@@ -3052,7 +3052,7 @@ export default function App() {
                             <BookOpen className="w-3.5 h-3.5 text-[#8b5e3c]" />
                             {chapter.title}
                           </span>
-                          <span className="text-[10px] text-stone-400 shrink-0 font-mono italic">{chapter.lessons.length} bài • {chapter.duration}</span>
+                          <span className="text-[10px] text-stone-400 shrink-0 font-mono italic">{chapter.lessons.length} bài • {(chapter as any).duration || '45 phút'}</span>
                         </div>
                         <ul className="mt-2.5 space-y-2 pl-3 border-l border-[#8b5e3c]/20">
                           {chapter.lessons.map(lesson => {
@@ -3134,7 +3134,7 @@ export default function App() {
                       viewedCourse.reviews.map(rev => (
                         <div key={rev.id} className={`p-4 rounded-xl border text-xs space-y-2 ${isDetailDarkMode ? 'bg-[#221715] border-white/5 text-stone-300' : 'bg-white border-[#e8ded3] text-stone-800 shadow-3xs'}`}>
                           <div className="flex justify-between items-center">
-                            <span className="font-bold text-[#432c28]">{rev.user}</span>
+                            <span className="font-bold text-[#432c28]">{rev.userName || (rev as any).user || 'Học viên'}</span>
                             <div className="flex items-center gap-0.5">
                               {Array.from({ length: rev.rating }).map((_, i) => (
                                 <Star key={i} className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
@@ -3269,7 +3269,7 @@ export default function App() {
             <ScrollReveal>
               {(() => {
                 const activeBanners = banners.filter(b => b.isActive);
-                const displayBanners = activeBanners.length > 0 ? activeBanners : [
+                const displayBanners = (activeBanners.length > 0 ? activeBanners : [
                   {
                     id: 'banner-1',
                     title: 'Nghệ thuật đào tạo số',
@@ -3278,9 +3278,11 @@ export default function App() {
                     actionUrl: '#courses-explorer',
                     backgroundColor: '#fcf8f2',
                     textColor: '#432c28',
-                    accentColor: '#8b5e3c'
+                    accentColor: '#8b5e3c',
+                    imageUrl: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&q=80&w=1000",
+                    isActive: true
                   }
-                ];
+                ]) as Banner[];
                 
                 const safeIndex = (currentBannerIndex + displayBanners.length) % displayBanners.length;
                 const currentBanner = displayBanners[safeIndex];

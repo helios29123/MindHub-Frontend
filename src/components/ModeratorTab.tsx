@@ -523,9 +523,9 @@ export default function ModeratorTab({
                                   </div>
                                 )}
 
-                                {les.quiz && les.quiz.length > 0 && (
+                                {les.quiz && les.quiz.questions && les.quiz.questions.length > 0 && (
                                   <div className="bg-[#f0f9ff] text-[#0369a1] p-1.5 rounded border border-[#b3e5fc] text-[9.5px] font-medium leading-relaxed">
-                                    📝 <b>Có bài tập trắc nghiệm ({les.quiz.length} câu)</b>
+                                    📝 <b>Có bài tập trắc nghiệm ({les.quiz.questions.length} câu)</b>
                                   </div>
                                 )}
                               </div>
