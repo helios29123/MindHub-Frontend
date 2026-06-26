@@ -1,4 +1,5 @@
 import { Course, Chapter, Lesson, User, QAMessage, StudentProgress, PayoutRequest, AuditLog } from '../types';
+import { safeLocalStorage as localStorage } from '../utils/safeStorage';
 
 /**
  * MindHub API Service Configuration and Integration Layer
@@ -23,11 +24,11 @@ export interface ApiConfig {
 }
 
 // Read configuration from local storage or environment variables
-const initialMode = (localStorage.getItem('mindhub_api_mode') as 'mock' | 'api') || 'mock';
+const initialMode = 'mock';
 const initialBaseUrl = localStorage.getItem('mindhub_api_base_url') || (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
 const config: ApiConfig = {
-  mode: initialMode,
+  mode: 'mock',
   baseUrl: initialBaseUrl,
   authToken: localStorage.getItem('mindhub_api_token') || undefined,
   isLogEnabled: true,
@@ -114,15 +115,17 @@ export const ApiService = {
   },
 
   setMode(mode: 'mock' | 'api') {
-    config.mode = mode;
-    localStorage.setItem('mindhub_api_mode', mode);
-    devLog('Config', 'Changed API mode', { mode });
+    config.mode = 'mock';
+    localStorage.setItem('mindhub_api_mode', 'mock');
+    devLog('Config', 'Changed API mode (forced to mock)', { mode: 'mock' });
+    window.dispatchEvent(new CustomEvent('mindhub-api-mode-changed', { detail: 'mock' }));
   },
 
   setBaseUrl(url: string) {
     config.baseUrl = url;
     localStorage.setItem('mindhub_api_base_url', url);
     devLog('Config', 'Changed API Base URL', { url });
+    window.dispatchEvent(new CustomEvent('mindhub-api-base-url-changed', { detail: url }));
   },
 
   setAuthToken(token: string | null) {
@@ -146,6 +149,47 @@ export const ApiService = {
 
   clearVirtualLogs() {
     localStorage.setItem('mindhub_virtual_api_logs', '[]');
+  },
+
+  async testConnection(customUrl?: string): Promise<{ success: boolean; message: string; latency?: number }> {
+    const targetUrl = (customUrl || config.baseUrl).replace(/\/$/, '');
+    const startTime = Date.now();
+    try {
+      // Let's do a fast GET request with a small timeout to verify connectivity and CORS
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      
+      const response = await fetch(`${targetUrl}/courses`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      const latency = Date.now() - startTime;
+      
+      return { 
+        success: response.ok || response.status < 500, 
+        message: `Kết nối thành công! Mã phản hồi HTTP: ${response.status}.`,
+        latency
+      };
+    } catch (e: any) {
+      const latency = Date.now() - startTime;
+      console.warn('API connection test failed:', e);
+      let errMsg = 'Không thể kết nối. Máy chủ backend chưa phản hồi hoặc chặn CORS.';
+      if (e.name === 'AbortError') {
+        errMsg = 'Yêu cầu hết thời gian chờ (Timeout).';
+      } else if (e.message) {
+        errMsg = `Lỗi kết nối: ${e.message}`;
+      }
+      return { 
+        success: false, 
+        message: errMsg,
+        latency
+      };
+    }
   },
 
   // ==========================================

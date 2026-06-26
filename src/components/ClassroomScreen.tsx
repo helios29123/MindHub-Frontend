@@ -7,6 +7,7 @@ import {
   Maximize, Minimize
 } from 'lucide-react';
 import { Course, Lesson, StudentProgress, MentorMessage, QAMessage, User } from '../types';
+import { safeLocalStorage as localStorage } from '../utils/safeStorage';
 
 interface ClassroomScreenProps {
   course: Course;
@@ -16,24 +17,27 @@ interface ClassroomScreenProps {
 }
 
 export default function ClassroomScreen({ course, currentUser, onClose, enrolledCourseIds = [] }: ClassroomScreenProps) {
-  // Find active chapter and lesson
-  const allLessons: Lesson[] = course.chapters.flatMap(c => c.lessons);
+  // Find active chapter and lesson safely
+  const allLessons: Lesson[] = (course.chapters || []).flatMap(c => c ? (c.lessons || []) : []);
 
   // Manage mock progress state with local storage persistence
   const [progress, setProgress] = useState<StudentProgress>(() => {
-    const lastLessonId = localStorage.getItem(`mindhub_last_lesson_${course.id}`) || course.chapters[0]?.lessons[0]?.id || '';
+    const firstLessonId = (course.chapters && course.chapters[0] && course.chapters[0].lessons && course.chapters[0].lessons[0]) 
+      ? course.chapters[0].lessons[0].id 
+      : '';
+    const lastLessonId = localStorage.getItem(`mindhub_last_lesson_${course.id}`) || firstLessonId;
     const completedJson = localStorage.getItem(`mindhub_completed_lessons_${course.id}`);
     const completedIds: string[] = completedJson ? JSON.parse(completedJson) : [];
     
     return {
       courseId: course.id,
-      currentLessonId: allLessons.some(l => l.id === lastLessonId) ? lastLessonId : (course.chapters[0]?.lessons[0]?.id || ''),
+      currentLessonId: allLessons.some(l => l.id === lastLessonId) ? lastLessonId : firstLessonId,
       completedLessonIds: completedIds,
       notes: [
-        { id: 'n-1', lessonId: course.chapters[0]?.lessons[0]?.id || '', text: 'React Compiler giúp giải phóng hoàn toàn việc viết useMemo', timestamp: '01:12', timestampSec: 72 }
+        { id: 'n-1', lessonId: firstLessonId, text: 'React Compiler giúp giải phóng hoàn toàn việc viết useMemo', timestamp: '01:12', timestampSec: 72 }
       ],
       bookmarks: [
-        { id: 'b-1', lessonId: course.chapters[0]?.lessons[0]?.id || '', title: 'Đoạn quan trọng về Rendering', timestampSec: 180 }
+        { id: 'b-1', lessonId: firstLessonId, title: 'Đoạn quan trọng về Rendering', timestampSec: 180 }
       ],
       lastWatchedProgressSec: 0
     };
@@ -69,7 +73,7 @@ export default function ClassroomScreen({ course, currentUser, onClose, enrolled
   const [isFullscreen, setIsFullscreen] = useState(false);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const [showControls, setShowControls] = useState(true);
-  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const controlsTimeoutRef = useRef<any>(null);
 
   // Note addition form
   const [newNoteText, setNewNoteText] = useState('');
@@ -240,7 +244,7 @@ export default function ClassroomScreen({ course, currentUser, onClose, enrolled
 
   // Auto progression mockup tracker effect
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: any;
     if (isPlaying) {
       interval = setInterval(() => {
         setVideoTime(prev => {
@@ -511,6 +515,28 @@ Nó tự biến mọi component của bạn thành 'pure memoized render' tươn
 
   // Mock certificate verified code
   const verificationCode = `CERT-MD-${course.id.toUpperCase()}-${currentUser.id.toUpperCase()}`;
+
+  if (allLessons.length === 0 || !activeLesson) {
+    return (
+      <div className="fixed inset-0 bg-stone-950 z-[9999] flex flex-col items-center justify-center h-screen text-stone-250 font-sans p-6 text-center">
+        <div className="max-w-md bg-stone-900 border border-stone-800 p-8 rounded-2xl shadow-xl flex flex-col items-center">
+          <div className="w-16 h-16 bg-amber-500/11 text-amber-500 rounded-full flex items-center justify-center mb-6 border border-amber-500/20 animate-pulse">
+            <AlertTriangle className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-display font-semibold mb-3 text-stone-200">Chưa có nội dung bài học</h2>
+          <p className="text-stone-400 text-xs mb-6 leading-relaxed">
+            Khóa học <strong className="text-stone-300">{course.title}</strong> này hiện chưa được thiết lập giáo án hoặc chưa được thêm bất kỳ bài giảng nào. Vui lòng quay lại sau!
+          </p>
+          <button 
+            onClick={onClose} 
+            className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold rounded-xl transition duration-200 shadow-md cursor-pointer text-xs"
+          >
+            Quay lại trang chính (Thoát lớp học)
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-main-darker z-[9999] flex flex-col md:flex-row-reverse h-screen text-brand-light font-sans">

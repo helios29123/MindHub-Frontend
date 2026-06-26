@@ -29,7 +29,7 @@ export default function FooterLegal({ initialTab = 'terms', onClose }: FooterLeg
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-[9999] flex items-center justify-center p-3 sm:p-4">
+    <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-[10005] flex items-center justify-center p-3 sm:p-4">
       <div 
         id="legal-modal-card" 
         className="bg-white w-full max-w-4xl h-[88vh] md:h-[82vh] rounded-2xl shadow-2xl border border-brand-light-active overflow-hidden flex flex-col animate-fade-in text-main-darker"
@@ -45,7 +45,7 @@ export default function FooterLegal({ initialTab = 'terms', onClose }: FooterLeg
             onClick={onClose} 
             className="text-stone-300 hover:text-white bg-white/10 hover:bg-white/20 text-xs px-2.5 py-1.5 rounded-lg transition-colors"
           >
-            Đóng [✕]
+            Đóng [X]
           </button>
         </div>
 

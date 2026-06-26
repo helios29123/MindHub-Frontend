@@ -1,7 +1,20 @@
 import React, { useState } from 'react';
-import { User, Shield, Lock, Mail, Eye, EyeOff, UserPlus, LogIn, Key, Compass, AlertCircle, Coffee, Check, Users, Award } from 'lucide-react';
-import { User as UserType } from '../types';
+import { User, Shield, Lock, Mail, Eye, EyeOff, UserPlus, LogIn, Key, Compass, AlertCircle, Coffee, Check, Users, Award, Globe, X } from 'lucide-react';
+import { User as UserType, normalizeUser } from '../types';
+import { safeLocalStorage as localStorage } from '../utils/safeStorage';
 import { SYSTEM_ROLE_USERS } from '../data';
+import { ApiService } from '../services/api';
+
+const DB_SEED_ACCOUNTS = [
+  { id: 'db-1', name: 'MindHub Admin', email: 'admin@mindhub.test', password: '12345678', role: 'admin', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150', description: 'Tài khoản Quản trị tối cao (Admin)' },
+  { id: 'db-2', name: 'Nguyễn Minh Khoa', email: 'instructor1@mindhub.test', password: '12345678', role: 'instructor', avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=150', description: 'Giảng viên kì cựu môn Laravel (Instructor)' },
+  { id: 'db-3', name: 'Trần Hà Linh', email: 'instructor2@mindhub.test', password: '12345678', role: 'instructor', avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=150', description: 'Giảng viên thiết kế môn React (Instructor)' },
+  { id: 'db-4', name: 'Lê Gia Bảo', email: 'learner1@mindhub.test', password: '12345678', role: 'student', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150', description: 'Học viên active (Learner)' },
+  { id: 'db-5', name: 'Phạm Anh Thư', email: 'learner2@mindhub.test', password: '12345678', role: 'student', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150', description: 'Học viên active (Learner)' },
+  { id: 'db-6', name: 'Đỗ Hoàng Nam', email: 'learner.completed@mindhub.test', password: '12345678', role: 'student', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=150', description: 'Học viên đã hoàn thành khóa học (Learner)' },
+  { id: 'db-10', name: 'Learner Limit Device', email: 'learner.limit@mindhub.test', password: '12345678', role: 'student', avatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&q=80&w=150', description: 'Học viên giới hạn thiết bị (Learner)' },
+  { id: 'db-11', name: 'Learner Empty State', email: 'learner.empty@mindhub.test', password: '12345678', role: 'student', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150', description: 'Học viên trống dữ liệu (Learner)' },
+];
 
 interface AuthScreensProps {
   onLoginSuccess: (user: UserType) => void;
@@ -11,6 +24,7 @@ interface AuthScreensProps {
 
 export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'login' }: AuthScreensProps) {
   const [mode, setMode] = useState<'login' | 'register' | 'verify' | 'forgot' | 'reset'>(initialMode);
+  const [rightPanelTab, setRightPanelTab] = useState<'seed' | 'recent'>('seed');
   
   // Form fields
   const [email, setEmail] = useState('');
@@ -22,6 +36,12 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
   const [successMsg, setSuccessMsg] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+
+  // Instructor specific registration fields
+  const [registerRole, setRegisterRole] = useState<'student' | 'instructor'>('student');
+  const [instructorSpecialty, setInstructorSpecialty] = useState('Development');
+  const [instructorBio, setInstructorBio] = useState('');
+  const [instructorExperience, setInstructorExperience] = useState('');
 
   // Local database of registered users with email verification states
   const [localRegisteredUsers, setLocalRegisteredUsers] = useState<UserType[]>(() => {
@@ -40,7 +60,6 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
     const seeded: UserType[] = [
       { ...SYSTEM_ROLE_USERS.student, isEmailVerified: true },
       { ...SYSTEM_ROLE_USERS.instructor, isEmailVerified: true },
-      { ...SYSTEM_ROLE_USERS.moderator, isEmailVerified: true },
       { ...SYSTEM_ROLE_USERS.admin, isEmailVerified: true }
     ];
     // Attach default password to the seeded objects for smooth logic
@@ -71,7 +90,6 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
     const defaultHistory = [
       { ...SYSTEM_ROLE_USERS.student, isEmailVerified: true, password: 'password123' },
       { ...SYSTEM_ROLE_USERS.instructor, isEmailVerified: true, password: 'password123' },
-      { ...SYSTEM_ROLE_USERS.moderator, isEmailVerified: true, password: 'password123' },
       { ...SYSTEM_ROLE_USERS.admin, isEmailVerified: true, password: 'password123' }
     ] as any[];
     localStorage.setItem('mindhub_logged_in_history', JSON.stringify(defaultHistory));
@@ -97,6 +115,25 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
     }
     
     const emailTrimmed = email.trim().toLowerCase();
+    
+    // 0. Use Live Backend Database Auth if in API Mode
+    if (ApiService.getConfig().mode === 'api') {
+      setSuccessMsg('Đang gửi truy xuất thực tới máy chủ API...');
+      ApiService.login({ email: emailTrimmed, password })
+        .then(res => {
+          const apiUser = normalizeUser({
+            ...res.user,
+            isEmailVerified: true
+          });
+          saveToHistory(apiUser);
+          onLoginSuccess(apiUser);
+          onClose();
+        })
+        .catch(err => {
+          setErrorMsg(`Thất bại kết nối database / API: ${err.message || err.toString()}`);
+        });
+      return;
+    }
     
     // 1. Check local registered user database
     const matchedUserIndex = localRegisteredUsers.findIndex(u => u.email.toLowerCase() === emailTrimmed);
@@ -132,12 +169,11 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
     }
 
     // 2. Simulate standard system role accounts if typed with default pass (fallback backup)
-    let matchedRole: 'student' | 'instructor' | 'moderator' | 'admin' = 'student';
+    let matchedRole: 'student' | 'instructor' | 'admin' = 'student';
     let isSystemAccount = false;
     
     if (emailTrimmed === SYSTEM_ROLE_USERS.student.email.toLowerCase()) { matchedRole = 'student'; isSystemAccount = true; }
     else if (emailTrimmed === SYSTEM_ROLE_USERS.instructor.email.toLowerCase()) { matchedRole = 'instructor'; isSystemAccount = true; }
-    else if (emailTrimmed === SYSTEM_ROLE_USERS.moderator.email.toLowerCase()) { matchedRole = 'moderator'; isSystemAccount = true; }
     else if (emailTrimmed === SYSTEM_ROLE_USERS.admin.email.toLowerCase()) { matchedRole = 'admin'; isSystemAccount = true; }
     
     if (isSystemAccount) {
@@ -179,8 +215,34 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
     onClose();
   };
 
+  const handleSeedClick = (seed: typeof DB_SEED_ACCOUNTS[0]) => {
+    setEmail(seed.email);
+    setPassword(seed.password);
+    setErrorMsg('');
+    setSuccessMsg(`Đã tự động cấu hình hòm thư: ${seed.email}. Vui lòng nhấn "Truy cập hệ thống" để kết nối database!`);
+    
+    // Auto-login instantly for rapid testing in API mode!
+    const isApi = ApiService.getConfig().mode === 'api';
+    if (isApi) {
+      setSuccessMsg(`Đang thử kết nối trực tiếp đến database với tài khoản ${seed.email}...`);
+      ApiService.login({ email: seed.email, password: seed.password })
+        .then(res => {
+          const apiUser = normalizeUser({
+            ...res.user,
+            isEmailVerified: true
+          });
+          saveToHistory(apiUser);
+          onLoginSuccess(apiUser);
+          onClose();
+        })
+        .catch(err => {
+          setErrorMsg(`Không kết nối được: ${err.message || err.toString()}. Hãy chắc chắn DB đã seed và Backend đang hoạt động.`);
+        });
+    }
+  };
+
   // Perform quick account login in 1-click
-  const handleQuickLogin = (role: 'student' | 'instructor' | 'moderator' | 'admin') => {
+  const handleQuickLogin = (role: 'student' | 'instructor' | 'admin') => {
     const userObj = SYSTEM_ROLE_USERS[role];
     const withCheck: UserType = { ...userObj, isEmailVerified: true };
     saveToHistory(withCheck);
@@ -204,6 +266,35 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
     }
 
     const emailTrimmed = email.trim().toLowerCase();
+
+    // 0. Use Live Backend Database creation if in API Mode
+    if (ApiService.getConfig().mode === 'api') {
+      setSuccessMsg('Đang tạo tài khoản mới trong cơ sở dữ liệu (MySQL)...');
+      ApiService.register({ 
+        name: name.trim(), 
+        email: emailTrimmed, 
+        password,
+        role: registerRole,
+        specialty: registerRole === 'instructor' ? instructorSpecialty : undefined,
+        bio: registerRole === 'instructor' ? instructorBio : undefined,
+        experience: registerRole === 'instructor' ? instructorExperience : undefined
+      })
+        .then(res => {
+          const apiUser = normalizeUser({
+            ...res.user,
+            role: registerRole,
+            isEmailVerified: true
+          });
+          saveToHistory(apiUser);
+          onLoginSuccess(apiUser);
+          alert('Đăng ký tài khoản thành công! Bạn đã được tự động đăng nhập.');
+          onClose();
+        })
+        .catch(err => {
+          setErrorMsg(`Thất bại tạo tài khoản trên database: ${err.message || err.toString()}`);
+        });
+      return;
+    }
     
     // Check if account already exists
     const existing = localRegisteredUsers.find(u => u.email.toLowerCase() === emailTrimmed);
@@ -220,22 +311,33 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
       // Re-fill / refresh for unverified user re-attempting registration
       updatedList = localRegisteredUsers.map(u => 
         u.email.toLowerCase() === emailTrimmed 
-          ? { ...u, name: name.trim(), verificationOtp: generatedOtp, password: password } as any
+          ? { 
+              ...u, 
+              name: name.trim(), 
+              verificationOtp: generatedOtp, 
+              password: password, 
+              role: registerRole,
+              bio: registerRole === 'instructor' ? (instructorBio || 'Giảng viên MindHub.') : undefined,
+              interestedTopics: registerRole === 'instructor' ? [instructorSpecialty] : u.interestedTopics
+            } as any
           : u
       );
     } else {
-      // Register new student under pending unverified (isEmailVerified = false)
+      // Register new student or instructor under pending unverified (isEmailVerified = false)
       const newUser: UserType = {
         id: 'u-local-' + Date.now(),
         name: name.trim(),
         email: emailTrimmed,
-        avatar: `https://images.unsplash.com/photo-${1535713875002 + Math.floor(Math.random() * 50000)}?auto=format&fit=crop&q=80&w=150`,
-        role: 'student',
+        avatar: registerRole === 'instructor' 
+          ? `https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=150`
+          : `https://images.unsplash.com/photo-${1535713875002 + Math.floor(Math.random() * 50000)}?auto=format&fit=crop&q=80&w=150`,
+        role: registerRole,
         streak: 1,
         lastActiveDate: new Date().toISOString().split('T')[0],
         isEmailVerified: false,
         verificationOtp: generatedOtp,
-        interestedTopics: ['Web Development', 'React'],
+        interestedTopics: registerRole === 'instructor' ? [instructorSpecialty] : ['Web Development', 'React'],
+        bio: registerRole === 'instructor' ? (instructorBio || 'Giảng viên chuyên nghiệp tại MindHub.') : undefined,
         notificationSettings: {
           email: true,
           push: true,
@@ -376,22 +478,22 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
         className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-brand-light-active overflow-hidden flex flex-col my-auto max-h-[92vh] animate-fade-in text-main-darker"
       >
         {/* Banner with Brand Theme */}
-        <div className="bg-[#432c28] p-5 text-brand-light flex items-center justify-between border-b-4 border-brand-normal shrink-0">
+        <div className="bg-deep-indigo p-5 text-brand-light flex items-center justify-between border-b-4 border-emerald-500 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-[#f5ece3] rounded-xl flex items-center justify-center">
-              <Coffee className="w-5 h-5 text-brand-dark" />
+            <div className="p-2 bg-pale-cyan rounded-xl flex items-center justify-center">
+              <Globe className="w-5 h-5 text-forest-teal" />
             </div>
             <div className="text-left">
-              <h2 className="text-base sm:text-lg font-academic font-bold tracking-tight italic text-[#f5ece3] leading-tight">MindHub Academic Portal</h2>
-              <p className="text-[10px] text-brand-light/80 font-serif">Học thuật và Sáng tạo số 2026</p>
+              <h2 className="text-base sm:text-lg font-suisseintl font-bold tracking-tight text-[#f5ece3] leading-tight">MindHub Academic Portal</h2>
+              <p className="text-[10px] text-brand-light/80 font-suisseintlmono uppercase tracking-wider">Học thuật và Quản trị tri thức</p>
             </div>
           </div>
           <button 
             type="button" 
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white text-xs transition-colors"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -510,73 +612,134 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
                 </div>
               </form>
 
-              {/* Right Column: Previously Logged-in Accounts on this device */}
-              <div className="lg:col-span-5 bg-stone-50 border border-stone-200 rounded-2xl p-4 space-y-3 text-left">
-                <div className="border-b pb-1.5 border-stone-200/80">
-                  <span className="text-[9px] uppercase font-mono tracking-wider text-[#8b5e3c] font-bold block">THIẾT BỊ CỦA BẠN</span>
-                  <h4 className="text-xs font-bold text-stone-800 mt-0.5 flex items-center gap-1.55">
-                    <Users className="w-3.5 h-3.5 text-[#8b5e3c]" /> Tài khoản đã đăng nhập:
-                  </h4>
-                </div>
+              {/* Right Column: Previously Logged-in Accounts on this device & Seed Database Accounts */}
+              <div className="lg:col-span-5 bg-stone-50 border border-stone-200 rounded-2xl p-4 text-left flex flex-col justify-between self-stretch">
+                <div>
+                  <div className="flex border-b border-stone-200 mb-3 pb-1.5 justify-between items-center select-none">
+                    <button 
+                      type="button"
+                      onClick={() => setRightPanelTab('seed')}
+                      className={`text-[9px] font-bold uppercase pb-1 tracking-wider border-b-2 transition-all cursor-pointer ${rightPanelTab === 'seed' ? 'border-[#8b5e3c] text-[#8b5e3c]' : 'border-transparent text-stone-400 hover:text-stone-600'}`}
+                    >
+                      💾 CSDL phpMyAdmin
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setRightPanelTab('recent')}
+                      className={`text-[9px] font-bold uppercase pb-1 tracking-wider border-b-2 transition-all cursor-pointer ${rightPanelTab === 'recent' ? 'border-[#8b5e3c] text-[#8b5e3c]' : 'border-transparent text-stone-400 hover:text-stone-600'}`}
+                    >
+                      🕰️ Đăng nhập gần đây
+                    </button>
+                  </div>
 
-                <div className="space-y-2 max-h-[280px] overflow-y-auto tactile-scrollbar pr-0.5">
-                  {loginHistory.map((u, i) => {
-                    // Decide badge color & label depending on role
-                    let badgeColor = "bg-[#f5ece3] text-[#8b5e3c]";
-                    if (u.role === 'instructor') {
-                      badgeColor = "bg-blue-50 text-blue-700 border border-blue-100";
-                    } else if (u.role === 'moderator') {
-                      badgeColor = "bg-emerald-50 text-emerald-800 border border-emerald-100";
-                    } else if (u.role === 'admin') {
-                      badgeColor = "bg-red-50 text-red-700 border border-red-100";
-                    }
+                  {rightPanelTab === 'seed' ? (
+                    <div className="space-y-2">
+                      <div className="border-b pb-1 border-stone-200/50 mb-1.5 font-sans">
+                        <span className="text-[8px] font-bold uppercase text-stone-500 block font-mono">DỮ LIỆU THẬT TRONG DATABASE BE</span>
+                        <p className="text-[10px] text-stone-500 leading-normal">Bấm bất kỳ tài khoản nào để tự động điền mật khẩu mẫu <b className="font-mono">12345678</b>:</p>
+                      </div>
 
-                    return (
-                      <button
-                        type="button"
-                        key={u.id || i}
-                        onClick={() => handleHistoryClick(u)}
-                        className="w-full p-2.5 bg-white hover:bg-stone-100 border border-stone-200 hover:border-brand-normal rounded-xl text-left transition-all flex items-center gap-2.5 group relative shadow-3xs"
-                        title="Bấm để đăng nhập nhanh tức thì"
-                      >
-                        <img src={u.avatar} alt="Avatar profile" className="w-8 h-8 rounded-full object-cover shrink-0 border border-stone-100 shadow-3xs" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-center gap-1">
-                            <span className="text-[11px] font-bold text-stone-800 group-hover:text-brand-dark truncate">{u.name}</span>
-                            <span className={`text-[7px] px-1 py-0.5 rounded uppercase font-bold font-mono tracking-wider whitespace-nowrap shrink-0 ${badgeColor}`}>
-                              {u.role ? u.role.substring(0, 5).toUpperCase() : 'USER'}
-                            </span>
+                      <div className="space-y-1.5 max-h-[250px] overflow-y-auto tactile-scrollbar pr-0.5">
+                        {DB_SEED_ACCOUNTS.map((seed) => {
+                          let roleBadge = "bg-[#f5ece3] text-[#8b5e3c]";
+                          if (seed.role === 'instructor') {
+                            roleBadge = "bg-blue-50 text-blue-700 border border-blue-100";
+                          } else if (seed.role === 'admin') {
+                            roleBadge = "bg-red-50 text-red-700 border border-red-100";
+                          }
+
+                          return (
+                            <button
+                              type="button"
+                              key={seed.id}
+                              onClick={() => handleSeedClick(seed)}
+                              className="w-full p-2 bg-white hover:bg-[#faf6f2] border border-stone-200 hover:border-[#8b5e3c] rounded-xl text-left transition-all flex items-center gap-2 group relative shadow-3xs cursor-pointer"
+                              title="Click để tự động cấu hình và đăng nhập"
+                            >
+                              <img src={seed.avatar} alt="Seed avatar" className="w-7 h-7 rounded-full object-cover shrink-0 border border-stone-100 shadow-3xs animate-fade-in" />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-center gap-1">
+                                  <span className="text-[10px] font-bold text-stone-800 group-hover:text-[#8b5e3c] truncate leading-none">{seed.name}</span>
+                                  <span className={`text-[6px] px-1 py-0.2 rounded uppercase font-bold font-mono tracking-wider whitespace-nowrap shrink-0 ${roleBadge}`}>
+                                    {seed.role.toUpperCase()}
+                                  </span>
+                                </div>
+                                <span className="block text-[8px] text-stone-400 truncate font-mono mt-0.5">{seed.email}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 font-sans">
+                      <div className="border-b pb-1 border-stone-200/50 mb-1.5">
+                        <span className="text-[8px] font-bold uppercase text-stone-500 block font-mono">LỊCH SỬ THIẾT BỊ</span>
+                        <p className="text-[10px] text-stone-500 leading-normal">Tài khoản từng đăng nhập gần đây, bấm để truy cập nhanh:</p>
+                      </div>
+
+                      <div className="space-y-1.5 max-h-[250px] overflow-y-auto tactile-scrollbar pr-0.5">
+                        {loginHistory.map((u, i) => {
+                          let badgeColor = "bg-[#f5ece3] text-[#8b5e3c]";
+                          if (u.role === 'instructor') {
+                            badgeColor = "bg-blue-50 text-blue-700 border border-blue-100";
+                          } else if (u.role === 'admin') {
+                            badgeColor = "bg-red-50 text-red-700 border border-red-100";
+                          }
+
+                          return (
+                            <button
+                              type="button"
+                              key={u.id || i}
+                              onClick={() => handleHistoryClick(u)}
+                              className="w-full p-2 bg-white hover:bg-stone-100 border border-stone-200 hover:border-brand-normal rounded-xl text-left transition-all flex items-center gap-2 group relative shadow-3xs cursor-pointer"
+                              title="Bấm để đăng nhập nhanh tức thì"
+                            >
+                              <img src={u.avatar} alt="Avatar profile" className="w-7 h-7 rounded-full object-cover shrink-0 border border-stone-100 shadow-3xs" />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-center gap-1">
+                                  <span className="text-[10px] font-bold text-stone-800 group-hover:text-brand-dark truncate leading-none">{u.name}</span>
+                                  <span className={`text-[6px] px-1 py-0.2 rounded uppercase font-bold font-mono tracking-wider whitespace-nowrap shrink-0 ${badgeColor}`}>
+                                    {u.role ? u.role.substring(0, 5).toUpperCase() : 'USER'}
+                                  </span>
+                                </div>
+                                <span className="block text-[8px] text-stone-400 truncate font-mono mt-0.5">{u.email}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+
+                        {loginHistory.length === 0 && (
+                          <div className="text-center py-6 text-stone-400 text-[10px] font-serif">
+                            Chưa có lịch sử tài khoản nào trên thiết bị này.
                           </div>
-                          <span className="block text-[9px] text-stone-450 truncate font-mono">{u.email}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-
-                  {loginHistory.length === 0 && (
-                    <div className="text-center py-6 text-stone-400 text-[11px] font-serif">
-                      Chưa có lịch sử tài khoản nào trên thiết bị này.
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
 
-                <div className="pt-2 border-t border-stone-200/60 flex items-center justify-between">
-                  <p className="text-[9px] text-stone-500 leading-tight font-serif text-justify flex-1">
-                    * Chọn bất kỳ tài khoản ở trên để <b>tự động đăng nhập lập tức</b>.
+                <div className="pt-2 border-t border-stone-200/50 flex items-center justify-between mt-3 text-stone-500 text-justify">
+                  <p className="text-[9px] leading-tight font-serif flex-1 mt-1 pr-1.5">
+                    {rightPanelTab === 'seed' 
+                      ? "* Hãy click vào tài khoản DB ở trên để tự cấu hình email/mật khẩu rồi click Truy cập."
+                      : "* Bấm tài khoản lưu vết để bỏ qua gõ phím và đăng nhập lập tức."}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm('Bạn có chắc chắn muốn xóa toàn bộ lịch sử tài khoản đã lưu trên thiết bị này không?')) {
-                        localStorage.removeItem('mindhub_logged_in_history');
-                        setLoginHistory([]);
-                        alert('Đã xóa sạch lịch sử thiết bị!');
-                      }
-                    }}
-                    className="text-[8px] text-red-650 hover:underline hover:text-red-700 ml-2 font-mono"
-                  >
-                    Xoá lịch sử
-                  </button>
+                  {rightPanelTab === 'recent' && loginHistory.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm('Bạn có chắc chắn muốn xóa toàn bộ lịch sử thiết bị không?')) {
+                          localStorage.removeItem('mindhub_logged_in_history');
+                          setLoginHistory([]);
+                          alert('Đã xóa sạch bộ nhớ tạm!');
+                        }
+                      }}
+                      className="text-[8px] text-red-650 hover:underline hover:text-red-700 ml-2 font-mono whitespace-nowrap font-bold cursor-pointer"
+                    >
+                      Xoá lịch sử
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -592,6 +755,39 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
                 </h3>
                 <p className="text-[11px] text-stone-500 mt-1">Cơ hội trải nghiệm học tập đỉnh cao tại hòn đảo tri thức của chúng tôi.</p>
               </div>
+
+              {/* Tab Selector for Student vs Instructor Registration */}
+              <div className="flex bg-stone-100 p-1 rounded-xl border border-stone-200">
+                <button
+                  type="button"
+                  onClick={() => setRegisterRole('student')}
+                  className={`flex-1 text-center py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    registerRole === 'student'
+                      ? 'bg-white text-[#432c28] shadow-sm'
+                      : 'text-stone-500 hover:text-stone-800'
+                  }`}
+                >
+                  🎓 Đăng ký Học viên
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRegisterRole('instructor')}
+                  className={`flex-1 text-center py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    registerRole === 'instructor'
+                      ? 'bg-[#432c28] text-white shadow-sm'
+                      : 'text-stone-500 hover:text-stone-[#432c28]'
+                  }`}
+                >
+                  👨‍🏫 Đăng ký Giảng viên
+                </button>
+              </div>
+
+              {registerRole === 'instructor' && (
+                <div className="bg-amber-50/50 p-3 rounded-xl border border-amber-100 space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider font-bold text-[#8b5e3c]">Chế độ Đăng ký Đối tác Giảng dạy</span>
+                  <p className="text-[11px] text-stone-500">Form này dành riêng cho các Thầy cô muốn phát triển và xuất bản học liệu trực tuyến trên MindHub.</p>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div>
@@ -654,6 +850,49 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
                   </div>
                 </div>
               </div>
+
+              {/* Instructor specialty & Bio form fields */}
+              {registerRole === 'instructor' && (
+                <div className="space-y-3 bg-stone-50 p-3.5 rounded-xl border border-stone-200 grid grid-cols-1 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-stone-605 mb-1">Lĩnh vực Giảng dạy chuyên môn</label>
+                      <select
+                        value={instructorSpecialty}
+                        onChange={(e) => setInstructorSpecialty(e.target.value)}
+                        className="w-full px-3 py-2 border border-stone-250 rounded-xl text-xs focus:ring-1 focus:ring-brand-normal bg-white"
+                      >
+                        <option value="Development">Phát triển phần mềm (Development)</option>
+                        <option value="Design">Thiết kế & Sáng tạo (Design)</option>
+                        <option value="Marketing">Truyền thông & Marketing</option>
+                        <option value="Artificial Intelligence">Trí tuệ nhân tạo (AI)</option>
+                        <option value="Business & Startup">Khởi nghiệp & Kinh doanh</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-stone-605 mb-1">Số năm kinh nghiệm giảng dạy</label>
+                      <input 
+                        type="text"
+                        value={instructorExperience}
+                        onChange={(e) => setInstructorExperience(e.target.value)}
+                        placeholder="VD: Trên 5 năm, Thạc sĩ CNTT..."
+                        className="w-full px-3 py-2 border border-stone-250 rounded-xl text-xs focus:ring-1 focus:ring-brand-normal bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-605 mb-1">Tiểu sử tóm tắt (Giới thiệu bản thân)</label>
+                    <textarea
+                      value={instructorBio}
+                      onChange={(e) => setInstructorBio(e.target.value)}
+                      placeholder="Hãy viết vài dòng giới thiệu năng lực chuyên môn và các dự án của Thầy Cô..."
+                      className="w-full px-3 py-2 border border-stone-250 rounded-xl text-xs focus:ring-1 focus:ring-brand-normal bg-white h-16 resize-none"
+                    />
+                  </div>
+                </div>
+              )}
 
                <div className="flex items-start gap-2 bg-stone-50 p-3 rounded-xl border">
                 <input 

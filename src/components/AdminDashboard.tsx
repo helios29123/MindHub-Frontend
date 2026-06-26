@@ -4,10 +4,637 @@ import {
   Trash2, UserX, Plus, FileText, CheckCircle, Landmark, 
   ShoppingBag, AlertTriangle, AlertCircle, XCircle, 
   FolderTree, Edit2, Key, BookOpen, Search, Check, Layers, ShieldCheck, Filter, Image,
-  Award, TrendingUp, GraduationCap, Star, Activity
+  Award, TrendingUp, GraduationCap, Star, Activity,
+  MessageSquare, Compass, Eye, ShieldAlert, Clock, Info
 } from 'lucide-react';
-import { Course, User, PayoutRequest, AuditLog, AccountRequest, Order, Role, Banner, Notification, Coupon } from '../types';
+import { Course, User, PayoutRequest, AuditLog, AccountRequest, Order, Role, Banner, Notification, Coupon, FlaggedItem } from '../types';
+import { safeLocalStorage as localStorage } from '../utils/safeStorage';
 import { SYSTEM_COUPONS, AUDIT_LOGS_MOCK } from '../data';
+import { ApiService } from '../services/api';
+
+interface ModeratorTabProps {
+  currentUser: User;
+  courses: Course[];
+  flaggedReviews: FlaggedItem[];
+  onApproveCourse: (courseId: string) => void;
+  onRejectCourse: (courseId: string, reason: string) => void;
+  onResolveFlag: (flagId: string, resolveAction: 'dismiss' | 'resolved') => void;
+  accountRequests: AccountRequest[];
+  onResolveAccountRequest: (id: string, action: 'approved' | 'rejected') => void;
+  onClose: () => void;
+}
+
+function ModeratorTab({
+  currentUser,
+  courses,
+  flaggedReviews,
+  onApproveCourse,
+  onRejectCourse,
+  onResolveFlag,
+  accountRequests,
+  onResolveAccountRequest,
+  onClose
+}: ModeratorTabProps) {
+
+  // Selected tab: 'moderation_courses' | 'moderation_content' | 'account_requests'
+  const [activeTab, setActiveTab] = useState<'moderation_courses' | 'moderation_content' | 'account_requests'>('moderation_courses');
+  
+  // Rejection modal state
+  const [rejectingCourseId, setRejectingCourseId] = useState<string | null>(null);
+  const [rejectionReasonText, setRejectionReasonText] = useState('');
+  
+  // Course detailed inspector state
+  const [inspectingCourse, setInspectingCourse] = useState<Course | null>(null);
+
+  // Search & Filter for Pending Courses
+  const [courseSearchQuery, setCourseSearchQuery] = useState('');
+
+  // Search & Filter for Flagged Content (Comments/Reviews)
+  const [contentSearchQuery, setContentSearchQuery] = useState('');
+  const [contentTypeFilter, setContentTypeFilter] = useState<'all' | 'review' | 'comment'>('all');
+
+  // Course review actions
+  const pendingCourses = courses.filter(c => {
+    const matchesQuery = c.title.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
+                         c.instructorName.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
+                         c.description.toLowerCase().includes(courseSearchQuery.toLowerCase());
+    return c.status === 'pending' && matchesQuery;
+  });
+
+  const handleOpenRejectModal = (courseId: string) => {
+    setRejectingCourseId(courseId);
+    setRejectionReasonText('');
+  };
+
+  const handleConfirmReject = () => {
+    if (!rejectingCourseId || !rejectionReasonText.trim()) return;
+    onRejectCourse(rejectingCourseId, rejectionReasonText);
+    setRejectingCourseId(null);
+    setRejectionReasonText('');
+    alert('Đã ghi nhận lý do và từ chối phê duyệt khóa học này thành công!');
+  };
+
+  return (
+    <div className="bg-white min-h-[75vh] rounded-2xl border border-brand-light-active overflow-hidden flex flex-col md:flex-row text-main-darker animate-fade-in shadow">
+      
+      {/* Tab Selectors Left Sidebar */}
+      <div className="w-full md:w-56 bg-white border-b md:border-b-0 md:border-r border-brand-light-active p-4 space-y-2 shrink-0">
+        <div className="text-center pb-4 border-b border-brand-light-active mb-4">
+          <img src={currentUser.avatar} alt="Avatar" className="w-14 h-14 rounded-full mx-auto mb-2 border-2 border-brand-dark" />
+          <h3 className="text-xs font-bold truncate">{currentUser.name}</h3>
+          <span className="text-[9px] bg-main-normal text-brand-light uppercase tracking-wider px-2 py-0.5 rounded inline-block mt-1 font-semibold">Admin Moderation</span>
+        </div>
+
+        <button 
+          onClick={() => setActiveTab('moderation_courses')}
+          className={`w-full text-left px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 ${activeTab === 'moderation_courses' ? 'bg-brand-normal text-brand-light' : 'hover:bg-brand-light-hover'}`}
+        >
+          <Compass className="w-4 h-4 text-stone-700" /> Khóa học Chờ Duyệt ({courses.filter(c => c.status === 'pending').length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('moderation_content')}
+          className={`w-full text-left px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 ${activeTab === 'moderation_content' ? 'bg-brand-normal text-brand-light' : 'hover:bg-brand-light-hover'}`}
+        >
+          <ShieldAlert className="w-4 h-4 text-stone-700" /> Kiểm duyệt Bình luận ({flaggedReviews.length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('account_requests')}
+          className={`w-full text-left px-3 py-2 text-xs font-semibold rounded-lg flex items-center justify-between ${activeTab === 'account_requests' ? 'bg-brand-normal text-brand-light' : 'hover:bg-brand-light-hover'}`}
+        >
+          <div className="flex items-center gap-2">
+            <UserX className="w-4 h-4 text-stone-705 shrink-0" /> Yêu cầu Khóa & Xóa
+          </div>
+          <span className="bg-red-150 text-red-800 text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+            {accountRequests.filter(r => r.status === 'pending').length}
+          </span>
+        </button>
+
+        <div className="pt-6">
+          <button onClick={onClose} className="w-full text-center border text-xs py-1.5 rounded-lg text-gray-400 hover:text-black">
+            Quay lại Admin chính
+          </button>
+        </div>
+      </div>
+
+      {/* Interactive Main Body Content */}
+      <div className="flex-1 p-6 space-y-4 overflow-y-auto">
+        
+        {/* COURSES VERIFICATION/APPROVE WORKFLOW */}
+        {activeTab === 'moderation_courses' && (() => {
+          const totalPendingCount = courses.filter(c => c.status === 'pending').length;
+
+          return (
+            <div className="space-y-4 animate-fade-in text-xs text-left">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-2 border-b border-stone-100">
+                <div>
+                  <h3 className="text-sm md:text-base font-display font-bold text-main-normal text-left flex items-center gap-1.5">
+                    <Compass className="w-5 h-5 text-stone-800" /> Danh sách khóa học chờ thẩm định xuất bản
+                  </h3>
+                  <p className="text-[10.5px] text-stone-400">Kiểm tra thông tin đề cương, tài liệu và cấu trúc lớp học trước khi xuất bản rộng rãi.</p>
+                </div>
+                
+                {/* Search query input */}
+                {totalPendingCount > 0 && (
+                  <div className="w-full sm:w-72">
+                    <input
+                      type="text"
+                      placeholder="Tìm bài giảng theo từ khóa, giảng viên..."
+                      value={courseSearchQuery}
+                      onChange={(e) => setCourseSearchQuery(e.target.value)}
+                      className="w-full text-xs p-2 px-3 border border-brand-light-active rounded-xl bg-slate-50 focus:outline-none focus:ring-1 focus:ring-brand-normal placeholder-stone-400 font-medium"
+                    />
+                  </div>
+                )}
+              </div>
+              
+              {totalPendingCount === 0 ? (
+                <div className="text-center py-16 bg-slate-50 border border-dashed rounded-2xl">
+                  <CheckCircle className="w-12 h-12 text-emerald-600 mx-auto mb-2" />
+                  <p className="font-extrabold text-sm text-stone-800">Xin chúc mừng!</p>
+                  <p className="text-stone-500 text-xs mt-1">Không có chương trình đào tạo nào đang tồn đọng chờ kiểm duyệt xuất bản.</p>
+                </div>
+              ) : pendingCourses.length === 0 ? (
+                <div className="text-center py-12 bg-slate-50 border border-dashed rounded-2xl space-y-2">
+                  <Info className="w-10 h-10 text-stone-400 mx-auto" />
+                  <p className="text-stone-500 font-bold">Không tìm thấy kết quả nào phù hợp với từ khóa "{courseSearchQuery}".</p>
+                  <button
+                    onClick={() => setCourseSearchQuery('')}
+                    className="text-[#8b5e3c] font-black hover:underline text-xs"
+                  >
+                    Xóa bộ lọc tìm kiếm
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {pendingCourses.map((c) => (
+                    <div key={c.id} className="border border-brand-light-active bg-slate-50 p-4 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm hover:border-brand-normal/30 transition-all">
+                      <div className="flex gap-3 text-left">
+                        <img src={c.image} alt="Banner" className="w-20 h-14 object-cover rounded-lg shrink-0 border" />
+                        <div>
+                          <span className="text-[9px] bg-brand-normal/10 text-brand-dark px-1.5 py-0.5 rounded font-black uppercase tracking-wider">{c.category}</span>
+                          <h4 className="font-bold text-xs text-main-normal leading-snug mt-1">{c.title}</h4>
+                          <p className="text-[10px] text-stone-500 mt-0.5">Giảng viên: <span className="font-semibold text-stone-700">{c.instructorName}</span> • Đề xuất: <span className="font-bold text-stone-800">{c.price.toLocaleString('vi-VN')} VND</span></p>
+                          <p className="text-[11px] text-stone-605 mt-1 line-clamp-2">{c.description}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-1.5 shrink-0 w-full md:w-auto self-end md:self-center justify-end">
+                        <button 
+                          onClick={() => setInspectingCourse(c)}
+                          className="bg-stone-100 hover:bg-stone-200 text-stone-850 font-bold py-1.5 px-3 rounded-xl flex items-center gap-1 border border-stone-300 shadow-3xs text-[11px]"
+                          title="Xem toàn bộ cấu trúc bài viết, tài liệu, quiz"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-stone-750" /> Xem Chi Tiết
+                        </button>
+                        <button 
+                          onClick={() => {
+                            if (window.confirm(`Xác nhận phê duyệt và phát hành khóa học "${c.title}" lên hệ thống MindHub công khai?`)) {
+                              onApproveCourse(c.id);
+                              alert('✓ Đã phê duyệt và xuất bản khóa học thành công!');
+                            }
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 px-3 rounded-xl flex items-center gap-1 shadow text-[11px]"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" /> Phê Duyệt
+                        </button>
+                        <button 
+                          onClick={() => handleOpenRejectModal(c.id)}
+                          className="bg-red-500 hover:bg-red-600 text-white font-bold py-1.5 px-3 rounded-xl flex items-center gap-1 shadow text-[11px]"
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Từ Chối
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* FLAGGED CONCERNS COMMENT / REVIEWS BLACKLIST VERIFY */}
+        {activeTab === 'moderation_content' && (() => {
+          const totalFlagsCount = flaggedReviews.length;
+          
+          const filteredFlagged = flaggedReviews.filter(flag => {
+            const matchesSearch = flag.content.toLowerCase().includes(contentSearchQuery.toLowerCase()) ||
+                                  flag.reporter.toLowerCase().includes(contentSearchQuery.toLowerCase()) ||
+                                  flag.reason.toLowerCase().includes(contentSearchQuery.toLowerCase()) ||
+                                  (flag.courseTitle || '').toLowerCase().includes(contentSearchQuery.toLowerCase());
+            const matchesType = contentTypeFilter === 'all' || flag.type === contentTypeFilter;
+            return matchesSearch && matchesType;
+          });
+
+          return (
+            <div className="space-y-4 animate-fade-in text-xs text-left">
+              <div className="border-b pb-4 space-y-2">
+                <h3 className="text-sm md:text-base font-display font-bold text-main-normal flex items-center gap-1.5">
+                  <ShieldAlert className="w-5 h-5 text-red-600 animate-pulse" /> 
+                  Kiểm duyệt nội dung Bình luận & Đánh giá học viên
+                </h3>
+                <p className="text-stone-500 text-[11px] leading-relaxed">
+                  Xem xét các báo cáo vi phạm tiêu chuẩn cộng đồng, từ ngữ thô tục, spam liên kết lậu, hoặc nội dung không hợp lệ do các thành viên đóng góp.
+                </p>
+              </div>
+
+              {totalFlagsCount > 0 && (
+                <div className="flex flex-col md:flex-row gap-3 bg-slate-50 p-3 rounded-2xl border">
+                  
+                  {/* Search query field */}
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      placeholder="Tìm nội dung vi phạm, người báo cáo..."
+                      value={contentSearchQuery}
+                      onChange={(e) => setContentSearchQuery(e.target.value)}
+                      className="w-full text-xs p-2.5 border border-brand-light-active rounded-xl bg-white focus:outline-none focus:ring-1 focus:ring-brand-normal placeholder-stone-400 font-medium"
+                    />
+                  </div>
+
+                  {/* Filter tabs */}
+                  <div className="flex gap-1 bg-stone-200/50 p-1 rounded-xl self-start md:self-center">
+                    <button
+                      type="button"
+                      onClick={() => setContentTypeFilter('all')}
+                      className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all ${
+                        contentTypeFilter === 'all' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-855'
+                      }`}
+                    >
+                      Tất cả ({flaggedReviews.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setContentTypeFilter('review')}
+                      className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all ${
+                        contentTypeFilter === 'review' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-855'
+                      }`}
+                    >
+                      Đánh giá
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setContentTypeFilter('comment')}
+                      className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all ${
+                        contentTypeFilter === 'comment' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-855'
+                      }`}
+                    >
+                      Bình luận
+                    </button>
+                  </div>
+
+                </div>
+              )}
+
+              {totalFlagsCount === 0 ? (
+                <div className="text-center py-16 bg-slate-50 border border-dashed rounded-2xl">
+                  <CheckCircle className="w-12 h-12 text-emerald-600 mx-auto mb-2" />
+                  <p className="font-extrabold text-sm text-stone-800">Không có tố cáo vi phạm!</p>
+                  <p className="text-stone-500 text-xs mt-1">Hệ thống bình luận, đánh giá hiện đang hoạt động lành mạnh và an tâm.</p>
+                </div>
+              ) : filteredFlagged.length === 0 ? (
+                <div className="text-center py-12 bg-slate-50 border border-dashed rounded-2xl space-y-2">
+                  <Info className="w-10 h-10 text-stone-400 mx-auto" />
+                  <p className="text-stone-500 font-semibold text-xs">Không tìm thấy nội dung vi phạm nào khớp với bộ lọc.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setContentSearchQuery('');
+                      setContentTypeFilter('all');
+                    }}
+                    className="text-[#8b5e3c] font-black hover:underline text-[11px]"
+                  >
+                    Xóa tất cả bộ lọc hiện hữu
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredFlagged.map((flag) => (
+                    <div key={flag.id} className="border border-red-150 bg-red-50/5 hover:bg-neutral-50/50 p-4 rounded-2xl space-y-3 text-left transition-all relative">
+                      
+                      <div className="flex flex-wrap justify-between items-center gap-2">
+                        <span className="font-extrabold text-red-650 flex items-center gap-1 font-sans">
+                          <AlertTriangle className="w-4 h-4 text-red-650 shrink-0" />
+                          Lý do báo cáo: <span className="underline decoration-red-200">{flag.reason}</span>
+                        </span>
+                        
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[9px] font-extrabold tracking-wider px-2 py-0.5 rounded uppercase ${
+                            flag.type === 'review' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {flag.type === 'review' ? '⭐ Đánh giá' : '💬 Thảo luận Q&A'}
+                          </span>
+                          <span className="text-[10px] text-gray-400 font-mono">Người báo cáo: {flag.reporter}</span>
+                        </div>
+                      </div>
+
+                      {flag.courseTitle && (
+                        <div className="bg-stone-105 hover:bg-stone-200 px-2.5 py-1 rounded-lg text-[10.5px] text-stone-850 flex items-center gap-1 inline-block border font-bold">
+                          <BookOpen className="w-3.5 h-3.5 text-stone-700" />
+                          <span>Mục tiêu tại:</span> <span className="font-extrabold text-stone-900">{flag.courseTitle}</span>
+                        </div>
+                      )}
+
+                      <div className="bg-white p-3 rounded-lg border border-red-100/60 text-stone-750 leading-normal text-xs font-semibold whitespace-pre-wrap font-mono italic">
+                        "{flag.content}"
+                      </div>
+
+                      <div className="flex justify-end gap-2 text-xs pt-1">
+                        {/* Dismiss report */}
+                        <button 
+                          onClick={() => {
+                            if (window.confirm('Bác bỏ báo cáo và hiển thị lại bình luận này bình thường?')) {
+                              onResolveFlag(flag.id, 'dismiss');
+                              alert('✓ Đã bác bỏ báo cáo. Bình luận này an toàn.');
+                            }
+                          }}
+                          className="border border-stone-300 hover:bg-white text-stone-600 font-bold px-3 py-1.5 rounded-xl text-xs bg-slate-50 transition-all shadow-3xs"
+                        >
+                          Bác bỏ tố cáo (Nội dung Sạch)
+                        </button>
+                        
+                        {/* Logically delete from course’s reviews list & remove flag */}
+                        <button 
+                          onClick={() => {
+                            if (window.confirm('Bạn có chắc chắn muốn XÓA BỎ VĨNH VIỄN bình luận/đánh giá vi phạm này khỏi hệ thống khóa học?')) {
+                              onResolveFlag(flag.id, 'resolved');
+                              alert('✓ Nội dung vi phạm đã được gỡ bỏ khỏi cơ sở dữ liệu học trình thành công!');
+                            }
+                          }}
+                          className="bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-1.5 rounded-xl text-xs flex items-center gap-1 shadow-sm transition-all whitespace-nowrap"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> Gỡ bỏ Nội dung (Xóa vĩnh viễn)
+                        </button>
+                      </div>
+
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ACCOUNT LOCK/DELETION REQUESTS FOR MODERATORS */}
+        {activeTab === 'account_requests' && (
+          <div className="space-y-4 animate-fade-in text-xs text-left">
+            <h3 className="text-sm md:text-base font-display font-bold text-main-normal flex items-center gap-1.5">
+              <UserX className="w-5 h-5 text-red-650" />
+              Kiểm duyệt yêu cầu Khóa & Xóa (Moderator Panel)
+            </h3>
+            <p className="text-gray-400 text-xs">
+              Xem xét đề xuất đóng/xóa dữ liệu và vô hiệu hóa tài khoản tự nguyện được gửi từ học viên.
+            </p>
+
+            {accountRequests.length === 0 ? (
+              <div className="text-center py-12 border border-dashed rounded-2xl bg-slate-50">
+                <CheckCircle className="w-12 h-12 text-emerald-600 mx-auto mb-2" />
+                <p className="font-semibold text-xs text-main-normal">Không có yêu cầu Khóa/Xóa tài khoản nào cần xử lý.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {accountRequests.map((req) => (
+                  <div 
+                    key={req.id} 
+                    className={`border p-4 rounded-xl bg-white shadow-3xs flex flex-col md:flex-row justify-between gap-4 items-start md:items-center transition-all ${
+                      req.status === 'approved' ? 'border-emerald-200/60 bg-emerald-50/10' :
+                      req.status === 'rejected' ? 'border-stone-205 bg-stone-50/20' : 'border-red-150 bg-red-50/5'
+                    }`}
+                  >
+                    <div className="space-y-2 flex-1 text-xs">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-main-normal">{req.userName}</span>
+                        <span className="text-stone-400 font-mono">({req.userEmail})</span>
+                        <span className={`text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded tracking-wider ${
+                          req.type === 'delete' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {req.type === 'delete' ? '🚨 Đóng vĩnh viễn' : '⏳ Tạm khóa tài khoản'}
+                        </span>
+                        <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                          req.status === 'approved' ? 'bg-emerald-100 text-emerald-850' :
+                          req.status === 'rejected' ? 'bg-stone-200 text-stone-605' : 'bg-red-100 text-red-600 border border-red-200'
+                        }`}>
+                          {req.status === 'approved' ? 'Kiểm duyệt viên đã Duyệt' :
+                           req.status === 'rejected' ? 'Kiểm duyệt viên từ chối' : 'Đang Đợi Duyệt'}
+                        </span>
+                      </div>
+
+                      <div className="text-[11px] text-stone-600 bg-slate-50 p-2.5 rounded-xl border border-stone-100/60">
+                        <span className="font-bold text-stone-700 block mb-0.5">Lý do trình báo:</span>
+                        <p className="italic font-sans leading-relaxed">"{req.reason}"</p>
+                      </div>
+
+                      <div className="text-[9px] text-gray-400 font-mono">
+                        Yêu cầu tự nguyện gửi lúc: {new Date(req.timestamp).toLocaleString('vi-VN')}
+                      </div>
+                    </div>
+
+                    {req.status === 'pending' && (
+                      <div className="flex gap-1.5 self-end md:self-center shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onResolveAccountRequest(req.id, 'approved');
+                            alert(`Đã duyệt chấp thuận yêu cầu của ${req.userName}.`);
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 px-3 rounded-xl text-xs flex items-center gap-1 shadow transition-all"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" /> Duyệt đóng
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onResolveAccountRequest(req.id, 'rejected');
+                            alert(`Đã từ chối yêu cầu của ${req.userName}.`);
+                          }}
+                          className="bg-red-500 hover:bg-red-600 text-white font-semibold py-1.5 px-3 rounded-xl text-xs flex items-center gap-1 shadow transition-all"
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Từ Chối
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* MODERATOR COURSE INSPECTION MODAL */}
+        {inspectingCourse && (
+          <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-[9999] flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl max-w-2xl w-full p-5 sm:p-6 space-y-4 text-left border shadow-2xl max-h-[92vh] overflow-y-auto tactile-scrollbar">
+              <div className="flex justify-between items-start border-b pb-3">
+                <div>
+                  <span className="text-[9px] bg-stone-900 text-white px-2.5 py-0.5 rounded font-mono font-bold uppercase tracking-wider">
+                    {inspectingCourse.category} • NHÁP CHỜ KIỂM DUYỆT
+                  </span>
+                  <h3 className="font-display font-bold text-main-normal text-base mt-1">{inspectingCourse.title}</h3>
+                  <p className="text-[11px] text-stone-500 mt-0.5">Giảng viên xuất bản: <span className="font-bold">{inspectingCourse.instructorName}</span> • Giá dự kiến: {inspectingCourse.price.toLocaleString('vi-VN')} VND</p>
+                </div>
+                <button 
+                  onClick={() => setInspectingCourse(null)}
+                  className="p-1 rounded-full hover:bg-slate-100 text-stone-500 font-bold"
+                >
+                  X
+                </button>
+              </div>
+
+              <div className="space-y-4 text-xs text-stone-800">
+                
+                {/* Descriptive image & requirements */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div>
+                    <img src={inspectingCourse.image} alt="Banner Preview" className="w-full h-32 object-cover rounded-xl border" />
+                    <p className="text-[11px] text-stone-500 italic mt-1.5">{inspectingCourse.subtitle}</p>
+                  </div>
+                  <div className="space-y-2 bg-slate-50 p-3 rounded-xl border">
+                    <h4 className="font-bold text-stone-900 flex items-center gap-1">
+                      <Info className="w-3.5 h-3.5 text-stone-700" /> Tiêu chuẩn khóa học
+                    </h4>
+                    <p className="font-semibold text-[10.5px]">Điều kiện tiên quyết:</p>
+                    <ul className="list-disc pl-4 space-y-1 text-[10px] text-stone-600">
+                      {inspectingCourse.requirements?.map((req, i) => (
+                        <li key={i}>{req}</li>
+                      )) || <li>Không yêu cầu gì đặc biệt.</li>}
+                    </ul>
+                    <p className="font-semibold text-[10.5px] mt-2">Năng lực đạt được sau học trình:</p>
+                    <ul className="list-disc pl-4 space-y-1 text-[10px] text-stone-600">
+                      {inspectingCourse.willLearn?.map((learn, i) => (
+                        <li key={i}>{learn}</li>
+                      )) || <li>Hoàn thiện kỹ năng của ngành.</li>}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Chapters list verification */}
+                <div className="space-y-2 border-t pt-3">
+                  <h4 className="font-bold text-stone-950 flex items-center gap-1.5">
+                    <BookOpen className="w-4 h-4 text-stone-700" /> Hệ thống chương học & Nội dung giảng dạy đính kèm
+                  </h4>
+
+                  {inspectingCourse.chapters && inspectingCourse.chapters.length > 0 ? (
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {inspectingCourse.chapters.map((ch, idx) => (
+                        <div key={ch.id || idx} className="bg-stone-50 p-2.5 rounded-lg border text-left">
+                          <p className="font-bold text-stone-900">Chương {idx + 1}: {ch.title}</p>
+                          <div className="pl-3 mt-1 space-y-1.5 border-l-2 border-stone-300">
+                            {ch.lessons?.map((les, lidx) => (
+                              <div key={les.id || lidx} className="text-[11px] space-y-1">
+                                <p className="text-stone-700 font-medium">✔️ {les.title} ({les.duration || '0:00'})</p>
+                                
+                                {les.docContent && (
+                                  <div className="bg-white p-2 rounded border border-stone-200 mt-1 max-h-24 overflow-y-auto text-[10px] font-mono leading-relaxed whitespace-pre-wrap text-stone-600">
+                                    📄 <b>[NỘI DUNG TÀI LIỆU DOC]:</b>
+                                    <br />
+                                    {les.docContent}
+                                  </div>
+                                )}
+
+                                {les.quiz && les.quiz.questions && les.quiz.questions.length > 0 && (
+                                  <div className="bg-[#f0f9ff] text-[#0369a1] p-1.5 rounded border border-[#b3e5fc] text-[9.5px] font-medium leading-relaxed">
+                                    📝 <b>Có bài tập trắc nghiệm ({les.quiz.questions.length} câu)</b>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-red-50 text-red-700 rounded-xl leading-relaxed text-[11px] font-medium border border-red-200">
+                      ⚠️ Giảng viên chưa đăng tải nội dung cụ thể hoặc hệ thống bài học nào cho khóa học nháp này! Cần có tối thiểu 1 chương học và bài tập để tiếp cận kiểm duyệt.
+                    </div>
+                  )}
+                </div>
+
+                {/* Additional specific user/course permissions verification */}
+                <div className="bg-amber-50/50 rounded-xl p-3 border border-amber-100 space-y-1">
+                  <h4 className="font-bold text-[#854d0e] flex items-center gap-1">
+                    <Shield className="w-3.5 h-3.5 text-[#854d0e]" /> Thiết lập bảo mật quy tắc học viên:
+                  </h4>
+                  <ul className="list-disc pl-4 space-y-1 text-[10.5px] text-stone-700">
+                    <li>Cho phép tua bài giảng: {inspectingCourse.allowSkip ? 'Đồng ý' : 'Không (Bắt buộc xem hết)'}</li>
+                    <li>Cho phép tải code/tài liệu: {inspectingCourse.allowDownload ? 'Đồng ý' : 'Không (Chỉ đọc online)'}</li>
+                    <li>Mở cổng thảo luận Q&A: {inspectingCourse.allowDiscussion !== false ? 'Mở' : 'Khóa đóng'}</li>
+                    <li>Cấp chứng chỉ: {inspectingCourse.giveCertificate ? 'Có' : 'Không'}</li>
+                  </ul>
+                </div>
+
+              </div>
+
+              <div className="flex justify-end gap-2 text-xs pt-3 border-t">
+                <button 
+                  onClick={() => setInspectingCourse(null)}
+                  className="px-4 py-2 border rounded-xl bg-slate-50 text-stone-600 hover:text-black font-semibold"
+                >
+                  Đóng cửa sổ
+                </button>
+                <button 
+                  onClick={() => {
+                    const id = inspectingCourse.id;
+                    setInspectingCourse(null);
+                    onApproveCourse(id);
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold"
+                >
+                  Phê Duyệt Ngay ✔️
+                </button>
+                <button 
+                  onClick={() => {
+                    const id = inspectingCourse.id;
+                    setInspectingCourse(null);
+                    handleOpenRejectModal(id);
+                  }}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold"
+                >
+                  Từ Chối Hoàn Trả
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* REJECTION REASON DETAIL MODAL SIMULATION */}
+        {rejectingCourseId && (
+          <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-[9999] flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 text-left border shadow-2xl">
+              <h3 className="font-display font-semibold text-main-normal text-sm flex items-center gap-1 text-red-600">
+                <AlertTriangle className="w-4 h-4 text-red-600 animate-pulse" /> Nhập Lý Do Từ Chối Phê Duyệt
+              </h3>
+              <p className="text-xs text-stone-500 leading-snug">Lý do này sẽ hiển thị trực tiếp trong Hồ Sơ của Giảng viên để họ chỉnh sửa đề cương kịp thời.</p>
+              
+              <textarea 
+                rows={4}
+                value={rejectionReasonText}
+                onChange={(e) => setRejectionReasonText(e.target.value)}
+                placeholder="Bài giảng thử nghiệm còn thiếu chapter 2, âm thanh video bị rè, hoặc có nội dung vi phạm bản quyền..."
+                className="w-full text-xs p-3 border rounded-xl focus:ring-1 focus:ring-brand-normal focus:outline-none"
+                required
+              />
+
+              <div className="flex justify-end gap-2 text-xs">
+                <button 
+                  onClick={() => setRejectingCourseId(null)}
+                  className="px-4 py-2 border rounded-xl text-stone-600 bg-slate-50 hover:bg-white font-medium"
+                >
+                  Bỏ qua
+                </button>
+                <button 
+                  onClick={handleConfirmReject}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold"
+                >
+                  Xác nhận Từ Chối xuất bản
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
 
 interface AdminDashboardProps {
   currentUser: User;
@@ -27,6 +654,10 @@ interface AdminDashboardProps {
   onUpdateBanners: (banners: Banner[]) => void;
   notifications?: Notification[];
   onUpdateNotifications?: (notifications: Notification[]) => void;
+  flaggedReviews?: FlaggedItem[];
+  onResolveFlag?: (flagId: string, resolveAction: 'dismiss' | 'resolved') => void;
+  onApproveCourse?: (courseId: string) => void;
+  onRejectCourse?: (courseId: string, reason: string) => void;
 }
 
 interface CategoryNode {
@@ -52,15 +683,58 @@ export default function AdminDashboard({
   banners,
   onUpdateBanners,
   notifications = [],
-  onUpdateNotifications
+  onUpdateNotifications,
+  flaggedReviews = [],
+  onResolveFlag = () => {},
+  onApproveCourse = () => {},
+  onRejectCourse = () => {}
 }: AdminDashboardProps) {
 
   // Selected Tab
   const [activeTab, setActiveTab] = useState<
     'general_admin' | 'courses_management' | 'categories_management' | 
     'users_management' | 'role_permissions' | 'payouts_requests' | 
-    'orders_management' | 'marketing_notifications' | 'banners_management' | 'account_requests' | 'audits_logs'
+    'orders_management' | 'marketing_notifications' | 'banners_management' | 'account_requests' | 'audits_logs' |
+    'moderator_controls' | 'api_config'
   >('general_admin');
+
+  // Backend API Integration States
+  const [apiModeState, setApiModeState] = useState<'mock' | 'api'>(() => ApiService.getConfig().mode);
+  const [apiBaseUrlState, setApiBaseUrlState] = useState<string>(() => ApiService.getConfig().baseUrl);
+  const [virtualLogs, setVirtualLogs] = useState<any[]>([]);
+  const [testResult, setTestResult] = useState<{
+    status: 'idle' | 'testing' | 'success' | 'failed';
+    message: string;
+    latency?: number;
+  }>({ status: 'idle', message: '' });
+
+  const handleTestConnection = async () => {
+    setTestResult({ status: 'testing', message: 'Đang kiểm tra kết nối tới Backend...' });
+    const res = await ApiService.testConnection(apiBaseUrlState.trim());
+    if (res.success) {
+      setTestResult({
+        status: 'success',
+        message: res.message,
+        latency: res.latency
+      });
+    } else {
+      setTestResult({
+        status: 'failed',
+        message: res.message,
+        latency: res.latency
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'api_config') {
+      setVirtualLogs(ApiService.getVirtualLogs());
+      const interval = setInterval(() => {
+        setVirtualLogs(ApiService.getVirtualLogs());
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab]);
   
   // Commission settings & coupon states
   const [commissionRate, setCommissionRate] = useState(30);
@@ -185,7 +859,7 @@ export default function AdminDashboard({
     { id: 'u-102', name: 'Trịnh Gia Bảo', email: 'giabaoxspammer@gmail.com', avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=150', role: 'student', streak: 0, lastActiveDate: '2026-05-21', interestedTopics: [], notificationSettings: { email: true, push: false, app: true, scheduleReminders: false }, phone: '0912345678' },
     { id: 'u-103', name: 'Dr. Lê Quốc Khánh', email: 'khanh.le@mindhub.edu.vn', avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=150', role: 'instructor', streak: 12, lastActiveDate: '2026-06-12', interestedTopics: ['Development'], notificationSettings: { email: true, push: true, app: true, scheduleReminders: true }, phone: '0923456789' },
     { id: 'u-104', name: 'Ninh Thị Lan Chi', email: 'lanchi.ninh@mindhub.edu.vn', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150', role: 'instructor', streak: 15, lastActiveDate: '2026-06-10', interestedTopics: ['Design'], notificationSettings: { email: true, push: true, app: true, scheduleReminders: true }, phone: '0934567890' },
-    { id: 'u-105', name: 'Tạ Minh Đăng', email: 'dangtm.mod@mindhub.edu.vn', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150', role: 'moderator', streak: 8, lastActiveDate: '2026-06-12', interestedTopics: [], notificationSettings: { email: true, push: true, app: true, scheduleReminders: false }, phone: '0945678901' }
+    { id: 'u-105', name: 'Tạ Minh Đăng', email: 'dangtm.mod@mindhub.edu.vn', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150', role: 'admin', streak: 8, lastActiveDate: '2026-06-12', interestedTopics: [], notificationSettings: { email: true, push: true, app: true, scheduleReminders: false }, phone: '0945678901' }
   ]);
   const [bannedUserIds, setBannedUserIds] = useState<string[]>(['u-102']);
   const [userSearchText, setUserSearchText] = useState('');
@@ -204,7 +878,6 @@ export default function AdminDashboard({
   const [rolePermissions, setRolePermissions] = useState<Record<Role, PermissionKey[]>>({
     student: ['course_discussion'],
     instructor: ['course_discussion', 'payout_request', 'course_editing'],
-    moderator: ['course_discussion', 'course_verification', 'content_censorship'],
     admin: ['course_discussion', 'payout_request', 'payout_approval', 'course_editing', 'course_verification', 'content_censorship', 'coupon_management', 'user_moderation', 'category_editing', 'order_billing']
   });
 
@@ -950,7 +1623,7 @@ export default function AdminDashboard({
     <div className="bg-white min-h-[85vh] rounded-2xl border border-brand-light-active overflow-hidden flex flex-col xl:flex-row text-main-darker animate-fade-in shadow">
       
       {/* Sidebar navigation */}
-      <div className="w-full xl:w-64 bg-brand-light border-b xl:border-b-0 xl:border-r border-brand-light-active p-4 space-y-1 shrink-0 flex flex-col justify-between">
+      <div className="w-full xl:w-64 bg-white border-b xl:border-b-0 xl:border-r border-brand-light-active p-4 space-y-1 shrink-0 flex flex-col justify-between">
         <div>
           <div className="text-center pb-4 border-b border-brand-light-active mb-4">
             <img src={currentUser.avatar} alt="Avatar" className="w-14 h-14 rounded-full mx-auto mb-2 border-2 border-brand-normal" />
@@ -1055,6 +1728,18 @@ export default function AdminDashboard({
             >
               <FileText className="w-4 h-4 text-stone-700" /> Nhật ký Audit Logs
             </button>
+            <button 
+              onClick={() => setActiveTab('moderator_controls')}
+              className={`w-full text-left px-3 py-2 text-[11.5px] font-bold rounded-lg flex items-center justify-between ${activeTab === 'moderator_controls' ? 'bg-stone-900 text-white shadow-3xs' : 'hover:bg-brand-light-hover'}`}
+            >
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-stone-700" /> Kiểm duyệt nội dung
+              </div>
+              <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">
+                {flaggedReviews.length + courses.filter(c => c.status === 'pending').length}
+              </span>
+            </button>
+
           </div>
         </div>
 
@@ -2035,7 +2720,7 @@ export default function AdminDashboard({
                           <div className="space-y-0.5 min-w-0 pr-24">
                             <h5 className="font-extrabold text-stone-900 text-[11.5px] truncate">{rec.studentName}</h5>
                             <p className="text-stone-400 font-mono text-[9px] truncate">{rec.studentEmail}</p>
-                            <p className="text-[10px] font-bold text-[#8b5e3c] truncate" title={rec.courseTitle}>📚 Khóa bỏ lỡ: <span className="text-stone-750 font-normal">{rec.courseTitle}</span></p>
+                            <p className="text-[10px] font-bold text-[#8b5e3c] truncate" title={rec.courseTitle}>Khóa bỏ lỡ: <span className="text-stone-750 font-normal">{rec.courseTitle}</span></p>
                           </div>
                         </div>
 
@@ -2655,7 +3340,7 @@ export default function AdminDashboard({
                 onClick={handleOpenAddUser}
                 className="bg-stone-900 hover:bg-stone-800 text-white font-bold p-2 px-4 rounded-xl flex items-center gap-1.5 text-xs transition-colors self-end sm:self-center"
               >
-                <Plus className="w-4 h-4" /> Khai sinh Thành viên mới
+                <Plus className="w-4 h-4" /> Tạo người dùng
               </button>
             </div>
 
@@ -2681,7 +3366,6 @@ export default function AdminDashboard({
                   <option value="All">--- Tất cả vai trò hệ thống ---</option>
                   <option value="student">Học viên (Student)</option>
                   <option value="instructor">Giảng viên (Instructor)</option>
-                  <option value="moderator">Kiểm duyệt viên (Moderator)</option>
                   <option value="admin">Quản trị viên tối cao (Admin)</option>
                 </select>
               </div>
@@ -2734,8 +3418,7 @@ export default function AdminDashboard({
                           <td className="p-3 text-center">
                             <span className={`text-[8.5px] font-black uppercase px-2 py-0.5 rounded tracking-wide ${
                               usr.role === 'admin' ? 'bg-red-150 text-red-800 bg-red-100' :
-                              usr.role === 'instructor' ? 'bg-orange-100 text-orange-850 bg-amber-100' :
-                              usr.role === 'moderator' ? 'bg-indigo-100 text-indigo-805 bg-blue-100' : 'bg-stone-105 text-stone-700 bg-stone-100'
+                              usr.role === 'instructor' ? 'bg-orange-100 text-orange-850 bg-amber-100' : 'bg-stone-105 text-stone-700 bg-stone-100'
                             }`}>
                               {usr.role}
                             </span>
@@ -2808,7 +3491,6 @@ export default function AdminDashboard({
                         <th className="p-3.5 font-black w-72">Quyền Hạn / Tác Vụ</th>
                         <th className="p-3.5 font-black text-center text-stone-700 w-32">Học Viên (student)</th>
                         <th className="p-3.5 font-black text-center text-orange-755 w-32">Giảng Viên (instructor)</th>
-                        <th className="p-3.5 font-black text-center text-blue-800 w-32">Kiểm Duyệt (moderator)</th>
                         <th className="p-3.5 font-black text-center text-red-800 w-32">Tổng Trực Admin</th>
                       </tr>
                     </thead>
@@ -2819,7 +3501,7 @@ export default function AdminDashboard({
                             <span className="font-bold text-stone-900 block">{permission.name}</span>
                             <span className="text-[9.5px] text-stone-400 block mt-0.5">Mã định danh: <code className="bg-stone-100 px-1 py-0.5 text-stone-600 rounded font-mono">{permission.key}</code> • Nhóm: {permission.group}</span>
                           </td>
-                          {(['student', 'instructor', 'moderator', 'admin'] as Role[]).map((role) => {
+                          {(['student', 'instructor', 'admin'] as Role[]).map((role) => {
                             const hasPerm = rolePermissions[role].includes(permission.key);
                             return (
                               <td key={role} className="p-3.5 text-center">
@@ -3183,10 +3865,10 @@ export default function AdminDashboard({
                             onChange={(e) => setCouponTargetCourse(e.target.value)}
                             className="w-full text-xs px-2.5 py-2 border rounded-xl bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-medium text-stone-800"
                           >
-                            <option value="all">🌐 Toàn sàn (Tất cả khóa học)</option>
+                            <option value="all">Toàn sàn (Tất cả khóa học)</option>
                             {courses.map((c) => (
                               <option key={c.id} value={c.id}>
-                                📚 {c.title.slice(0, 35)}...
+                                {c.title.slice(0, 35)}...
                               </option>
                             ))}
                           </select>
@@ -3308,10 +3990,10 @@ export default function AdminDashboard({
                             onChange={(e) => setNotifTargetCourse(e.target.value)}
                             className="w-full text-xs px-2.5 py-2 border rounded-xl bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium text-stone-800"
                           >
-                            <option value="all">🌐 Toàn diện học viên hệ thống (Toàn sàn)</option>
+                            <option value="all">Toàn diện học viên hệ thống (Toàn sàn)</option>
                             {courses.map((c) => (
                               <option key={c.id} value={c.id}>
-                                📚 {c.title.slice(0, 35)}...
+                                {c.title.slice(0, 35)}...
                               </option>
                             ))}
                           </select>
@@ -3833,6 +4515,282 @@ export default function AdminDashboard({
           </div>
         )}
 
+        {/* TAB 11: MODERATOR CONTROLS */}
+        {activeTab === 'moderator_controls' && (
+          <div className="space-y-4 animate-fade-in text-xs text-left">
+            <ModeratorTab 
+              currentUser={currentUser}
+              courses={courses}
+              flaggedReviews={flaggedReviews}
+              onApproveCourse={onApproveCourse}
+              onRejectCourse={onRejectCourse}
+              onResolveFlag={onResolveFlag}
+              accountRequests={accountRequests}
+              onResolveAccountRequest={onResolveAccountRequest}
+              onClose={() => setActiveTab('general_admin')}
+            />
+          </div>
+        )}
+
+        {/* TAB 12: DEVELOPER BACKEND INTEGRATION PANEL REMOVED */}
+        {activeTab === 'api_config' && (
+          <div className="hidden">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-indigo-100 pb-3">
+              <div>
+                <h3 className="text-base font-display font-black text-[#5c3a21] flex items-center gap-1.5">
+                  <Settings className="w-5 h-5 text-[#8b5e3c] animate-spin" style={{ animationDuration: '6s' }} /> Cấu Hình Kết Nối Backend API Thật
+                </h3>
+                <p className="text-stone-500 text-[11px] mt-0.5">Chuẩn bị tích hợp, cấu hình địa chỉ endpoint và kiểm tra luồng truyền nhận tải dữ liệu của hệ thống.</p>
+              </div>
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${apiModeState === 'api' ? 'bg-[#8b5e3c] text-white animate-pulse' : 'bg-amber-100 text-amber-800'}`}>
+                Trạng thái: {apiModeState === 'api' ? '🔌 KẾT NỐI API THẬT' : '📦 MOCK MODE (LOCAL)'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              
+              {/* Left Column: Config Panel */}
+              <div className="lg:col-span-5 space-y-4">
+                <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-4">
+                  <h4 className="font-bold text-stone-800 text-xs">Phím điều khiển Tích Hợp</h4>
+                  
+                  {/* Mode Selector */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-bold text-stone-600">Luồng lưu chuyển dữ liệu:</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          ApiService.setMode('mock');
+                          setApiModeState('mock');
+                          alert('Đã kích hoạt chế độ Giả lập (Mock Mode). Toàn bộ dữ liệu nằm cục bộ trong trình duyệt.');
+                        }}
+                        className={`py-2 rounded-xl text-center font-bold border transition-all ${apiModeState === 'mock' ? 'bg-amber-50 border-amber-400 text-amber-800' : 'bg-stone-50 hover:bg-stone-100 text-stone-600'}`}
+                      >
+                        📦 Giả lập Mock
+                      </button>
+                      
+                      <button
+                        type="button"
+                        onClick={() => {
+                          ApiService.setMode('api');
+                          setApiModeState('api');
+                          alert(`Đã bật chế độ API thật! Trình duyệt sẽ gửi Request trực tiếp tới địa chỉ: ${apiBaseUrlState} \n\nHãy đảm bảo bạn đã cấu hình CORS và kích hoạt Backend server của bạn.`);
+                        }}
+                        className={`py-2 rounded-xl text-center font-bold border transition-all ${apiModeState === 'api' ? 'bg-indigo-50 border-indigo-400 text-indigo-800' : 'bg-stone-50 hover:bg-stone-100 text-stone-600'}`}
+                      >
+                        🔌 Gửi API Thật
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Base URL */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-bold text-stone-600">Đường dẫn gốc Backend (API Base URL):</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={apiBaseUrlState}
+                        onChange={(e) => setApiBaseUrlState(e.target.value)}
+                        placeholder="http://localhost:3000/api"
+                        className="flex-1 p-2 border rounded-xl font-mono text-xs focus:outline-none focus:border-indigo-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!apiBaseUrlState.trim()) return;
+                          ApiService.setBaseUrl(apiBaseUrlState.trim());
+                          alert('Đã cập nhật base URL kết nối Backend thành công!');
+                        }}
+                        className="bg-[#8b5e3c] hover:bg-[#724c30] text-white font-bold py-2 px-3 rounded-xl transition-all"
+                      >
+                        Lưu
+                      </button>
+                    </div>
+                    <span className="text-[10px] text-stone-450 block leading-tight">Yêu cầu giao thức HTTP/HTTPS. Hãy cấu hình CORS trên backend để chấp nhận domain trình duyệt hiện tại.</span>
+
+                    {/* Connection Tester */}
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={handleTestConnection}
+                        disabled={testResult.status === 'testing'}
+                        className={`w-full py-1.5 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1.5 text-[11px] ${
+                          testResult.status === 'testing'
+                            ? 'bg-stone-100 text-stone-400 cursor-not-allowed'
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        }`}
+                      >
+                        {testResult.status === 'testing' ? (
+                          <>
+                            <span className="w-3 h-3 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
+                            Đang kết nối...
+                          </>
+                        ) : (
+                          '⚡ Kiểm Tra Kết Nối Backend'
+                        )}
+                      </button>
+
+                      {testResult.status !== 'idle' && (
+                        <div className={`mt-2 p-2.5 rounded-xl text-[10.5px] border leading-relaxed ${
+                          testResult.status === 'success'
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800 animate-fade-in'
+                            : 'bg-red-50 border-red-200 text-red-800 animate-fade-in'
+                        }`}>
+                          <div className="flex justify-between items-center font-bold mb-0.5">
+                            <span>{testResult.status === 'success' ? '✅ KẾT NỐI THÀNH CÔNG' : '❌ KẾT NỐI THẤT BẠI'}</span>
+                            {testResult.latency !== undefined && (
+                              <span className="font-mono text-[9.5px] bg-white/60 px-1 py-0.5 rounded border">
+                                Latency: {testResult.latency}ms
+                              </span>
+                            )}
+                          </div>
+                          <p>{testResult.message}</p>
+                          {testResult.status === 'failed' && (
+                            <p className="text-[9.5px] text-red-600 mt-1 font-bold">
+                              * Hãy chắc chắn backend đang hoạt động, CORS được cấu hình đúng và không bị chặn Mixed Content.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Mixed Content & Failed to fetch Troubleshooting Info Box */}
+                    <div className="mt-3 bg-stone-50 border border-stone-200 p-3 rounded-xl text-stone-700 space-y-1.5 animate-fade-in">
+                      <div className="flex items-center gap-1.5 text-[#8b5e3c] font-bold text-[11px]">
+                        <span>💡</span> Mẹo Khắc Phục Lỗi "Failed to Fetch" (Mixed Content / CORS)
+                      </div>
+                      <p className="text-[10px] text-stone-600 leading-relaxed">
+                        Ứng dụng của bạn đang chạy qua <b>HTTPS bảo mật</b>. Trình duyệt hiện đại sẽ chặn toàn bộ các yêu cầu AJAX gọi đến địa chỉ <b>HTTP không bảo mật</b> (như <code className="bg-white px-1 py-0.5 rounded border text-stone-700">http://localhost:8000/api</code>) do cơ chế Mixed Content.
+                      </p>
+                      <div className="text-[10px] space-y-1 pl-1 text-stone-600">
+                        <div>• <b>Phương án 1 (Khuyên dùng):</b> Tạo đường hầm HTTPS bằng <a href="https://ngrok.com" target="_blank" rel="noreferrer" className="text-[#8b5e3c] hover:underline font-bold">ngrok</a> cực nhanh qua terminal máy tính của bạn:</div>
+                        <div className="bg-stone-900 text-stone-100 p-1.5 rounded font-mono text-[9px] select-all my-1 text-center font-bold">
+                          ngrok http 8000
+                        </div>
+                        <div>Sau đó copy địa chỉ HTTPS ngrok cung cấp (ví dụ: <code className="bg-white px-1 py-0.5 rounded border text-stone-700">https://xxxx.ngrok-free.app/api</code>) dán vào ô <b>API Base URL</b> ở trên và lưu lại.</div>
+                        <div className="pt-1">• <b>Phương án 2:</b> Kích hoạt SSL/HTTPS trên Laragon hoặc Laravel của bạn để gọi bằng URL <code className="bg-white px-1 py-0.5 rounded border text-stone-700">https://mindhub.test/api</code>.</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Auth Token Token */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-bold text-stone-600">Token bảo mật ủy quyền (Authorization Token):</label>
+                    <input
+                      type="text"
+                      defaultValue={localStorage.getItem('mindhub_api_token') || ''}
+                      onChange={(e) => {
+                        localStorage.setItem('mindhub_api_token', e.target.value);
+                      }}
+                      placeholder="eyJhbGciOiJIUzI1NiIsIn..."
+                      className="w-full p-2 border rounded-xl font-mono text-xs focus:outline-none focus:border-indigo-500"
+                    />
+                    <span className="text-[10px] text-stone-400 block leading-tight">Sẽ được tự động gửi đi trong Header yêu cầu dưới dạng: <code className="bg-stone-100 p-0.5 rounded text-red-500 font-mono">Authorization: Bearer [token]</code></span>
+                  </div>
+                </div>
+
+                {/* API Specs for Developers */}
+                <div className="bg-stone-950 text-stone-200 border border-stone-900 rounded-2xl p-4 space-y-3.5">
+                  <h4 className="font-bold text-white text-xs flex items-center gap-1">📋 Đặc tả kỹ thuật Request/Response</h4>
+                  <p className="text-[10.5px] text-stone-300">Backend của bạn cần triển khai tối thiểu các endpoint sau:</p>
+                  
+                  <div className="space-y-2 font-mono text-[10px]">
+                    <div className="p-2 bg-black/30 rounded border border-indigo-950">
+                      <div className="flex justify-between font-bold text-emerald-400">
+                        <span>GET /api/courses</span>
+                        <span className="text-[9px] bg-emerald-500/10 px-1 rounded">PUBLIC hoặc ADMIN</span>
+                      </div>
+                      <p className="text-[9px] text-stone-300 mt-0.5">Lấy danh sách các khóa học hiện hành.</p>
+                    </div>
+
+                    <div className="p-2 bg-black/30 rounded border border-indigo-950">
+                      <div className="flex justify-between font-bold text-amber-400">
+                        <span>POST /api/courses</span>
+                        <span className="text-[9px] bg-amber-500/10 px-1 rounded">INSTRUCTOR</span>
+                      </div>
+                      <p className="text-[9px] text-stone-300 mt-0.5">Tạo bản nháp khóa học (Course Draft) mới.</p>
+                    </div>
+
+                    <div className="p-2 bg-black/30 rounded border border-indigo-950">
+                      <div className="flex justify-between font-bold text-sky-400">
+                        <span>PUT /api/courses/:id/chapters</span>
+                        <span className="text-[9px] bg-sky-500/10 px-1 rounded">INSTRUCTOR</span>
+                      </div>
+                      <p className="text-[9px] text-stone-300 mt-0.5">Lưu đồng bộ toàn bộ chương học & bài học video của giảng viên.</p>
+                    </div>
+
+                    <div className="p-2 bg-black/30 rounded border border-indigo-950">
+                      <div className="flex justify-between font-bold text-pink-400">
+                        <span>POST /api/media/upload-video</span>
+                        <span className="text-[9px] bg-pink-500/10 px-1 rounded">MULTIPART FORM</span>
+                      </div>
+                      <p className="text-[9px] text-stone-300 mt-0.5">Nhận file video bài giảng, chuyển mã adaptive HLS rồi trả về m3u8 stream.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Console/Traffic logs */}
+              <div className="lg:col-span-7 flex flex-col space-y-4 min-h-[450px]">
+                <div className="flex-1 bg-stone-900 text-stone-200 border border-stone-800 rounded-2xl p-4 flex flex-col font-mono">
+                  <div className="flex justify-between items-center border-b border-stone-850 pb-2 mb-3">
+                    <span className="text-stone-400 text-[11px] font-bold flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" /> Virtual API Traffic Console
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        ApiService.clearVirtualLogs();
+                        setVirtualLogs([]);
+                      }}
+                      className="text-stone-450 hover:text-white text-[10px] font-bold border border-stone-700 px-2 py-0.5 rounded transition-colors"
+                    >
+                      Clear Logs
+                    </button>
+                  </div>
+
+                  {/* Terminal Area */}
+                  <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 max-h-[380px] text-[10.5px]">
+                    {virtualLogs.length === 0 ? (
+                      <div className="text-stone-500 italic text-center pt-10 text-[11px]">
+                        Chưa ghi nhận tín hiệu truyền thông API HTTP nào.<br/>
+                        Hãy tạo bản nháp khóa học, thêm chương, hoặc tải video khóa học để theo dõi Request tải lên.
+                      </div>
+                    ) : (
+                      virtualLogs.map((log) => (
+                        <div key={log.id} className="border-b border-stone-850 pb-2 space-y-1">
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-indigo-400 font-bold">[{log.time}] [{log.category}]</span>
+                            <span className={`px-1 rounded text-[9px] font-bold ${log.mode === 'api' ? 'bg-[#8b5e3c]/30 text-indigo-300' : 'bg-amber-600/20 text-amber-400'}`}>
+                              {log.mode.toUpperCase()} MODE
+                            </span>
+                          </div>
+                          <p className="text-emerald-400 font-bold">Action: {log.action}</p>
+                          {log.payload && (
+                            <pre className="p-2 bg-stone-950/80 border border-stone-850 rounded text-[9.5px] text-sky-305 max-h-36 overflow-y-auto overflow-x-auto whitespace-pre">
+                              {log.payload}
+                            </pre>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* API Ready Validation Alert */}
+                <div className="p-3.5 bg-stone-50 border border-stone-200 rounded-2xl flex items-start gap-2.5">
+                  <span className="text-[#8b5e3c] text-sm mt-0.5">ℹ</span>
+                  <div className="space-y-1 leading-relaxed text-[#5c3a21]">
+                    <p className="font-bold">Lưu ý cho đội ngũ lập trình Backend:</p>
+                    <p>Toàn bộ lớp dữ liệu UI của MindHub (như Video, Thỏa thuận, Bài thi thử, Chứng chỉ PDF, Khảo nghiệm câu trả lời) đã được chuẩn bị chu đáo để hỗ trợ CORS. Nhấp chọn chế độ 'Gửi API thật' rồi cấu hình Base URL là toàn bộ ứng dụng sẽ bắt đầu giao tiếp đồng bộ trực tiếp!</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* MODAL 1: ADD / EDIT USER PROFILE */}
@@ -3842,9 +4800,9 @@ export default function AdminDashboard({
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="font-black text-sm text-stone-900 flex items-center gap-1.5">
                 <Users className="w-4 h-4 text-stone-850" />
-                {editingUser ? 'Biên dịch Hồ sơ Thành viên' : 'Khai sinh Thành viên mới'}
+                {editingUser ? 'Biên dịch Hồ sơ Thành viên' : 'Tạo người dùng'}
               </h3>
-              <button onClick={() => setShowUserModal(false)} className="text-stone-400 hover:text-stone-700 text-xs font-bold">✕ Đóng</button>
+              <button onClick={() => setShowUserModal(false)} className="text-stone-400 hover:text-stone-700 text-xs font-bold">X Đóng</button>
             </div>
 
             <form onSubmit={handleSaveUser} className="space-y-3.5 text-xs">
@@ -3883,7 +4841,6 @@ export default function AdminDashboard({
                   >
                     <option value="student">student (Học sinh)</option>
                     <option value="instructor">instructor (Giảng viên)</option>
-                    <option value="moderator">moderator (Kiểm duyệt viên)</option>
                     <option value="admin">admin (Quản trị cao cấp)</option>
                   </select>
                 </div>
@@ -3961,7 +4918,7 @@ export default function AdminDashboard({
                 <BookOpen className="w-4 h-4 text-stone-750" />
                 {editingCourse ? `Biên tập khóa: ${editingCourse.title}` : 'Khai sinh Khóa học mới'}
               </h3>
-              <button onClick={() => setShowCourseModal(false)} className="text-stone-400 hover:text-stone-700 text-xs font-bold">✕ Đóng</button>
+              <button onClick={() => setShowCourseModal(false)} className="text-stone-400 hover:text-stone-700 text-xs font-bold">X Đóng</button>
             </div>
 
             <form onSubmit={handleSaveCourse} className="space-y-4 text-xs">

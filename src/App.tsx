@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Compass, Search, User, ShoppingCart, Heart, Bell, Moon, Sun, 
   Settings, Award, Sparkles, BookOpen, Star, Filter, ArrowUpDown, 
-  Check, LogOut, FileText, ChevronRight, CheckCircle, Shield, 
+  Check, LogOut, FileText, ChevronRight, ChevronLeft, CheckCircle, Shield, 
   HelpCircle, AlertCircle, Edit, Flame, RefreshCw,
   Coffee, Lock, Zap, MessageSquare, Music, Disc, Volume2, VolumeX, Pause, Play, Clock,
   Upload, Trash2, SkipBack, SkipForward, Repeat, UserX, Users, Video,
-  ShoppingBag, Landmark, Download, Tag
+  ShoppingBag, Landmark, Download, Tag, Globe, Cpu, Layers, Terminal, Database
 } from 'lucide-react';
 
 import { loadAndCleanUploadedSongs, saveUploadedSong, deleteUploadedSong, validateMp3File, PlayableSong } from './utils/musicDb';
@@ -16,7 +16,8 @@ import {
   INITIAL_NOTIFICATIONS, INITIAL_FAVORITES, FLAGGED_REVIEWS_MOCK, 
   PAYOUT_REQUESTS_MOCK, INITIAL_BANNERS
 } from './data';
-import { Course, User as UserType, Order, FlaggedItem, PayoutRequest, Notification, AccountRequest, Lesson, Banner } from './types';
+import { Course, User as UserType, Order, FlaggedItem, PayoutRequest, Notification, AccountRequest, Lesson, Banner, normalizeUser } from './types';
+import { safeLocalStorage as localStorage } from './utils/safeStorage';
 
 // Import subcomponents
 import AuthScreens from './components/AuthScreens';
@@ -24,9 +25,9 @@ import FooterLegal from './components/FooterLegal';
 import CartAndCheckout from './components/CartAndCheckout';
 import ClassroomScreen from './components/ClassroomScreen';
 import InstructorDashboard from './components/InstructorDashboard';
-import ModeratorTab from './components/ModeratorTab';
 import AdminDashboard from './components/AdminDashboard';
 import { FreePreviewModal } from './components/FreePreviewModal';
+import { ApiService } from './services/api';
 
 // Simple custom intersection observer wrapper to achieve smooth scroll animations
 interface ScrollRevealProps {
@@ -39,6 +40,10 @@ function ScrollReveal({ children, delayMs = 0 }: ScrollRevealProps) {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') {
+      setIsVisible(true);
+      return;
+    }
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) {
         if (delayMs > 0) {
@@ -123,9 +128,19 @@ const INSTRUCTORS_DATA = [
 
 export default function App() {
   // --- CORE STATE MANAGERS ---
-  const [currentUser, setCurrentUser] = useState<UserType>(INITIAL_USER);
-  const [categoriesList, setCategoriesList] = useState<string[]>(['All', 'Development', 'Design', 'Marketing', 'Artificial Intelligence']);
+  const [currentUser, setCurrentUser] = useState<UserType>(() => {
+    const stored = localStorage.getItem('mindhub_current_user');
+    if (stored) {
+      try { return normalizeUser(JSON.parse(stored)); } catch (e) { console.error(e); }
+    }
+    return INITIAL_USER;
+  });
+  const [categoriesList, setCategoriesList] = useState<string[]>(['All', 'Development', 'Design', 'Marketing', 'Artificial Intelligence', 'Business & Startup', 'Data Science', 'Cybersecurity']);
   const [courses, setCourses] = useState<Course[]>(() => {
+    const stored = localStorage.getItem('mindhub_courses_db');
+    if (stored) {
+      try { return JSON.parse(stored); } catch (e) { console.error(e); }
+    }
     const dates: Record<string, string> = {
       'course-1': '2026-05-15',
       'course-2': '2026-04-10',
@@ -141,8 +156,20 @@ export default function App() {
       freeVideoDuration: c.id === 'course-1' || c.id === 'course-2' || c.id === 'course-3' ? 15 : (c.freeVideoDuration || 30)
     }));
   });
-  const [favorites, setFavorites] = useState<string[]>(INITIAL_FAVORITES);
-  const [cart, setCart] = useState<string[]>([]);
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    const stored = localStorage.getItem('mindhub_favorites');
+    if (stored) {
+      try { return JSON.parse(stored); } catch (e) { console.error(e); }
+    }
+    return INITIAL_FAVORITES;
+  });
+  const [cart, setCart] = useState<string[]>(() => {
+    const stored = localStorage.getItem('mindhub_cart');
+    if (stored) {
+      try { return JSON.parse(stored); } catch (e) { console.error(e); }
+    }
+    return [];
+  });
   const [notifications, setNotifications] = useState<Notification[]>(() => {
     const stored = localStorage.getItem('mindhub_notifications');
     if (stored) {
@@ -150,8 +177,20 @@ export default function App() {
     }
     return INITIAL_NOTIFICATIONS;
   });
-  const [flaggedReviews, setFlaggedReviews] = useState<FlaggedItem[]>(FLAGGED_REVIEWS_MOCK);
-  const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>(PAYOUT_REQUESTS_MOCK);
+  const [flaggedReviews, setFlaggedReviews] = useState<FlaggedItem[]>(() => {
+    const stored = localStorage.getItem('mindhub_flagged_reviews');
+    if (stored) {
+      try { return JSON.parse(stored); } catch (e) { console.error(e); }
+    }
+    return FLAGGED_REVIEWS_MOCK;
+  });
+  const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>(() => {
+    const stored = localStorage.getItem('mindhub_payout_requests');
+    if (stored) {
+      try { return JSON.parse(stored); } catch (e) { console.error(e); }
+    }
+    return PAYOUT_REQUESTS_MOCK;
+  });
   
   // Account closure & lock request states
   const [accountRequests, setAccountRequests] = useState<AccountRequest[]>(() => {
@@ -207,7 +246,13 @@ export default function App() {
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [sortBy, setSortBy] = useState<'rating' | 'bestseller' | 'priceAsc' | 'priceDesc' | 'newest' | 'oldest'>('rating');
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string>('All');
+  const [sortBy, setSortBy] = useState<'rating' | 'bestseller' | 'priceAsc' | 'priceDesc' | 'newest' | 'oldest'>('newest');
+  const [showHeroPopup, setShowHeroPopup] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'home' | 'intro'>('home');
+  const [coursesPage, setCoursesPage] = useState<number>(1);
+  const [favSortBy, setFavSortBy] = useState<'favoritesDesc' | 'ratingDesc' | 'priceAsc'>('favoritesDesc');
+  const [recentPurchasedFilter, setRecentPurchasedFilter] = useState<'1_week' | '2_weeks' | '3_weeks' | '1_month' | 'all'>('all');
 
   // Instructor filtering states
   const [instructorCategory, setInstructorCategory] = useState<string>('All');
@@ -218,7 +263,13 @@ export default function App() {
   const [showBgmSuggestions, setShowBgmSuggestions] = useState<boolean>(false);
 
   // Enrolled courses (purchased courses by student)
-  const [enrolledCourseIds, setEnrolledCourseIds] = useState<string[]>(['course-1']);
+  const [enrolledCourseIds, setEnrolledCourseIds] = useState<string[]>(() => {
+    const stored = localStorage.getItem('mindhub_enrolled_courses_db');
+    if (stored) {
+      try { return JSON.parse(stored); } catch (e) { console.error(e); }
+    }
+    return ['course-1'];
+  });
 
   // Orders and transactions history (student payments & admin control)
   const [orders, setOrders] = useState<Order[]>(() => {
@@ -267,9 +318,175 @@ export default function App() {
     localStorage.setItem('mindhub_banners', JSON.stringify(updated));
   };
 
+  // Active Screens & Modals triggers
+  const [showAuth, setShowAuth] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    const stored = localStorage.getItem('mindhub_is_logged_in');
+    return stored === null ? true : stored === 'true';
+  });
+
   useEffect(() => {
     localStorage.setItem('mindhub_notifications', JSON.stringify(notifications));
   }, [notifications]);
+
+  useEffect(() => {
+    localStorage.setItem('mindhub_courses_db', JSON.stringify(courses));
+  }, [courses]);
+
+  useEffect(() => {
+    localStorage.setItem('mindhub_enrolled_courses_db', JSON.stringify(enrolledCourseIds));
+  }, [enrolledCourseIds]);
+
+  useEffect(() => {
+    localStorage.setItem('mindhub_current_user', JSON.stringify(currentUser));
+  }, [currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem('mindhub_is_logged_in', isLoggedIn ? 'true' : 'false');
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    localStorage.setItem('mindhub_favorites', JSON.stringify(favorites));
+  }, [favorites]);
+
+  useEffect(() => {
+    localStorage.setItem('mindhub_cart', JSON.stringify(cart));
+  }, [cart]);
+
+  useEffect(() => {
+    localStorage.setItem('mindhub_flagged_reviews', JSON.stringify(flaggedReviews));
+  }, [flaggedReviews]);
+
+  useEffect(() => {
+    localStorage.setItem('mindhub_payout_requests', JSON.stringify(payoutRequests));
+  }, [payoutRequests]);
+
+  useEffect(() => {
+    localStorage.setItem('mindhub_orders', JSON.stringify(orders));
+  }, [orders]);
+
+  useEffect(() => {
+    setCoursesPage(1);
+  }, [selectedCategory, selectedSubcategory, searchQuery, sortBy]);
+
+  const getCoursePurchaseDate = (courseId: string): Date => {
+    const matchedOrder = orders.find(o => o.status === 'success' && o.courses.some(item => item.id === courseId));
+    if (matchedOrder) {
+      return new Date(matchedOrder.date);
+    }
+    const today = new Date();
+    if (courseId === 'course-1') {
+      const d = new Date(today);
+      d.setDate(today.getDate() - 3);
+      return d;
+    }
+    if (courseId === 'course-2') {
+      const d = new Date(today);
+      d.setDate(today.getDate() - 10);
+      return d;
+    }
+    if (courseId === 'course-3') {
+      const d = new Date(today);
+      d.setDate(today.getDate() - 25);
+      return d;
+    }
+    const d = new Date(today);
+    d.setDate(today.getDate() - 5);
+    return d;
+  };
+
+  // API Config Mode replication state to handle immediate dynamic data reloads
+  const [apiConfigMode, setApiConfigMode] = useState<'mock' | 'api'>(() => ApiService.getConfig().mode);
+
+  // Sync state and reload data on events
+  useEffect(() => {
+    const handleModeChange = (e: Event) => {
+      const customEvent = e as CustomEvent<'mock' | 'api'>;
+      setApiConfigMode(customEvent.detail);
+    };
+    window.addEventListener('mindhub-api-mode-changed', handleModeChange);
+    return () => window.removeEventListener('mindhub-api-mode-changed', handleModeChange);
+  }, []);
+
+  // Live Load Data Effect when Switching into API mode vs Mock Mode
+  useEffect(() => {
+    let active = true;
+    if (apiConfigMode === 'api') {
+      console.log('🔌 Connecting to Live Backend Database via API...');
+      
+      // Load categories from database
+      ApiService.getCategories().then(cats => {
+        if (!active) return;
+        if (cats && cats.length > 0) {
+          setCategoriesList(['All', ...cats.map(c => c.name)]);
+        }
+      }).catch(e => console.warn('Lỗi nạp danh mục DB:', e));
+
+      // Load courses from database with stable mock data fallback if real API fails/is empty
+      ApiService.getCourses().then(coursList => {
+        if (!active) return;
+        if (coursList && coursList.length > 0) {
+          setCourses(coursList);
+        } else {
+          // API connected but returned no courses - use local storage or static mock data
+          const storedCourses = localStorage.getItem('mindhub_courses_db');
+          if (storedCourses) {
+            try {
+              const parsed = JSON.parse(storedCourses);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                setCourses(parsed);
+                return;
+              }
+            } catch {}
+          }
+          setCourses(INITIAL_COURSES);
+        }
+      }).catch(e => {
+        console.warn('Lỗi kết nối API Backend thật, tự động nạp dữ liệu Mock dự phòng:', e);
+        const storedCourses = localStorage.getItem('mindhub_courses_db');
+        if (storedCourses) {
+          try {
+            const parsed = JSON.parse(storedCourses);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setCourses(parsed);
+              return;
+            }
+          } catch {}
+        }
+        setCourses(INITIAL_COURSES);
+      });
+
+      // Load student enrolled courses if logged in and not guest
+      if (currentUser && currentUser.id !== 'u-guest') {
+        ApiService.getMyEnrolledCourses().then(enrolledList => {
+          if (!active) return;
+          if (enrolledList && enrolledList.length > 0) {
+            setEnrolledCourseIds(enrolledList.map(c => c.id));
+          }
+        }).catch(e => console.warn('Lỗi nạp lịch sử học khóa học DB:', e));
+      }
+    } else {
+      // Restore cached or default static mockup data in Mock Mode
+      const storedCourses = localStorage.getItem('mindhub_courses_db');
+      if (storedCourses) {
+        try {
+          const parsed = JSON.parse(storedCourses);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setCourses(parsed);
+          }
+        } catch {
+          setCourses(INITIAL_COURSES);
+        }
+      } else {
+        setCourses(INITIAL_COURSES);
+      }
+      setCategoriesList(['All', 'Development', 'Design', 'Marketing', 'Artificial Intelligence', 'Business & Startup', 'Data Science', 'Cybersecurity']);
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [apiConfigMode, currentUser.id]);
 
   // Listen to global legal / support triggers for decoupled modals activation
   useEffect(() => {
@@ -298,9 +515,12 @@ export default function App() {
     });
   }, [orders]);
 
+  // Reset course pagination page when filters or sorting change
+  useEffect(() => {
+    setCoursesPage(1);
+  }, [searchQuery, selectedCategory, selectedSubcategory, sortBy]);
+
   // Active Screens & Modals triggers
-  const [showAuth, setShowAuth] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
   const [showCart, setShowCart] = useState(false);
   const [directSelectCourseId, setDirectSelectCourseId] = useState<string | null>(null);
   const [initialCartTab, setInitialCartTab] = useState<'cart' | 'wishlist'>('cart');
@@ -367,7 +587,7 @@ export default function App() {
   }, [showMusicHint]);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: any;
     if (introAutoCloseCountdown !== null) {
       if (introAutoCloseCountdown > 0) {
         timer = setTimeout(() => {
@@ -418,7 +638,7 @@ export default function App() {
 
   // Simulation timer for when INTRO_VIDEO_URL is left empty ""
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: any;
     if (showIntroVideo && !INTRO_VIDEO_URL && !introVideoPaused && introAutoCloseCountdown === null) {
       interval = setInterval(() => {
         setIntroVideoTime(prev => {
@@ -596,12 +816,16 @@ export default function App() {
       tag.id = 'youtube-iframe-api-script';
       tag.src = 'https://www.youtube.com/iframe_api';
       const firstScriptTag = document.getElementsByTagName('script')[0];
-      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+      if (firstScriptTag && firstScriptTag.parentNode) {
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+      } else {
+        document.head.appendChild(tag);
+      }
     }
 
     const previousCallback = (window as any).onYouTubeIframeAPIReady;
     (window as any).onYouTubeIframeAPIReady = () => {
-      if (previousCallback) previousCallback();
+      if (typeof previousCallback === 'function') previousCallback();
       setIsYtApiReady(true);
     };
 
@@ -663,7 +887,8 @@ export default function App() {
               }
             },
             onStateChange: (event: any) => {
-              if (event.data === (window as any).YT.PlayerState.ENDED) {
+              const endedState = ((window as any).YT && (window as any).YT.PlayerState) ? (window as any).YT.PlayerState.ENDED : 0;
+              if (event.data === endedState) {
                 if (isLoopingSingleRef.current) {
                   event.target.playVideo();
                 } else {
@@ -762,7 +987,20 @@ export default function App() {
 
   // Init HTML5 audio element
   useEffect(() => {
-    const audio = new Audio(currentSong.isYoutube ? '' : currentSong.url);
+    let audio: HTMLAudioElement | null = null;
+    try {
+      if (typeof Audio !== 'undefined') {
+        audio = new Audio(currentSong.isYoutube ? '' : currentSong.url);
+      }
+    } catch (e) {
+      console.warn('[Audio Polyfill] Audio constructor is blocked or unsupported:', e);
+    }
+
+    if (!audio) {
+      audioRef.current = null;
+      return;
+    }
+
     audio.loop = false;
     audio.volume = musicVolume;
     audioRef.current = audio;
@@ -794,7 +1032,11 @@ export default function App() {
 
     return () => {
       if (audioRef.current) {
-        audioRef.current.pause();
+        try {
+          audioRef.current.pause();
+        } catch (e) {
+          console.warn(e);
+        }
         audioRef.current.removeEventListener('ended', handleEnded);
         audioRef.current.removeEventListener('timeupdate', handleTimeUpdate);
         audioRef.current.removeEventListener('durationchange', handleDurationChange);
@@ -995,7 +1237,7 @@ export default function App() {
     'Digital Marketing',
     'Cơ sở dữ liệu NoSQL',
     'Cố vấn Công nghệ',
-    'Nghệ thuật & Cà phê'
+    'Điện toán Đám mây & DevOps'
   ];
 
   const handleBuyCourseNow = (courseId: string) => {
@@ -1013,7 +1255,7 @@ export default function App() {
   };
 
   // --- PERSPECTIVE/ROLE SWITCHER ---
-  const handleSwitchRole = (role: 'student' | 'instructor' | 'moderator' | 'admin') => {
+  const handleSwitchRole = (role: 'student' | 'instructor' | 'admin') => {
     const targetUser = SYSTEM_ROLE_USERS[role];
     setCurrentUser(targetUser);
     // Reset view states
@@ -1025,7 +1267,7 @@ export default function App() {
     const newNotif: Notification = {
       id: 'notif-' + Date.now(),
       title: `Switch Role: Quyền ${role.toUpperCase()}`,
-      message: `Đã kích hoạt giao diện điều hướng dành riêng cho ${role === 'admin' ? 'Quản trị viên' : role === 'instructor' ? 'Giảng viên' : role === 'moderator' ? 'Kiểm duyệt viên' : 'Học viên'}.`,
+      message: `Đã kích hoạt giao diện điều hướng dành riêng cho ${role === 'admin' ? 'Quản trị viên' : role === 'instructor' ? 'Giảng viên' : 'Học viên'}.`,
       type: 'success',
       date: 'Vừa xong',
       read: false
@@ -1240,17 +1482,30 @@ export default function App() {
 
   // --- FILTER & SORT CALC ---
   // Using state categoriesList instead of hardcoded list
+  const availableSubcategories = useMemo(() => {
+    if (selectedCategory === 'All') {
+      return Array.from(new Set(courses.map(c => c.subcategory).filter(Boolean))) as string[];
+    } else {
+      return Array.from(new Set(
+        courses
+          .filter(c => c.category === selectedCategory)
+          .map(c => c.subcategory)
+          .filter(Boolean)
+      )) as string[];
+    }
+  }, [courses, selectedCategory]);
 
   const filteredCourses = courses.filter((c) => {
     const matchesSearch = c.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           c.subtitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           c.instructorName.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCat = selectedCategory === 'All' || c.category === selectedCategory;
+    const matchesSubcat = selectedSubcategory === 'All' || c.subcategory === selectedSubcategory;
     
     // Non-active or hidden courses are invisible to standard Student role
     const isVisibleForCurrentRole = currentUser.role !== 'student' || (c.status === 'active' && !c.isHidden);
 
-    return matchesSearch && matchesCat && isVisibleForCurrentRole;
+    return matchesSearch && matchesCat && matchesSubcat && isVisibleForCurrentRole;
   });
 
   const sortedCourses = [...filteredCourses].sort((a, b) => {
@@ -1270,6 +1525,14 @@ export default function App() {
     }
     return 0;
   });
+
+  const coursesPerPage = 6;
+  const totalCoursesPages = Math.ceil(sortedCourses.length / coursesPerPage);
+  const safeCoursesPage = Math.min(Math.max(1, coursesPage), totalCoursesPages || 1);
+  const paginatedCourses = sortedCourses.slice(
+    (safeCoursesPage - 1) * coursesPerPage,
+    safeCoursesPage * coursesPerPage
+  );
 
   const featuredCourses = courses.filter(c => c.isFeatured && c.status === 'active' && !c.isHidden);
   const newCourses = courses.filter(c => c.isNew && c.status === 'active' && !c.isHidden);
@@ -1332,10 +1595,21 @@ export default function App() {
   const handleSelectSuggestion = (item: { type: 'course' | 'instructor' | 'category' | 'subcategory'; value: string }) => {
     if (item.type === 'category') {
       setSelectedCategory(item.value);
+      setSelectedSubcategory('All');
+      setSearchQuery('');
+    } else if (item.type === 'subcategory') {
+      const parentCourse = courses.find(c => c.subcategory === item.value);
+      if (parentCourse) {
+        setSelectedCategory(parentCourse.category);
+      } else {
+        setSelectedCategory('All');
+      }
+      setSelectedSubcategory(item.value);
       setSearchQuery('');
     } else {
       setSearchQuery(item.value);
       setSelectedCategory('All');
+      setSelectedSubcategory('All');
     }
     setShowMainSuggestions(false);
     
@@ -1351,6 +1625,7 @@ export default function App() {
   const handleSelectInstructorCourses = (name: string) => {
     setSearchQuery(name);
     setSelectedCategory('All');
+    setSelectedSubcategory('All');
     setTimeout(() => {
       const el = document.getElementById('available-courses-section') || document.getElementById('courses-explorer');
       if (el) {
@@ -1409,13 +1684,6 @@ export default function App() {
             Giảng viên
           </button>
           <button 
-            id="role-switch-moderator"
-            onClick={() => handleSwitchRole('moderator')}
-            className={`px-3 py-1 rounded-full font-bold transition-all ${currentUser.role === 'moderator' ? 'bg-brand-normal text-brand-light scale-105 shadow' : 'bg-[#e3dfdf]/15 hover:bg-[#e3dfdf]/25'}`}
-          >
-            Kiểm duyệt viên
-          </button>
-          <button 
             id="role-switch-admin"
             onClick={() => handleSwitchRole('admin')}
             className={`px-3 py-1 rounded-full font-bold transition-all ${currentUser.role === 'admin' ? 'bg-brand-normal text-brand-light scale-105 shadow' : 'bg-[#e3dfdf]/15 hover:bg-[#e3dfdf]/25'}`}
@@ -1431,14 +1699,14 @@ export default function App() {
         {/* Logo / Brand Name */}
         <button 
           onClick={() => { setViewedCourse(null); setStudyingCourse(null); }}
-          className="flex items-center gap-2.5 text-brand-dark group select-none text-left shrink-0"
+          className="flex items-center gap-2.5 text-deep-indigo group select-none text-left shrink-0 animate-fade-in"
         >
-          <div className="p-2.5 bg-[#f5ece3] rounded-xl group-hover:bg-brand-light-hover transition-colors flex items-center justify-center">
-            <Coffee className="w-5 h-5 text-brand-dark" />
+          <div className="p-2.5 bg-pale-cyan rounded-xl group-hover:bg-brand-light-hover transition-colors flex items-center justify-center border border-emerald-250/30">
+            <Globe className="w-5 h-5 text-forest-teal animate-spin" style={{ animationDuration: '20s' }} />
           </div>
           <div className="hidden xs:block">
-            <span className="font-academic font-bold text-lg md:text-2xl tracking-tight text-main-normal leading-none block italic select-none">MindHub</span>
-            <span className="text-[9px] text-stone-500 font-serif block mt-0.5">Thư viện Học thuật & Cà phê</span>
+            <span className="font-suisseintl font-black text-lg md:text-2xl tracking-tighter text-deep-ink leading-none block select-none">MindHub</span>
+            <span className="text-[9px] text-slate font-suisseintlmono block mt-0.5 uppercase tracking-wide">Hệ thống Đào tạo & Quản trị Tri thức</span>
           </div>
         </button>
 
@@ -1463,7 +1731,7 @@ export default function App() {
                   }
                 }
               }}
-              className="w-full text-[11px] sm:text-xs pl-8 sm:pl-9 pr-7 py-1.5 bg-stone-50 hover:bg-stone-50/70 border border-brand-light-active rounded-xl focus:bg-white focus:ring-1 focus:ring-[#8b5e3c] focus:border-[#8b5e3c] focus:outline-none transition-all"
+              className="w-full text-[11px] sm:text-xs pl-8 sm:pl-9 pr-7 py-1.5 bg-stone-50 hover:bg-stone-50/70 border border-brand-light-active rounded-xl focus:bg-white focus:ring-1 focus:ring-deep-indigo focus:border-deep-indigo focus:outline-none transition-all"
             />
             {searchQuery && (
               <button
@@ -1471,7 +1739,7 @@ export default function App() {
                   setSearchQuery('');
                   setShowMainSuggestions(false);
                 }}
-                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-[10px] text-stone-400 hover:text-[#432c28] font-bold"
+                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-[10px] text-stone-400 hover:text-deep-indigo font-bold"
               >
                 ✕
               </button>
@@ -1956,12 +2224,12 @@ export default function App() {
                 onClick={() => {
                   setShowCart(true);
                 }}
-                className="relative p-2 text-rose-650 hover:text-[#852b21] transition-colors"
+                className="relative p-2 text-deep-indigo hover:text-deep-indigo/90 transition-colors"
                 title="Sản phẩm yêu thích"
               >
-                <Heart className={`w-5 h-5 ${favorites.length > 0 ? 'fill-rose-500 text-rose-500' : 'text-stone-500'}`} />
+                <Heart className={`w-5 h-5 ${favorites.length > 0 ? 'fill-deep-indigo text-deep-indigo' : 'text-stone-500'}`} />
                 {favorites.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-rose-500 text-white font-mono text-[9px] w-4.5 h-4.5 rounded-full flex items-center justify-center font-bold">
+                  <span className="absolute -top-1 -right-1 bg-deep-indigo text-white font-mono text-[9px] w-4.5 h-4.5 rounded-full flex items-center justify-center font-bold">
                     {favorites.length}
                   </span>
                 )}
@@ -3181,7 +3449,7 @@ export default function App() {
                           onClick={() => {
                             handleBuyCourseNow(viewedCourse.id);
                           }}
-                          className="w-full bg-stone-900 hover:bg-stone-950 flex items-center justify-center text-white py-3.5 px-6 rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer"
+                          className="w-full bg-deep-indigo hover:bg-deep-indigo/95 flex items-center justify-center text-white py-3.5 px-6 rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer"
                         >
                           Mua Ngay
                         </button>
@@ -3229,18 +3497,6 @@ export default function App() {
             onDeleteCourse={handleDeleteCourse}
             onClose={() => handleSwitchRole('student')}
           />
-        ) : currentUser.role === 'moderator' ? (
-          <ModeratorTab 
-            currentUser={currentUser}
-            courses={courses}
-            flaggedReviews={flaggedReviews}
-            onApproveCourse={handleApproveCourse}
-            onRejectCourse={handleRejectCourse}
-            onResolveFlag={handleResolveFlag}
-            accountRequests={accountRequests}
-            onResolveAccountRequest={handleResolveAccountRequest}
-            onClose={() => handleSwitchRole('student')}
-          />
         ) : currentUser.role === 'admin' ? (
           <AdminDashboard 
             currentUser={currentUser}
@@ -3260,293 +3516,681 @@ export default function App() {
             onUpdateBanners={saveBanners}
             notifications={notifications}
             onUpdateNotifications={(updated) => setNotifications(updated)}
+            flaggedReviews={flaggedReviews}
+            onResolveFlag={handleResolveFlag}
+            onApproveCourse={handleApproveCourse}
+            onRejectCourse={handleRejectCourse}
           />
         ) : (
           /* --- STUDENT PERSPECTIVE (PRIMARY INTERACTIVITIES) --- */
-          <div className="space-y-10 text-sm text-left animate-fade-in pb-12">
+          <div className="space-y-8 text-sm text-left animate-fade-in pb-12">
             
-            {/* 1. Cozy Cafe Inspired Landing Banner & Branding (Dynamic Carousel) */}
-            <ScrollReveal>
-              {(() => {
-                const activeBanners = banners.filter(b => b.isActive);
-                const displayBanners = (activeBanners.length > 0 ? activeBanners : [
-                  {
-                    id: 'banner-1',
-                    title: 'Nghệ thuật đào tạo số',
-                    subtitle: 'Nền tảng học tập trực tuyến chắt lọc tinh hoa từ phương pháp giáo dục truyền thống và trải nghiệm công nghệ tinh tế. Hôm nay bạn đang thắp sáng ngọn lửa học tập!',
-                    actionText: 'Bắt đầu học tập',
-                    actionUrl: '#courses-explorer',
-                    backgroundColor: '#fcf8f2',
-                    textColor: '#432c28',
-                    accentColor: '#8b5e3c',
-                    imageUrl: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&q=80&w=1000",
-                    isActive: true
-                  }
-                ]) as Banner[];
-                
-                const safeIndex = (currentBannerIndex + displayBanners.length) % displayBanners.length;
-                const currentBanner = displayBanners[safeIndex];
+            {/* Page Tabs Navigation (Trang Chủ vs Trang Giới Thiệu) */}
+            <div className="flex border-b border-mist gap-6 select-none font-sans sticky top-[72px] bg-[#fbf9f6]/95 backdrop-blur-md z-30 pt-3 pb-0 px-4 md:px-6">
+              <button 
+                onClick={() => setActiveTab('home')}
+                className={`pb-3 -mb-[1px] text-[13px] md:text-sm font-bold transition-all border-b-2 cursor-pointer flex items-center gap-1.5 ${activeTab === 'home' ? 'border-deep-indigo text-deep-ink font-black' : 'border-transparent text-stone-400 hover:text-stone-750'}`}
+              >
+                <span>Khám Phá Khóa Học</span>
+              </button>
+              <button 
+                onClick={() => setActiveTab('intro')}
+                className={`pb-3 -mb-[1px] text-[13px] md:text-sm font-bold transition-all border-b-2 cursor-pointer flex items-center gap-1.5 ${activeTab === 'intro' ? 'border-deep-indigo text-deep-ink font-black' : 'border-transparent text-stone-400 hover:text-stone-750'}`}
+              >
+                <span>Giới Thiệu MindHub</span>
+              </button>
+            </div>
 
-                const handleActionClick = () => {
-                  const url = currentBanner.actionUrl || '';
-                  if (url.startsWith('#')) {
-                    const el = document.getElementById(url.replace('#', '')) || document.getElementById('available-courses-section');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  } else if (categoriesList.includes(url)) {
-                    setSelectedCategory(url);
-                    const el = document.getElementById('available-courses-section');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  } else {
-                    const el = document.getElementById('available-courses-section');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  }
-                };
-
-                return (
-                  <div 
-                    id="courses-explorer" 
-                    style={{ backgroundColor: currentBanner.backgroundColor || '#fcf8f2', color: currentBanner.textColor || '#432c28' }}
-                    className="p-8 md:p-12 lg:p-14 rounded-3xl border border-brand-light-active relative overflow-hidden shadow-xs hover:border-brand-normal/40 transition-all duration-500"
-                  >
-                    {/* Decorative background logo blob */}
-                    <div className="absolute -top-10 -right-10 w-44 h-44 bg-[#e8d8c8]/50 rounded-full filter blur-2xl opacity-40 select-none pointer-events-none animate-float-slow"></div>
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center relative z-10">
-                      
-                      {/* Left Column - Content */}
-                      <div className="lg:col-span-7 space-y-5 lg:space-y-6 text-left">
-                        <div className="flex items-center gap-2">
-                          <span 
-                            className="text-[10px] md:text-xs font-bold tracking-[0.2em] uppercase px-2.5 py-1 rounded-full bg-white/60 backdrop-blur-xs shadow-3xs inline-block"
-                            style={{ color: currentBanner.accentColor }}
-                          >
-                            TIN TỔNG TIÊU ĐIỂM
-                          </span>
-                          {displayBanners.length > 1 && (
-                            <span className="text-[10px] uppercase font-mono px-2 py-0.5 bg-black/5 rounded-md font-bold">
-                              Trang {safeIndex + 1}/{displayBanners.length}
-                            </span>
-                          )}
-                        </div>
-                        
-                        <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight leading-[1.1]">
-                          Xin chào, <span className="underline font-semibold" style={{ textDecorationColor: currentBanner.accentColor }}>{currentUser.name}</span>!
-                          <span className="block font-serif italic font-normal text-3xl md:text-4xl lg:text-[46px] mt-2.5 leading-[1.15]" style={{ color: currentBanner.accentColor }}>
-                            {currentBanner.title}
-                          </span>
-                        </h1>
-                        
-                        <p className="text-[13px] md:text-[14px] leading-relaxed font-sans max-w-xl opacity-90">
-                          {currentBanner.subtitle}
-                        </p>
-
-                        <div className="flex flex-wrap gap-3 pt-2">
-                          <button 
-                            onClick={handleActionClick}
-                            style={{ backgroundColor: currentBanner.accentColor }}
-                            className="inline-flex items-center justify-center gap-2 text-white px-10 py-3.5 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer hover:brightness-105"
-                          >
-                            {currentBanner.actionText} <span className="text-sm">→</span>
-                          </button>
-                          
-                          <button 
-                            onClick={() => {
-                              setShowIntroVideo(true);
-                              setIntroVideoTime(0);
-                              setIntroAutoCloseCountdown(null);
-                            }}
-                            className="inline-flex items-center justify-center gap-2 bg-white/80 hover:bg-white text-stone-700 border border-brand-light-active px-8 py-3.5 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all shadow-xs cursor-pointer"
-                          >
-                            Xem giới thiệu <span className="text-xs">▶</span>
-                          </button>
-                        </div>
-
-                        {/* Interactive Coffee brewing bar */}
-                        <div className="space-y-3.5 pt-3.5 pb-2 border-t border-brand-light-active/30 max-w-lg bg-white/40 backdrop-blur-3xs border border-[#e8ded3] p-4.5 rounded-2xl shadow-xs transition-all duration-300 hover:shadow-xs">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10.5px] font-black text-[#5c3e38] uppercase tracking-wider block flex items-center gap-1.5">
-                              ☕ Quầy Cà Phê Học Tập:
-                            </span>
-                            <span className="text-[9px] bg-[#8b5e3c]/10 text-[#8b5e3c] px-2 py-0.5 rounded-full font-bold">
-                              Đang chuẩn bị tốt nhất
-                            </span>
-                          </div>
-                          
-                          {/* Coffee Selections */}
-                          <div className="grid grid-cols-3 gap-2">
-                            <button 
-                              onClick={() => setSelectedDrink('espresso')}
-                              className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex flex-col sm:flex-row items-center justify-center gap-1.5 border cursor-pointer ${selectedDrink === 'espresso' ? 'bg-[#5c3e38] text-white border-[#5c3e38] shadow-md scale-[1.02]' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50 hover:scale-[1.01]'}`}
-                              title="Espresso đậm đà đánh thức mọi giác quan"
-                            >
-                              <Coffee className="w-4 h-4 text-amber-500" />
-                              <span className="whitespace-nowrap">Espresso</span>
-                            </button>
-                            <button 
-                              onClick={() => setSelectedDrink('cappuccino')}
-                              className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex flex-col sm:flex-row items-center justify-center gap-1.5 border cursor-pointer ${selectedDrink === 'cappuccino' ? 'bg-[#5c3e38] text-white border-[#5c3e38] shadow-md scale-[1.02]' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50 hover:scale-[1.01]'}`}
-                              title="Latte sữa thơm ngon béo nhẹ tinh tế"
-                            >
-                              <Coffee className="w-4 h-4 text-orange-400" />
-                              <span className="whitespace-nowrap">Latte Sữa</span>
-                            </button>
-                            <button 
-                              onClick={() => setSelectedDrink('matcha')}
-                              className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex flex-col sm:flex-row items-center justify-center gap-1.5 border cursor-pointer ${selectedDrink === 'matcha' ? 'bg-emerald-800 text-white border-[#1e6146] shadow-md scale-[1.02]' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50 hover:scale-[1.01]'}`}
-                              title="Trà Matcha sảng khoái mát lành an nhiên"
-                            >
-                              <Coffee className="w-4 h-4 text-emerald-400" />
-                              <span className="whitespace-nowrap">Trà Matcha</span>
-                            </button>
-                          </div>
-
-                          {/* Interactive Table Number Adjustment Section (1 to 99) */}
-                          <div className="pt-2 border-t border-stone-150 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] text-stone-500 font-bold">Vị trí bàn ngồi:</span>
-                              <span className="text-[11px] bg-[#8b5e3c] text-white px-2 py-0.5 rounded-lg font-black tracking-wide shadow-2xs">
-                                Bàn số {selectedTable < 10 ? `0${selectedTable}` : selectedTable}
-                              </span>
-                            </div>
-
-                            {/* Control group to adjust table strictly from 1 to 99 */}
-                            <div className="flex items-center gap-1.5 self-end sm:self-auto bg-white border border-stone-200 p-1 rounded-xl shadow-2xs select-none">
-                              <button 
-                                type="button"
-                                onClick={() => setSelectedTable(prev => Math.max(1, prev - 1))}
-                                disabled={selectedTable <= 1}
-                                className={`w-6.5 h-6.5 flex items-center justify-center font-black rounded-lg text-xs transition-all ${selectedTable <= 1 ? 'text-stone-300 bg-stone-50' : 'text-stone-700 hover:bg-stone-100 active:scale-95 cursor-pointer bg-stone-50'}`}
-                                title="Giảm số bàn"
-                              >
-                                -
-                              </button>
-                              
-                              <input 
-                                type="number"
-                                min={1}
-                                max={99}
-                                value={selectedTable || ''}
-                                onChange={(e) => {
-                                  const val = parseInt(e.target.value);
-                                  if (isNaN(val)) {
-                                    setSelectedTable(1);
-                                  } else {
-                                    setSelectedTable(Math.min(99, Math.max(1, val)));
-                                  }
-                                }}
-                                className="w-10 text-center font-extrabold text-stone-850 text-xs bg-transparent border-0 p-0 focus:ring-0 focus:outline-hidden"
-                              />
-
-                              <button 
-                                type="button"
-                                onClick={() => setSelectedTable(prev => Math.min(99, prev + 1))}
-                                disabled={selectedTable >= 99}
-                                className={`w-6.5 h-6.5 flex items-center justify-center font-black rounded-lg text-xs transition-all ${selectedTable >= 99 ? 'text-stone-300 bg-stone-50' : 'text-stone-700 hover:bg-stone-100 active:scale-95 cursor-pointer bg-stone-50'}`}
-                                title="Tăng số bàn"
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Bottom stats row inside Left Column */}
-                        <div className="pt-6 border-t border-brand-light-active/40 flex flex-wrap gap-6 items-center text-xs text-stone-500">
-                          <div>
-                            <span className="font-serif italic text-xl md:text-2xl font-bold text-[#432c28] block">15k+</span>
-                            <span className="text-[9px] uppercase tracking-widest font-bold text-stone-400">HỌC VIÊN</span>
-                          </div>
-                          <div className="w-px h-8 bg-brand-light-active/50"></div>
-                          <div>
-                            <span className="font-serif italic text-xl md:text-2xl font-bold text-[#432c28] block">120+</span>
-                            <span className="text-[9px] uppercase tracking-widest font-bold text-stone-400">CHUYÊN GIA</span>
-                          </div>
-                          <div className="w-px h-8 bg-brand-light-active/50"></div>
-                          <div>
-                            <span className="font-serif italic text-xl md:text-2xl font-bold text-[#432c28] block font-semibold text-[#8b5e3c]">4.9/5</span>
-                            <span className="text-[9px] uppercase tracking-widest font-bold text-stone-400">ĐÁNH GIÁ</span>
-                          </div>
-                        </div>
+            {activeTab === 'home' ? (
+              <>
+                {/* Elegant Header & Current Courses Side-by-Side Layout */}
+                <div className="flex flex-col lg:flex-row gap-6 items-stretch w-full">
+                  {/* Left Side: Khóa học đang tham gia (Takes remaining space) */}
+                  <div className="flex-1 bg-[#fcfcfc] border border-stone-150 rounded-3xl p-4 md:p-5 flex flex-col justify-between shadow-3xs text-left">
+                    <div>
+                      <div className="flex justify-between items-center border-b border-stone-100 pb-3 mb-4">
+                        <h3 className="text-sm md:text-base font-extrabold flex items-center gap-2 text-[#432c28]">
+                          <BookOpen className="w-5 h-5 text-brand-normal" /> Khóa học đang tham gia
+                        </h3>
+                        <span className="text-[10px] bg-[#f5ece3] text-[#8b5e3c] font-bold px-2.5 py-1 rounded-md">
+                          {courses.filter(c => enrolledCourseIds.includes(c.id)).length} KHÓA ĐANG HỌC
+                        </span>
                       </div>
 
-                      {/* Right Column - Layered Images of Selected Banner or Default Team */}
-                      <div className="lg:col-span-5 relative flex flex-col items-center justify-center p-4">
-                        {/* Behind the image frame wrapper offset box */}
-                        <div className="absolute inset-0 bg-white border border-brand-light-active rounded-3xl -translate-x-3 -translate-y-3 z-0"></div>
-                        
-                        {/* The main image container */}
-                        <div className="relative w-full h-[320px] md:h-[380px] rounded-3xl overflow-hidden border-4 border-white shadow-lg z-10">
-                          <img 
-                            src={currentBanner.imageUrl || "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&q=80&w=1000"} 
-                            alt={currentBanner.title} 
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-cover select-none transition-all duration-700" 
-                          />
+                      {courses.filter(c => enrolledCourseIds.includes(c.id)).length === 0 ? (
+                        <div className="text-center py-6 text-stone-400 bg-white border border-dashed border-stone-200 rounded-2xl">
+                          <p className="text-xs font-medium">Bạn chưa bắt đầu khóa học nào. Khám phá các khóa học bên dưới để bắt đầu học ngay!</p>
                         </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                          {courses.filter(c => enrolledCourseIds.includes(c.id)).map(c => (
+                            <div key={c.id} className="border border-brand-light-active rounded-2xl p-4 bg-white flex flex-col justify-between hover-glow-card transition-all text-left space-y-3">
+                              <div className="flex gap-3">
+                                <img src={c.image} alt="Avatar" className="w-14 h-10 object-cover rounded-lg shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <span className="text-[8px] bg-[#f5ece3] text-[#432c28] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider">Đang học</span>
+                                  <h4 className="font-bold text-xs text-main-normal truncate mt-0.5">{c.title}</h4>
+                                  <p className="text-[9px] text-gray-400 mt-0.5 truncate">{c.instructorName}</p>
+                                </div>
+                              </div>
 
-                        {/* Carousel Arrows Overlay on Image */}
-                        {displayBanners.length > 1 && (
-                          <div className="absolute bottom-6 right-6 z-30 flex gap-2">
-                            <button
-                              onClick={() => setCurrentBannerIndex(prev => (prev - 1 + displayBanners.length) % displayBanners.length)}
-                              className="w-9 h-9 bg-stone-900/85 hover:bg-stone-900 text-white rounded-full flex items-center justify-center backdrop-blur-xs transition-transform active:scale-90 cursor-pointer shadow"
-                              title="Banner trước"
-                            >
-                              ←
-                            </button>
-                            <button
-                              onClick={() => setCurrentBannerIndex(prev => (prev + 1) % displayBanners.length)}
-                              className="w-9 h-9 bg-stone-900/85 hover:bg-stone-900 text-white rounded-full flex items-center justify-center backdrop-blur-xs transition-transform active:scale-90 cursor-pointer shadow"
-                              title="Banner sau"
-                            >
-                              →
-                            </button>
-                          </div>
-                        )}
+                              <div className="space-y-1">
+                                <div className="flex justify-between text-[10px] text-gray-400">
+                                  <span>Tiến độ:</span>
+                                  <span className="font-bold text-brand-dark">{c.completionRate || 60}%</span>
+                                </div>
+                                <div className="w-full bg-[#f5ece3] h-1.5 rounded-full overflow-hidden">
+                                  <div className="bg-brand-normal h-full animate-progress-fluid" style={{ width: `${c.completionRate || 60}%` }}></div>
+                                </div>
+                              </div>
 
-                        {/* Overlapping interactive Box 1 (Top-right) */}
-                        <div className="absolute -top-1 -right-2 bg-white border border-brand-light-active p-3 rounded-2xl shadow-md z-25 max-w-[170px] transform rotate-1">
-                          <span className="text-[8px] uppercase tracking-wider font-bold text-[#8b5e3c] block mb-0.5">CẢM HỨNG</span>
-                          <p className="font-serif italic text-[11px] text-[#432c28] leading-tight font-bold">
-                            "Học đi đôi với hành"
-                          </p>
-                        </div>
-
-                        {/* Overlapping interactive Box 2 */}
-                        <div className="absolute -bottom-4 -left-3 bg-[#faf6f0] border border-brand-light-active p-3 rounded-2xl shadow-md z-20 flex items-center gap-3 transform -rotate-1">
-                          <div className="relative w-10 h-7 flex items-end justify-center select-none pt-1 shrink-0">
-                            {/* Floating Steams */}
-                            <div className="absolute top-[-5px] flex gap-0.5 justify-center w-full">
-                              <span className="w-0.5 h-2 bg-[#8b5e3c]/40 rounded-full animate-steam-1"></span>
-                              <span className="w-1 h-2.5 bg-[#8b5e3c]/30 rounded-full animate-steam-2"></span>
-                              <span className="w-0.5 h-2 bg-[#8b5e3c]/40 rounded-full animate-steam-3"></span>
+                              <button 
+                                onClick={() => setStudyingCourse(c)}
+                                className="w-full bg-[#432c28] hover:bg-brand-darker text-brand-light py-1.5 rounded-lg text-[10px] font-bold transition-all text-center block cursor-pointer"
+                              >
+                                Vào lớp học ngay »
+                              </button>
                             </div>
-                            
-                            {/* Cutest mini cup */}
-                            <div className={`w-8 h-5.5 rounded-b-md border relative transition-all duration-300 ${selectedDrink === 'matcha' ? 'bg-emerald-50 border-emerald-800' : selectedDrink === 'cappuccino' ? 'bg-[#fcf7ef] border-[#432c28]' : 'bg-[#e5d8cb] border-amber-950'}`}>
-                              <div className={`absolute top-0.5 -right-2 w-1.5 h-2.5 rounded-r border border-l-0 ${selectedDrink === 'matcha' ? 'border-emerald-800' : selectedDrink === 'cappuccino' ? 'border-[#432c28]' : 'border-amber-950'}`}></div>
-                            </div>
-                          </div>
-
-                          <div className="text-left">
-                            <div className="text-amber-500 font-bold text-[9px] leading-none mb-0.5">★★★★★</div>
-                            <span className="text-[9px] uppercase tracking-wider font-bold text-stone-500 block leading-tight">Đang học bàn số {selectedTable < 10 ? `0${selectedTable}` : selectedTable}</span>
-                            <span className="text-[9px] text-[#432c28] font-black block">
-                              {selectedDrink === 'espresso' && '☕ Espresso thắp lửa'}
-                              {selectedDrink === 'cappuccino' && '☕ Latte Sữa sáng tạo'}
-                              {selectedDrink === 'matcha' && '🍵 Matcha Zen tĩnh lặng'}
-                            </span>
-                          </div>
+                          ))}
                         </div>
-                      </div>
-
+                      )}
                     </div>
                   </div>
-                );
-              })()}
+
+                  {/* Right Side: Welcome back card (Compact: 100px to 200px wide, say 200px) */}
+                  <div className="w-full lg:w-[200px] shrink-0 bg-white border border-brand-light-active p-4 rounded-3xl shadow-subtle flex flex-col justify-between text-center space-y-3">
+                    <div className="space-y-2">
+                      <div className="w-10 h-10 bg-[#f5ece3] text-[#8b5e3c] rounded-full flex items-center justify-center mx-auto font-bold text-sm">
+                        {currentUser.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="space-y-0.5">
+                        <h4 className="text-[10px] font-bold text-stone-400 uppercase tracking-wider leading-none">
+                          Chào mừng quay lại
+                        </h4>
+                        <p className="text-xs font-black text-brand-dark truncate max-w-full px-1" title={currentUser.name}>
+                          {currentUser.name}!
+                        </p>
+                      </div>
+                      <p className="text-[10.5px] text-stone-500 leading-snug">
+                        Cùng tiếp tục thắp sáng ngọn lửa tri thức hôm nay tại MindHub.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowHeroPopup(true)}
+                      className="w-full bg-deep-indigo hover:bg-midnight-teal text-white text-[10.5px] font-bold py-2 px-2.5 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap animate-none"
+                    >
+                      <Sparkles className="w-3 h-3 text-emerald-300 animate-pulse shrink-0" />
+                      <span>Xem Bản Tin</span>
+                    </button>
+                  </div>
+                </div>
+
+            {/* NEW SECTION: DANH SÁCH KHÓA HỌC (AVAILABLE COURSES) WITH PAGINATION */}
+            <ScrollReveal delayMs={100}>
+              <div id="available-courses-section" className="space-y-6 pt-2">
+                <div className="bg-white border border-mist p-5 rounded-3xl space-y-4 shadow-xs">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b border-mist pb-4 text-left">
+                    <div>
+                      <h3 className="text-xl md:text-2xl font-extrabold text-deep-ink flex items-center gap-2">
+                        <Compass className="w-6 h-6 text-deep-indigo" /> Danh Sách Khóa Học
+                      </h3>
+                      <p className="text-stone-500 text-xs">
+                        Khám phá các khóa học tinh hoa chắt lọc được thiết kế chuyên biệt cho mọi học viên.
+                      </p>
+                    </div>
+                    <span className="text-[10px] bg-pale-cyan text-forest-teal font-bold px-3 py-1.5 rounded-md uppercase tracking-wider font-mono select-none">
+                      {sortedCourses.length} KHÓA HỌC HIỆN CÓ
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
+                    {/* Left: Search input */}
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                      <input 
+                        type="text" 
+                        value={searchQuery}
+                        onFocus={() => setShowMainSuggestions(true)}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setShowMainSuggestions(true);
+                        }}
+                        placeholder="Tìm khóa học, bài học, giảng viên..."
+                        className="w-full text-xs pl-9 pr-3 py-2.5 border border-brand-light-active rounded-xl focus:ring-1 focus:ring-brand-normal focus:outline-none bg-slate-50"
+                      />
+
+                      {/* SUGGESTIONS MENU OVERLAY FOR CATALOG SEARCH */}
+                      {showMainSuggestions && searchQuery.trim().length > 0 && (
+                        <>
+                          <div className="fixed inset-0 z-30 cursor-default bg-transparent" onClick={() => setShowMainSuggestions(false)} />
+                          <div tabIndex={-1} className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-[#e8ded3] rounded-2xl shadow-xl z-40 max-h-72 overflow-y-auto divide-y divide-[#e8ded3]/30 text-left py-1">
+                            {(() => {
+                              const list = getSearchSuggestions(searchQuery);
+                              if (list.length === 0) {
+                                return (
+                                  <div className="p-3.5 text-[11px] text-stone-400 italic text-center">
+                                    Không tìm thấy gợi ý trùng khớp.
+                                  </div>
+                                );
+                              }
+                              return list.map((item, idx) => {
+                                let badgeColor = "bg-stone-50 text-stone-600";
+                                let typeLabel = "Bài học";
+                                if (item.type === 'category') {
+                                  badgeColor = "bg-amber-150 text-amber-900";
+                                  typeLabel = "Danh mục";
+                                } else if (item.type === 'instructor') {
+                                  badgeColor = "bg-emerald-150 text-emerald-950";
+                                  typeLabel = "Giảng viên";
+                                } else if (item.type === 'subcategory') {
+                                  badgeColor = "bg-sky-150 text-sky-950";
+                                  typeLabel = "Chuyên đề";
+                                }
+                                return (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => handleSelectSuggestion(item)}
+                                    className="w-full px-3.5 py-2 hover:bg-[#faf6f2] flex items-center justify-between transition-colors gap-2 text-left cursor-pointer border-none"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <Search className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                                      <span className="text-xs font-semibold text-stone-800 truncate leading-none">
+                                        {item.value}
+                                      </span>
+                                    </div>
+                                    <span className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded uppercase font-mono tracking-wider shrink-0 ${badgeColor}`}>
+                                      {typeLabel}
+                                    </span>
+                                  </button>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Right: Sort dropdown */}
+                    <div className="flex items-center gap-2 text-xs w-full lg:w-auto justify-end shrink-0">
+                      <ArrowUpDown className="w-4 h-4 text-gray-450" />
+                      <span className="text-gray-400 font-medium">Sắp xếp theo:</span>
+                      <select 
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value as any)}
+                        className="border border-brand-light-active rounded-xl px-3 py-2 bg-white focus:outline-none text-[11px] font-medium text-stone-750"
+                      >
+                        <option value="newest">Khóa học mới nhất</option>
+                        <option value="rating">Đánh giá tốt nhất</option>
+                        <option value="bestseller">Bán chạy nhất</option>
+                        <option value="priceAsc">Giá tăng dần</option>
+                        <option value="priceDesc">Giá giảm dần</option>
+                        <option value="oldest">Khóa học cũ nhất</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Two-tiered Learning Categories and Subcategories */}
+                  <div className="border-t border-stone-100 pt-4 space-y-3.5">
+                    {/* Tier 1: Parent Categories */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider select-none shrink-0 mr-1">Danh mục chính:</span>
+                      <div className="flex flex-wrap gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                        {categoriesList.map((cat) => (
+                          <button 
+                            key={cat}
+                            onClick={() => {
+                              setSelectedCategory(cat);
+                              setSelectedSubcategory('All');
+                            }}
+                            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${selectedCategory === cat ? 'bg-deep-indigo text-white shadow-xs scale-102 font-bold' : 'bg-stone-100 hover:bg-stone-200 text-stone-600'}`}
+                          >
+                            {cat === 'All' ? 'Tất cả phần' : cat}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Tier 2: Subcategories (nested/indented look) */}
+                    {availableSubcategories.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 bg-[#fdfcfb] border border-stone-150/60 p-2.5 rounded-2xl pl-4 animate-fade-in">
+                        <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider select-none shrink-0 mr-1 flex items-center gap-1">
+                          <Layers className="w-3.5 h-3.5 text-[#8b5e3c]" /> Chuyên đề con:
+                        </span>
+                        <div className="flex flex-wrap gap-1.5 overflow-x-auto no-scrollbar">
+                          {/* "Tất cả" chip for Subcategories */}
+                          <button 
+                            onClick={() => setSelectedSubcategory('All')}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${selectedSubcategory === 'All' ? 'bg-[#8b5e3c] text-white shadow-3xs font-bold' : 'bg-stone-50 border border-stone-200/50 hover:bg-stone-100 text-stone-550'}`}
+                          >
+                            Tất cả chuyên đề
+                          </button>
+                          
+                          {availableSubcategories.map((sub) => (
+                            <button 
+                              key={sub}
+                              onClick={() => setSelectedSubcategory(sub)}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${selectedSubcategory === sub ? 'bg-[#8b5e3c] text-white shadow-3xs font-bold' : 'bg-stone-50 border border-stone-200/50 hover:bg-stone-100 text-stone-550'}`}
+                            >
+                              {sub}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Course grid with 4 columns on large screen */}
+                {paginatedCourses.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400 bg-white border border-dashed rounded-2xl">
+                    <p className="font-semibold">Không tìm thấy khóa học nào phù hợp với yêu cầu tìm kiếm của bạn.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                      {paginatedCourses.map((c) => {
+                        const isEnrolled = enrolledCourseIds.includes(c.id);
+                        return (
+                          <div 
+                            key={c.id} 
+                            className="border border-brand-light-active bg-white rounded-3xl overflow-hidden flex flex-col justify-between hover-glow-card transition-all duration-300 text-left"
+                          >
+                            <div className="relative">
+                              <img src={c.image} alt="Course banner" className="w-full h-40 object-cover" />
+                              <button 
+                                onClick={() => handleToggleFavorite(c.id)}
+                                className="absolute top-2 right-2 bg-white/95 p-2 rounded-full hover:bg-white text-deep-indigo scale-100 active:scale-95 transition-all shadow-md z-10"
+                                title="Yêu thích"
+                              >
+                                <Heart className={`w-4 h-4 ${favorites.includes(c.id) ? 'fill-deep-indigo text-deep-indigo' : 'text-gray-400'}`} />
+                              </button>
+                              
+                              <div className="absolute bottom-2 left-2 flex gap-1">
+                                {c.isBestseller && (
+                                  <span className="text-[8px] bg-yellow-500 text-brand-light px-2 py-0.5 rounded-md font-bold uppercase tracking-wider shadow-sm">Bán chạy</span>
+                                )}
+                                {c.isNew && (
+                                  <span className="text-[8px] bg-blue-600 text-brand-light px-2 py-0.5 rounded-md font-bold uppercase tracking-wider shadow-sm">Mới nhất</span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
+                              <div>
+                                <span className="text-[10px] text-gray-500 block uppercase font-mono tracking-wider font-semibold">{c.subcategory}</span>
+                                <h4 className="text-[14px] font-bold text-main-darker leading-snug line-clamp-2 hover:text-brand-normal cursor-pointer mt-1" onClick={() => setViewedCourse(c)}>
+                                  {c.title}
+                                </h4>
+                                <p className="text-[11px] text-stone-500 mt-1 italic">Giảng viên: {c.instructorName}</p>
+                                
+                                <div className="flex items-center gap-1 text-[11px] text-yellow-500 mt-1.5 font-bold">
+                                  <span>{c.rating}</span>
+                                  <span>★</span>
+                                  <span className="text-gray-400 font-normal text-[10px]">({c.reviewCount})</span>
+                                </div>
+                              </div>
+
+                              <div className="border-t border-stone-100 pt-3 flex items-center justify-between mt-3">
+                                <div>
+                                  {c.salePrice ? (
+                                    <div className="flex flex-col">
+                                      <span className="text-[13px] font-bold text-brand-dark">{formatVND(c.salePrice)}</span>
+                                      <span className="text-[10px] text-stone-400 line-through">{formatVND(c.price)}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-[13px] font-bold text-brand-dark">{formatVND(c.price)}</span>
+                                  )}
+                                </div>
+
+                                <div className="flex gap-1.5 flex-nowrap">
+                                  <button 
+                                    onClick={() => setViewedCourse(c)}
+                                    className="bg-[#f5ece3] hover:bg-[#dbcdc3] text-brand-dark text-[10px] font-bold py-2.5 px-4.5 rounded-xl transition-all cursor-pointer whitespace-nowrap"
+                                  >
+                                    Chi tiết
+                                  </button>
+                                  {isEnrolled ? (
+                                    <button 
+                                      onClick={() => setStudyingCourse(c)}
+                                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-2.5 px-4.5 rounded-xl transition-all whitespace-nowrap"
+                                    >
+                                      Đang học
+                                    </button>
+                                  ) : (
+                                    <button 
+                                      onClick={() => handleBuyCourseNow(c.id)}
+                                      className="bg-deep-indigo hover:bg-deep-indigo/95 text-white text-[10px] font-bold py-2.5 px-5 rounded-xl transition-all flex items-center justify-center cursor-pointer whitespace-nowrap"
+                                    >
+                                      Mua Ngay
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Elegant Pagination controls */}
+                    {totalCoursesPages > 1 && (
+                      <div className="flex justify-center items-center gap-2 pt-6 pb-2">
+                        <button
+                          onClick={() => setCoursesPage(prev => Math.max(1, prev - 1))}
+                          disabled={safeCoursesPage === 1}
+                          className="p-2 rounded-xl border border-brand-light-active bg-white text-stone-700 hover:bg-stone-50 disabled:opacity-40 disabled:hover:bg-white transition-all cursor-pointer animate-none"
+                          title="Trang trước"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+
+                        <div className="flex items-center gap-1.5">
+                          {Array.from({ length: totalCoursesPages }).map((_, idx) => {
+                            const pageNum = idx + 1;
+                            const isCurrent = pageNum === safeCoursesPage;
+                            return (
+                              <button
+                                key={pageNum}
+                                onClick={() => setCoursesPage(pageNum)}
+                                className={`w-8.5 h-8.5 text-xs font-bold rounded-xl transition-all border cursor-pointer ${
+                                  isCurrent
+                                    ? 'bg-deep-indigo text-white border-deep-indigo shadow-xs scale-105'
+                                    : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50 hover:border-stone-300'
+                                }`}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <button
+                          onClick={() => setCoursesPage(prev => Math.min(totalCoursesPages, prev + 1))}
+                          disabled={safeCoursesPage === totalCoursesPages}
+                          className="p-2 rounded-xl border border-brand-light-active bg-white text-stone-700 hover:bg-stone-50 disabled:opacity-40 disabled:hover:bg-white transition-all cursor-pointer animate-none"
+                          title="Trang sau"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* FAQ banner helper panel in integrated layout */}
+                <div className="bg-brand-light/40 border border-brand-light-active p-4 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4 text-left">
+                  <div className="flex items-center gap-3">
+                    <HelpCircle className="w-5 h-5 text-brand-normal shrink-0" />
+                    <div>
+                      <h4 className="font-bold text-brand-dark text-xs">Có câu hỏi về MindHub?</h4>
+                      <p className="text-gray-500 text-[10.5px]">Chính sách cam kết hoàn trả 100% học liệu số trong 7 ngày nếu không hài lòng.</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setShowLegal('faq')}
+                    className="bg-white hover:bg-stone-50 border border-brand-light-active rounded-xl px-4 py-2 text-xs text-[#8b5e3c] font-bold transition-all shadow-3xs shrink-0 cursor-pointer"
+                  >
+                    Xem câu hỏi phổ biến »
+                  </button>
+                </div>
+              </div>
             </ScrollReveal>
 
-            {/* 1B. PROMOTIONAL SHOWCASE SECTION (HÌNH ẢNH QUẢNG BÁ & DEMO WEB) */}
+
+
+            {/* SECTION 2: TOP KHÓA HỌC ĐƯỢC YÊU THÍCH NHẤT */}
+            <ScrollReveal delayMs={150}>
+              <div className="bg-[#fcfcfc] border border-stone-150 rounded-3xl p-5 md:p-6 space-y-4 shadow-3xs">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-stone-100 pb-3">
+                  <div className="space-y-0.5">
+                    <h3 className="text-base md:text-lg font-extrabold flex items-center gap-2 text-[#432c28]">
+                      <Heart className="w-5 h-5 fill-deep-indigo text-deep-indigo" /> Top Khóa Học Được Yêu Thích Nhất
+                    </h3>
+                    <p className="text-[10.5px] text-stone-500">
+                      Những khóa học học thuật đỉnh cao thu hút đông đảo lượng quan tâm thảo luận nhất tuần qua.
+                    </p>
+                  </div>
+
+                  {/* Sort favorites controls */}
+                  <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                    <span className="text-[10.5px] text-stone-400 font-bold">Sắp xếp:</span>
+                    <select
+                      value={favSortBy}
+                      onChange={(e) => setFavSortBy(e.target.value as any)}
+                      className="border border-stone-200 rounded-lg px-2 py-1 bg-white focus:outline-none text-[10.5px] font-bold text-stone-700 shadow-3xs"
+                    >
+                      <option value="favoritesDesc">Yêu thích nhiều nhất</option>
+                      <option value="ratingDesc">Đánh giá tốt nhất</option>
+                      <option value="priceAsc">Giá thấp nhất</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Grid of Top Favorited Courses */}
+                {(() => {
+                  // Attach virtual favoriteCount & sort
+                  const sortedFavs = [...courses]
+                    .map(c => ({
+                      ...c,
+                      favoriteCount: Math.floor(c.enrolledCount * 0.45 + c.reviewCount * 1.6 + c.rating * 15)
+                    }))
+                    .sort((a, b) => {
+                      if (favSortBy === 'favoritesDesc') return b.favoriteCount - a.favoriteCount;
+                      if (favSortBy === 'ratingDesc') return b.rating - a.rating;
+                      if (favSortBy === 'priceAsc') return (a.salePrice || a.price) - (b.salePrice || b.price);
+                      return 0;
+                    })
+                    .slice(0, 4); // show top 4 favorited courses!
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                      {sortedFavs.map(c => {
+                        const isEnrolled = enrolledCourseIds.includes(c.id);
+                        return (
+                          <div key={c.id} className="bg-white border border-stone-150 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:border-[#8b5e3c]/30 transition-all text-left space-y-3 relative group">
+                            <button 
+                              onClick={() => handleToggleFavorite(c.id)}
+                              className="absolute top-2.5 right-2.5 bg-white/95 p-1.5 rounded-full hover:bg-white text-deep-indigo shadow-xs z-10 transition-transform active:scale-90"
+                              title="Yêu thích"
+                            >
+                              <Heart className={`w-3.5 h-3.5 ${favorites.includes(c.id) ? 'fill-deep-indigo text-deep-indigo' : 'text-stone-300'}`} />
+                            </button>
+
+                            <div className="space-y-2">
+                              <div className="relative overflow-hidden h-28 bg-stone-100 rounded-xl">
+                                <img src={c.image} alt={c.title} className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300" />
+                                <div className="absolute top-2 left-2 bg-[#8b5e3c] text-white font-mono text-[8px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider">
+                                  🔥 {c.favoriteCount.toLocaleString()} quan tâm
+                                </div>
+                              </div>
+
+                              <div className="min-w-0">
+                                <span className="text-[8px] bg-stone-100 text-stone-600 px-2 py-0.5 rounded font-mono font-bold uppercase">{c.subcategory}</span>
+                                <h4 className="font-extrabold text-xs text-main-normal leading-snug line-clamp-2 mt-1 cursor-pointer hover:text-[#8b5e3c]" onClick={() => setViewedCourse(c)}>
+                                  {c.title}
+                                </h4>
+                                <div className="flex items-center gap-1 text-[10px] text-yellow-500 mt-1 font-bold">
+                                  <span>{c.rating}</span>
+                                  <span>★</span>
+                                  <span className="text-gray-400 font-normal text-[9px]">({c.reviewCount})</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-2 border-t border-stone-50 text-[11px] mt-2">
+                              <div className="font-bold text-[#432c28]">
+                                {c.salePrice ? formatVND(c.salePrice) : formatVND(c.price)}
+                              </div>
+
+                              <div className="flex gap-1.5">
+                                <button 
+                                  onClick={() => setViewedCourse(c)}
+                                  className="bg-stone-50 hover:bg-stone-100 border border-stone-200 text-stone-750 text-[9.5px] font-bold py-1.5 px-3 rounded-xl transition cursor-pointer"
+                                >
+                                  Chi tiết
+                                </button>
+                                {isEnrolled ? (
+                                  <button 
+                                    onClick={() => setStudyingCourse(c)}
+                                    className="bg-emerald-50 text-emerald-800 text-[9.5px] font-bold py-1.5 px-3 rounded-xl transition"
+                                  >
+                                    Đang học
+                                  </button>
+                                ) : (
+                                  <button 
+                                    onClick={() => handleBuyCourseNow(c.id)}
+                                    className="bg-deep-indigo hover:bg-deep-indigo/95 text-white text-[9.5px] font-bold py-1.5 px-3 rounded-xl transition-all shadow-3xs"
+                                  >
+                                    Mua Ngay
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            </ScrollReveal>
+
+          </>
+        ) : (
+          /* --- INTRODUCTION TAB VIEW --- */
+          <div className="space-y-10 text-sm text-left animate-fade-in pb-12">
+            {/* Intro Hero Section with Stats */}
+            <ScrollReveal delayMs={100}>
+              <div className="bg-[#fcf8f2] border border-[#e8ded3] p-6 md:p-10 rounded-3xl relative overflow-hidden">
+                <div className="absolute -top-10 -right-10 w-44 h-44 bg-[#e8d8c8]/50 rounded-full filter blur-2xl opacity-40 select-none pointer-events-none animate-float-slow"></div>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
+                  <div className="lg:col-span-7 space-y-4 md:space-y-5">
+                    <span className="text-[10px] bg-[#8b5e3c]/10 text-[#8b5e3c] px-3 py-1 rounded-full font-mono font-bold uppercase tracking-wider">
+                      VỀ MINDHUB ACADEMY
+                    </span>
+                    
+                    <h2 className="text-2xl md:text-3.5xl font-extrabold tracking-tight text-[#432c28] leading-tight font-serif">
+                      Nghệ thuật đào tạo số & <br />
+                      Trải nghiệm học tập tĩnh lặng
+                    </h2>
+                    
+                    <p className="text-xs md:text-sm text-stone-605 leading-relaxed font-sans max-w-xl">
+                      Nền tảng học tập trực tuyến chắt lọc tinh hoa từ phương pháp giáo dục truyền thống mộc mạc và trải nghiệm công nghệ tinh tế nhất. Hôm nay bạn đang thắp sáng ngọn lửa học tập cùng MindHub!
+                    </p>
+
+                    {/* Interactive Tech Sandbox Environment Panel */}
+                    <div className="space-y-3 pt-3 pb-1 border-t border-brand-light-active/30 max-w-lg bg-white/40 backdrop-blur-3xs border border-mist p-3.5 rounded-xl shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black text-deep-indigo uppercase tracking-wider block flex items-center gap-1.5">
+                          ⚡ Môi Trường Sandbox Lab:
+                        </span>
+                        <span className="text-[8px] bg-pale-cyan text-forest-teal px-1.5 py-0.5 rounded-full font-bold">
+                          Thiết lập phiên làm việc trực tuyến
+                        </span>
+                      </div>
+                      
+                      {/* Sandbox Selections */}
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <button 
+                          onClick={() => setSelectedDrink('espresso')}
+                          className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 border cursor-pointer ${selectedDrink === 'espresso' ? 'bg-deep-indigo text-white border-deep-indigo shadow-md' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
+                        >
+                          <Cpu className="w-3.5 h-3.5 text-deep-indigo" />
+                          <span>Cloud VM</span>
+                        </button>
+                        <button 
+                          onClick={() => setSelectedDrink('cappuccino')}
+                          className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 border cursor-pointer ${selectedDrink === 'cappuccino' ? 'bg-deep-indigo text-white border-deep-indigo shadow-md' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
+                        >
+                          <Layers className="w-3.5 h-3.5 text-forest-teal" />
+                          <span>Agent AI</span>
+                        </button>
+                        <button 
+                          onClick={() => setSelectedDrink('matcha')}
+                          className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 border cursor-pointer ${selectedDrink === 'matcha' ? 'bg-deep-indigo text-white border-deep-indigo shadow-md' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
+                        >
+                          <Terminal className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Web Dev</span>
+                        </button>
+                      </div>
+
+                      {/* Table Number */}
+                      <div className="pt-1.5 border-t border-stone-150 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] text-stone-500 font-bold">Server Node:</span>
+                          <span className="text-[10px] bg-deep-indigo text-white px-1.5 py-0.5 rounded font-black">
+                            Node #{selectedTable < 10 ? `0${selectedTable}` : selectedTable}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1 bg-white border border-stone-200 p-0.5 rounded-lg select-none">
+                          <button 
+                            type="button"
+                            onClick={() => setSelectedTable(prev => Math.max(1, prev - 1))}
+                            disabled={selectedTable <= 1}
+                            className="w-5 h-5 flex items-center justify-center text-[10px] font-bold text-stone-600 bg-stone-50 rounded cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <input 
+                            type="number"
+                            min={1}
+                            max={99}
+                            value={selectedTable || ''}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value);
+                              setSelectedTable(isNaN(val) ? 1 : Math.min(99, Math.max(1, val)));
+                            }}
+                            className="w-6 text-center font-bold text-stone-850 text-[10px] bg-transparent border-0 p-0 focus:ring-0 focus:outline-hidden"
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => setSelectedTable(prev => Math.min(99, prev + 1))}
+                            disabled={selectedTable >= 99}
+                            className="w-5 h-5 flex items-center justify-center text-[10px] font-bold text-stone-600 bg-stone-50 rounded cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Stats Row moved directly here from Hero Banner */}
+                    <div className="pt-3 border-t border-brand-light-active/40 flex gap-4 items-center text-[11px] text-stone-500">
+                      <div>
+                        <span className="font-serif italic text-base font-bold text-[#432c28] block">15k+</span>
+                        <span className="text-[8px] uppercase tracking-widest font-bold text-stone-400">HỌC VIÊN</span>
+                      </div>
+                      <div className="w-px h-6 bg-brand-light-active/50"></div>
+                      <div>
+                        <span className="font-serif italic text-base font-bold text-[#432c28] block">120+</span>
+                        <span className="text-[8px] uppercase tracking-widest font-bold text-stone-400">CHUYÊN GIA</span>
+                      </div>
+                      <div className="w-px h-6 bg-brand-light-active/50"></div>
+                      <div>
+                        <span className="font-serif italic text-base font-bold text-[#8b5e3c] block font-semibold">4.9/5</span>
+                        <span className="text-[8px] uppercase tracking-widest font-bold text-stone-400">ĐÁNH GIÁ</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-5 relative flex flex-col items-center justify-center p-2">
+                    <div className="absolute inset-0 bg-white border border-brand-light-active rounded-2xl -translate-x-2 -translate-y-2 z-0"></div>
+                    <div className="relative w-full h-[220px] md:h-[260px] rounded-2xl overflow-hidden border-2 border-white shadow-md z-10">
+                      <img 
+                        src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&q=80&w=1000" 
+                        alt="Thư viện học thuật" 
+                        className="w-full h-full object-cover select-none" 
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </ScrollReveal>
+
+            {/* 1B. PROMOTIONAL SHOWCASE SECTION (GÓC TRỰC QUAN MINDHUB: TRỰC TIẾP TRẢI NGHIỆM TINH HOA) */}
             <ScrollReveal delayMs={150}>
               <div className="bg-white border border-brand-light-hover rounded-3xl p-6 md:p-8 space-y-6 shadow-2xs">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-[#faf5ec] pb-4 gap-2 text-left">
@@ -3561,9 +4205,7 @@ export default function App() {
                   </span>
                 </div>
 
-                {/* 3 columns of Beautiful High-Res Unsplash Images with Interactive Capabilities */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  
                   {/* Promo Card 1 - Focus Box with Interactive Rain Sound Synthesis and Note typing */}
                   <div className="group rounded-2xl overflow-hidden border border-brand-light-active hover:border-brand-normal/40 transition-all duration-300 bg-[#faf7f2]/30 flex flex-col justify-between p-2 min-h-[530px] md:min-h-[550px]">
                     <div>
@@ -3584,7 +4226,6 @@ export default function App() {
                           Từng bài học được tinh gọn mộc mạc tựa cuốn sổ tay da bên tách Latte thơm ngát. Thử bật nhạc âm cảnh gỗ để đạt tập trung cao độ:
                         </p>
 
-                        {/* Sound Synth Trigger Button */}
                         <div className="pt-1">
                           <button
                             onClick={(e) => {
@@ -3603,7 +4244,6 @@ export default function App() {
                           </button>
                         </div>
 
-                        {/* Animated Web Audio Active Sound Wave */}
                         {demo1AudioActive && (
                           <div className="flex gap-1 items-end h-4 justify-center py-1 bg-amber-50 rounded-lg">
                             <span className="w-1 bg-[#8b5e3c] rounded-full h-1/2 animate-ping"></span>
@@ -3613,7 +4253,6 @@ export default function App() {
                           </div>
                         )}
 
-                        {/* Demo Sketch notepad */}
                         <div className="space-y-1">
                           <span className="text-[9px] uppercase tracking-wider font-bold text-stone-400 block">Sổ tay nháp ý tưởng trực tuyến:</span>
                           <textarea
@@ -3648,7 +4287,6 @@ export default function App() {
                           Tri thức tại đây không dàn trải xô bồ ngoài thị trường. Hãy bấm "Xem thử" giáo trình cô đọng 3 chương cốt lõi ngay:
                         </p>
 
-                        {/* Interactive Syllabus Accordion */}
                         <div className="space-y-1.5 pt-1">
                           {[
                             { num: 1, title: 'Bản chất vòng đời State React', desc: 'Sự khác nhau cơ bản giữa render queue, batching gom cụm cập nhật mới nhất và useRef giữ tham chiếu bảo mật.' },
@@ -3698,7 +4336,6 @@ export default function App() {
                           Nhận diện lỗ hổng kiến thức chuẩn xác. Mời bạn trả lời thử câu hỏi mấu chốt được đưa ra bởi AI Mentor:
                         </p>
 
-                        {/* Interactive Quiz Card */}
                         <div className="bg-white border border-stone-200 rounded-xl p-3 text-left space-y-2.5 shadow-2xs">
                           {demo3QuizStep === 0 ? (
                             <div className="space-y-1.5 text-left">
@@ -3724,14 +4361,14 @@ export default function App() {
                             <div className="space-y-1.5 animate-fade-in text-left">
                               {demo3QuizStep === 2 ? (
                                 <>
-                                  <span className="text-[9px] bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded font-bold uppercase inline-block font-mono">Đúng rồi! ✓</span>
+                                  <span className="text-[9px] bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded font-bold uppercase inline-block font-mono font-bold">Đúng rồi! ✓</span>
                                   <p className="text-[10px] text-stone-600 leading-normal font-sans pt-1">
                                     React định vị thẻ dựa trên "key" để tối thiểu re-renders. Khi bạn Sort/Filter mảng, index bị xáo sẽ làm React gắn nhầm state nội bộ của thẻ cũ sang thẻ mới, tạo bug giao diện nguy hại khó lường!
                                   </p>
                                 </>
                               ) : (
                                 <>
-                                  <span className="text-[9px] bg-amber-50 text-amber-800 px-2 py-0.5 rounded font-bold uppercase inline-block font-mono">Chưa chuẩn xác! ✕</span>
+                                  <span className="text-[9px] bg-amber-50 text-amber-800 px-2 py-0.5 rounded font-bold uppercase inline-block font-mono font-bold">Chưa chuẩn xác! ✕</span>
                                   <p className="text-[10px] text-stone-600 leading-normal font-sans pt-1">
                                     Dùng index làm key là phản mẫu (anti-pattern) khi list mảng bị sắp xếp lại, xóa chèn phần tử. Hãy ưu tiên dùng id duy nhất (uuid, db id) để React đối sánh DOM ảo một cách tuyệt đối chính xác!
                                   </p>
@@ -3749,7 +4386,6 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-
                 </div>
 
                 {/* Scholar Inspiring Quote */}
@@ -3761,54 +4397,26 @@ export default function App() {
               </div>
             </ScrollReveal>
 
-            {/* 🤎 HIGH-FIDELITY DECORATIVE CHANNELS WITH REAL-LIFE PEOPLE (Mục trang trí) */}
-            <ScrollReveal delayMs={150}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-6">
-                
-                {/* Decorative Box 1 */}
-                <div className="bg-[#faf7f2] border-l-4 border-stone-850 rounded-2xl p-5 flex items-start gap-4 shadow-2xs hover:shadow-md transition-all text-left">
-                  <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-stone-100 border border-stone-250">
-                    <img 
-                      src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200" 
-                      alt="Học viên Minh Anh" 
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <h4 className="text-[14px] md:text-base font-black tracking-tight text-[#432c28] uppercase">
-                      Đại sứ học viên • Nguyễn Minh Anh
-                    </h4>
-                    <p className="text-[11px] text-stone-600 font-medium leading-relaxed">
-                      "Từ một lập trình viên tay ngang, nhờ lộ trình tĩnh lặng học sâu của MindHub kết hợp với sự đồng hành của AI Mentor, Minh Anh đã tối ưu hóa được hàng loạt Server Actions phức tạp của doanh nghiệp, bứt phá thu nhập vượt mong đợi."
-                    </p>
-                    <span className="text-[9px] text-[#432c28] font-mono font-bold block mt-1">Lớp đã học: Next.js Advance & Coffee Brew</span>
+            {/* FAQ banner helper panel in integrated layout */}
+            <ScrollReveal delayMs={200}>
+              <div className="bg-[#fcfcfc] border border-stone-150 p-5 rounded-3xl flex flex-col md:flex-row justify-between items-center gap-4 text-left shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <HelpCircle className="w-6 h-6 text-[#8b5e3c] shrink-0" />
+                  <div>
+                    <h4 className="font-extrabold text-[#432c28] text-sm">Có câu hỏi về MindHub?</h4>
+                    <p className="text-stone-500 text-xs">Chính sách cam kết hoàn trả 100% học liệu số trong 7 ngày nếu không hài lòng.</p>
                   </div>
                 </div>
-
-                {/* Decorative Box 2 */}
-                <div className="bg-[#faf7f2] border-l-4 border-stone-850 rounded-2xl p-5 flex items-start gap-4 shadow-2xs hover:shadow-md transition-all text-left">
-                  <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-stone-100 border border-stone-250">
-                    <img 
-                      src="https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&q=80&w=200" 
-                      alt="Chuyên gia Hoàng Long" 
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  </div>
-                  <div className="space-y-1 text-left">
-                    <h4 className="text-[14px] md:text-base font-black tracking-tight text-[#432c28] uppercase">
-                      Kiến trúc sư giải pháp • Đỗ Hoàng Long
-                    </h4>
-                    <p className="text-[11px] text-stone-600 font-medium leading-relaxed">
-                      "Kiến thức cốt lõi không bao giờ lỗi thời. Tôi đem tất cả kinh nghiệm thực chiến từ thung lũng Silicon cô đọng vào từng bài phân tích, tinh giản hóa mọi dòng mã nguồn để học viên thấu suốt bản chất chỉ trong vài giờ tự học tinh tuyển."
-                    </p>
-                    <span className="text-[9px] text-[#432c28] font-mono font-bold block mt-1">Cố vấn học thuật chính tại MindHub</span>
-                  </div>
-                </div>
-
+                <button 
+                  onClick={() => setShowLegal('faq')}
+                  className="bg-white hover:bg-stone-50 border border-stone-200 rounded-xl px-4.5 py-2.5 text-xs text-[#8b5e3c] font-bold transition-all shadow-3xs shrink-0 cursor-pointer"
+                >
+                  Xem câu hỏi phổ biến »
+                </button>
               </div>
             </ScrollReveal>
+          </div>
+        )}
 
             {/* 👨‍🏫 INSTRUCTORS SHOWCASE: VIEW, FILTER, FEATURED */}
             <ScrollReveal delayMs={180}>
@@ -3953,7 +4561,7 @@ export default function App() {
                             onClick={() => handleSelectInstructorCourses(inst.name)}
                             className="w-full bg-[#faf6f2] hover:bg-brand-normal hover:text-white text-[#8b5e3c] border border-brand-light-active py-2 rounded-xl text-[11px] font-bold transition-all text-center flex items-center justify-center gap-1 group cursor-pointer"
                           >
-                            <span>Xem các khóa học truyền thụ</span>
+                            <span>Xem các khóa học</span>
                             <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                           </button>
                         </div>
@@ -3961,59 +4569,128 @@ export default function App() {
                     </div>
                   );
                 })()}
-
               </div>
             </ScrollReveal>
 
-            {/* QUICK LINK OF OWNED/PURCHASED COURSES */}
-            {courses.filter(c => enrolledCourseIds.includes(c.id)).length > 0 && (
-              <ScrollReveal delayMs={200}>
-                <div className="space-y-4">
-                  <h3 className="text-base md:text-lg font-extrabold flex items-center gap-1.5 text-[#432c28]">
-                    <BookOpen className="w-5 h-5 text-brand-normal" /> Khóa học bạn sở hữu & Tiến độ của học viên
-                  </h3>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {courses.filter(c => enrolledCourseIds.includes(c.id)).map(c => (
-                      <div key={c.id} className="border border-brand-light-active rounded-2xl p-5 bg-white flex flex-col justify-between hover-glow-card transition-all text-left space-y-4">
-                        <div className="flex gap-4">
-                          <img src={c.image} alt="Avatar" className="w-16 h-12 object-cover rounded-lg shrink-0" />
-                          <div className="min-w-0">
-                            <span className="text-[9px] bg-[#f5ece3] text-[#432c28] px-2 py-0.5 rounded uppercase font-bold tracking-wider">Đã mua</span>
-                            <h4 className="font-bold text-xs text-main-normal truncate mt-1">{c.title}</h4>
-                            <p className="text-[10px] text-gray-400 mt-0.5">{c.instructorName}</p>
-                          </div>
-                        </div>
-
-                        <div className="space-y-1.5 pt-2 border-t border-stone-50">
-                          <div className="flex justify-between text-[11px] text-gray-400">
-                            <span>Tiến độ bài học:</span>
-                            <span className="font-bold text-brand-dark">60%</span>
-                          </div>
-                          <div className="w-full bg-[#f5ece3] h-1.5 rounded-full overflow-hidden">
-                            <div className="bg-brand-normal h-full animate-progress-fluid" style={{ width: '60%' }}></div>
-                          </div>
-                        </div>
-
-                        <button 
-                          onClick={() => setStudyingCourse(c)}
-                          className="w-full bg-[#432c28] hover:bg-brand-darker text-brand-light py-2 rounded-xl text-xs font-bold transition-all text-center block shadow-xs hover:shadow-md"
-                        >
-                          Bấm để Vào lớp học ngay »
-                        </button>
-                      </div>
-                    ))}
+             {/* SECTION 4: KHÓA HỌC ĐÃ MUA GẦN ĐÂY */}
+            <ScrollReveal delayMs={200}>
+              <div className="bg-[#fcfcfc] border border-stone-150 rounded-3xl p-5 md:p-6 space-y-4 shadow-3xs text-left">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-stone-100 pb-3">
+                  <div className="space-y-0.5">
+                    <h3 className="text-base md:text-lg font-extrabold flex items-center gap-2 text-[#432c28]">
+                      <BookOpen className="w-5 h-5 text-[#8b5e3c]" /> Khóa học đã mua gần đây
+                    </h3>
+                    <p className="text-[11px] text-stone-500">
+                      Hiển thị danh sách khóa học bạn sở hữu dựa trên mốc thời gian mua hàng.
+                    </p>
+                  </div>
+                  
+                  <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-auto">
+                    <span className="text-[10.5px] text-stone-500 font-bold">Lọc thời gian mua:</span>
+                    <select
+                      value={recentPurchasedFilter}
+                      onChange={(e) => setRecentPurchasedFilter(e.target.value as any)}
+                      className="border border-stone-200 rounded-xl px-2.5 py-1.5 bg-white focus:outline-none text-[10.5px] font-bold text-stone-700 shadow-3xs"
+                    >
+                      <option value="all">Toàn bộ thời gian ({courses.filter(c => enrolledCourseIds.includes(c.id)).length})</option>
+                      <option value="1_week">Trong vòng 1 tuần</option>
+                      <option value="2_weeks">Trong vòng 2 tuần</option>
+                      <option value="3_weeks">Trong vòng 3 tuần</option>
+                      <option value="1_month">Trong vòng 1 tháng</option>
+                    </select>
                   </div>
                 </div>
-              </ScrollReveal>
-            )}
+
+                {(() => {
+                  const filteredEnrolledCourses = courses.filter(c => enrolledCourseIds.includes(c.id)).filter(c => {
+                    if (recentPurchasedFilter === 'all') return true;
+                    const pDate = getCoursePurchaseDate(c.id);
+                    const diffMs = new Date().getTime() - pDate.getTime();
+                    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+                    if (recentPurchasedFilter === '1_week') return diffDays <= 7;
+                    if (recentPurchasedFilter === '2_weeks') return diffDays <= 14;
+                    if (recentPurchasedFilter === '3_weeks') return diffDays <= 21;
+                    if (recentPurchasedFilter === '1_month') return diffDays <= 30;
+                    return true;
+                  });
+
+                  if (enrolledCourseIds.length === 0) {
+                    return (
+                      <div className="text-center py-8 text-stone-400 bg-white border border-dashed border-stone-200 rounded-2xl">
+                        <p className="text-xs font-medium">Bạn chưa sở hữu khóa học nào. Hãy khám phá các khóa học chất lượng cao của chúng tôi dưới đây!</p>
+                      </div>
+                    );
+                  }
+
+                  if (filteredEnrolledCourses.length === 0) {
+                    return (
+                      <div className="text-center py-10 text-stone-400 bg-white border border-dashed border-stone-200 rounded-2xl flex flex-col items-center justify-center space-y-1">
+                        <p className="text-xs font-semibold text-stone-500">Không tìm thấy khóa học nào đã mua trong khoảng thời gian này.</p>
+                        <p className="text-[10.5px] text-stone-400">Thử thay đổi bộ lọc thời gian để hiển thị đầy đủ hơn.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                      {filteredEnrolledCourses.map(c => {
+                        const purchaseDate = getCoursePurchaseDate(c.id);
+                        return (
+                          <div key={c.id} className="bg-white border border-stone-150 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md transition-all text-left space-y-3 relative">
+                            <div className="flex gap-3">
+                              <img src={c.image} alt="Cover" className="w-16 h-12 object-cover rounded-lg shrink-0 border" />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap gap-1 items-center">
+                                  <span className="text-[8px] bg-stone-100 text-stone-600 px-1.5 py-0.5 rounded font-mono font-bold uppercase">{c.subcategory}</span>
+                                  <span className="text-[8px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-mono font-bold">
+                                    Mua ngày: {purchaseDate.toLocaleDateString('vi-VN')}
+                                  </span>
+                                </div>
+                                <h4 className="font-bold text-xs text-main-normal truncate mt-1.5" title={c.title}>{c.title}</h4>
+                                <p className="text-[10px] text-gray-400 mt-0.5 italic">Giảng viên: {c.instructorName}</p>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between items-center text-[9px] text-stone-500 font-bold">
+                                <span>Tiến độ học tập:</span>
+                                <span>{c.completionRate || 0}%</span>
+                              </div>
+                              <div className="w-full bg-stone-100 h-1.5 rounded-full overflow-hidden">
+                                <div 
+                                  className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
+                                  style={{ width: `${c.completionRate || 0}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-2 border-t border-stone-50">
+                              <span className="text-[10.5px] text-emerald-600 font-bold flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span> Đã kích hoạt
+                              </span>
+                              <button 
+                                onClick={() => setStudyingCourse(c)}
+                                className="bg-[#8b5e3c] hover:bg-[#5c3e38] text-white text-[10.5px] font-bold py-1.5 px-4 rounded-xl transition cursor-pointer whitespace-nowrap shadow-3xs"
+                              >
+                                Học tiếp »
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            </ScrollReveal>� 
+
 
             {/* ❤️ WISHLIST FAVORITES PORTAL WITH DIRECT SINGLE COURSE PAYMENTS */}
             {favorites.length > 0 && (
               <ScrollReveal delayMs={240}>
                 <div className="space-y-4 border-t border-brand-light-active pt-6 mt-6">
                   <h3 className="text-base md:text-lg font-extrabold flex items-center gap-1.5 text-[#432c28]">
-                    <Heart className="w-5 h-5 fill-stone-850 text-stone-850" /> Danh sách khóa học yêu thích & Đăng ký mua tuyển sinh
+                    <Heart className="w-5 h-5 fill-deep-indigo text-deep-indigo" /> Danh sách khóa học yêu thích của bạn
                   </h3>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -4023,7 +4700,7 @@ export default function App() {
                         <div key={c.id} className="border border-brand-light-active rounded-2xl p-4 bg-white flex flex-col justify-between hover:shadow-md transition-all text-left space-y-3 relative">
                           <button 
                             onClick={() => handleToggleFavorite(c.id)}
-                            className="absolute top-2.5 right-2.5 bg-stone-100 p-1.5 rounded-full hover:bg-stone-205 text-stone-700 transition"
+                            className="absolute top-2.5 right-2.5 bg-stone-100 p-1.5 rounded-full hover:bg-stone-200 text-stone-700 transition"
                             title="Xóa khỏi yêu thích"
                           >
                             ✕
@@ -4060,7 +4737,7 @@ export default function App() {
                             ) : (
                               <button 
                                 onClick={() => handleBuyCourseNow(c.id)}
-                                className="bg-stone-900 hover:bg-black text-white text-[10px] font-bold py-2.5 px-5 rounded-xl transition-all shadow-xs flex items-center justify-center cursor-pointer whitespace-nowrap"
+                                className="bg-deep-indigo hover:bg-deep-indigo/95 text-white text-[10px] font-bold py-2.5 px-5 rounded-xl transition-all shadow-xs flex items-center justify-center cursor-pointer whitespace-nowrap"
                               >
                                 Mua Ngay
                               </button>
@@ -4074,226 +4751,254 @@ export default function App() {
               </ScrollReveal>
             )}
 
-            {/* MAIN COURSES EXPLORATION SHEETS */}
-            <div id="available-courses-section" className="grid grid-cols-1 lg:grid-cols-4 gap-6 pt-6 align-start">
-              
-              {/* Left filter and categories widget */}
-              <div className="space-y-4">
-                <div className="bg-white border border-brand-light-active p-4 rounded-2xl text-left space-y-3 shadow-xs">
-                  <h4 className="font-display font-bold text-xs text-main-normal border-b pb-2 flex items-center gap-1.5">
-                    <Filter className="w-4 h-4 text-brand-normal" /> Danh Mục Khóa Học
-                  </h4>
-
-                  <div className="space-y-1">
-                    {categoriesList.map((cat) => (
-                      <button 
-                        key={cat}
-                        onClick={() => setSelectedCategory(cat)}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${selectedCategory === cat ? 'bg-brand-light text-brand-dark font-bold' : 'hover:bg-brand-light/30'}`}
-                      >
-                        {cat === 'All' ? 'Tất cả các phần' : cat}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Simulated static FAQ link helper panel */}
-                <div className="bg-brand-light/50 border border-brand-light-active p-4 rounded-2xl text-left space-y-2">
-                  <h4 className="font-semibold text-brand-dark text-xs flex items-center gap-1">
-                    <HelpCircle className="w-4 h-4" /> Có câu hỏi về MindHub?
-                  </h4>
-                  <p className="text-gray-500 text-[10.5px] leading-snug">Chính sách cam kết hoàn trả 100% học liệu số trong 7 ngày nếu không hài lòng.</p>
-                  <button 
-                    onClick={() => setShowLegal('faq')}
-                    className="text-xs text-brand-normal font-semibold hover:underline block"
-                  >
-                    Xem câu hỏi phổ biến »
-                  </button>
-                </div>
-              </div>
-
-              {/* Central Catalog courses list */}
-              <div className="lg:col-span-3 space-y-4">
-                
-                {/* Search controller bar & Sort switches */}
-                <div className="bg-white border border-brand-light-active p-3 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-3 shadow-xs">
-                  <div className="relative w-full sm:max-w-xs shrink-0">
-                    <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-                    <input 
-                      type="text" 
-                      value={searchQuery}
-                      onFocus={() => setShowMainSuggestions(true)}
-                      onChange={(e) => {
-                        setSearchQuery(e.target.value);
-                        setShowMainSuggestions(true);
-                      }}
-                      placeholder="Tìm bài học, giảng viên..."
-                      className="w-full text-xs pl-9 pr-3 py-2 border border-brand-light-active rounded-xl focus:ring-1 focus:ring-brand-normal focus:outline-none bg-slate-50"
-                    />
-
-                    {/* SUGGESTIONS MENU OVERLAY FOR CATALOG SEARCH */}
-                    {showMainSuggestions && searchQuery.trim().length > 0 && (
-                      <>
-                        <div className="fixed inset-0 z-30 cursor-default bg-transparent" onClick={() => setShowMainSuggestions(false)} />
-                        <div tabIndex={-1} className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-[#e8ded3] rounded-2xl shadow-xl z-40 max-h-72 overflow-y-auto divide-y divide-[#e8ded3]/30 text-left py-1">
-                          {(() => {
-                            const list = getSearchSuggestions(searchQuery);
-                            if (list.length === 0) {
-                              return (
-                                <div className="p-3.5 text-[11px] text-stone-400 italic text-center">
-                                  Không tìm thấy gợi ý trùng khớp.
-                                </div>
-                              );
-                            }
-                            return list.map((item, idx) => {
-                              let badgeColor = "bg-stone-50 text-stone-600";
-                              let typeLabel = "Bài học";
-                              if (item.type === 'category') {
-                                badgeColor = "bg-amber-150 text-amber-900";
-                                typeLabel = "Danh mục";
-                              } else if (item.type === 'instructor') {
-                                badgeColor = "bg-emerald-150 text-emerald-950";
-                                typeLabel = "Giảng viên";
-                              } else if (item.type === 'subcategory') {
-                                badgeColor = "bg-sky-150 text-sky-90);";
-                                typeLabel = "Chuyên đề";
-                              }
-                              return (
-                                <button
-                                  key={idx}
-                                  type="button"
-                                  onClick={() => handleSelectSuggestion(item)}
-                                  className="w-full px-3.5 py-2 hover:bg-[#faf6f2] flex items-center justify-between transition-colors gap-2 text-left cursor-pointer border-none"
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <Search className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                                    <span className="text-xs font-semibold text-stone-800 truncate leading-none">
-                                      {item.value}
-                                    </span>
-                                  </div>
-                                  <span className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded uppercase font-mono tracking-wider shrink-0 ${badgeColor}`}>
-                                    {typeLabel}
-                                  </span>
-                                </button>
-                              );
-                            });
-                          })()}
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs w-full sm:w-auto justify-end">
-                    <ArrowUpDown className="w-4 h-4 text-gray-450" />
-                    <span className="text-gray-400">Sắp xếp theo:</span>
-                    <select 
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as any)}
-                      className="border border-brand-light-active rounded-xl px-2 py-1 bg-white focus:outline-none text-[11px]"
+            {/* HERO BANNER POPUP MODAL */}
+            {showHeroPopup && (
+              <div className="fixed inset-0 bg-transparent z-50 flex items-center justify-center p-4 animate-fade-in overflow-y-auto pointer-events-none">
+                <div className="fixed inset-0 bg-transparent pointer-events-auto" onClick={() => setShowHeroPopup(false)} />
+                <div className="relative bg-white border-2 border-[#e8ded3] rounded-3xl w-full max-w-5xl shadow-2xl overflow-hidden my-8 max-h-[90vh] flex flex-col pointer-events-auto">
+                  
+                  {/* Modal Header / Close button */}
+                  <div className="absolute top-4 right-4 z-40">
+                    <button 
+                      onClick={() => setShowHeroPopup(false)}
+                      className="bg-black/75 hover:bg-black text-white w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-md font-bold text-sm cursor-pointer border border-white/20"
+                      title="Đóng"
                     >
-                      <option value="rating">Đánh giá tốt nhất</option>
-                      <option value="bestseller">Bán chạy nhất</option>
-                      <option value="priceAsc">Giá tăng dần</option>
-                      <option value="priceDesc">Giá giảm dần</option>
-                      <option value="newest">Khóa học mới nhất</option>
-                      <option value="oldest">Khóa học cũ nhất</option>
-                    </select>
+                      ✕
+                    </button>
                   </div>
-                </div>
 
-                {sortedCourses.length === 0 ? (
-                  <div className="text-center py-12 text-gray-400 bg-white border rounded-2xl">
-                    <p className="font-semibold">Không tìm thấy khóa học nào phù hợp với yêu cầu tìm kiếm của bạn.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {sortedCourses.map((c) => {
-                      const isEnrolled = enrolledCourseIds.includes(c.id);
+                  <div className="overflow-y-auto p-2 sm:p-4 md:p-6">
+                    {(() => {
+                      const activeBanners = banners.filter(b => b.isActive);
+                      const displayBanners = (activeBanners.length > 0 ? activeBanners : [
+                        {
+                          id: 'banner-1',
+                          title: 'Nghệ thuật đào tạo số',
+                          subtitle: 'Nền tảng học tập trực tuyến chắt lọc tinh hoa từ phương pháp giáo dục truyền thống và trải nghiệm công nghệ tinh tế. Hôm nay bạn đang thắp sáng ngọn lửa học tập!',
+                          actionText: 'Bắt đầu học tập',
+                          actionUrl: '#courses-explorer',
+                          backgroundColor: '#fcf8f2',
+                          textColor: '#432c28',
+                          accentColor: '#8b5e3c',
+                          imageUrl: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&q=80&w=1000",
+                          isActive: true
+                        }
+                      ]) as Banner[];
+                      
+                      const safeIndex = (currentBannerIndex + displayBanners.length) % displayBanners.length;
+                      const currentBanner = displayBanners[safeIndex];
+
+                      const handleActionClick = () => {
+                        setShowHeroPopup(false);
+                        const url = currentBanner.actionUrl || '';
+                        if (url.startsWith('#')) {
+                          const el = document.getElementById(url.replace('#', '')) || document.getElementById('available-courses-section');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        } else if (categoriesList.includes(url)) {
+                          setSelectedCategory(url);
+                          const el = document.getElementById('available-courses-section');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        } else {
+                          const el = document.getElementById('available-courses-section');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        }
+                      };
+
                       return (
                         <div 
-                          key={c.id} 
-                          className="border border-brand-light-active bg-white rounded-3xl overflow-hidden flex flex-col justify-between hover-glow-card transition-all duration-300 text-left"
+                          style={{ backgroundColor: currentBanner.backgroundColor || '#fcf8f2', color: currentBanner.textColor || '#432c28' }}
+                          className="p-6 md:p-10 rounded-2xl border border-brand-light-active relative overflow-hidden text-left"
                         >
-                          <div className="relative">
-                            <img src={c.image} alt="Course banner" className="w-full h-40 object-cover" />
-                            <button 
-                              onClick={() => handleToggleFavorite(c.id)}
-                              className="absolute top-2 right-2 bg-white/95 p-2 rounded-full hover:bg-white text-red-500 scale-100 active:scale-95 transition-all shadow-md z-10"
-                              title="Yêu thích"
-                            >
-                              <Heart className={`w-4 h-4 ${favorites.includes(c.id) ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} />
-                            </button>
+                          {/* Decorative background logo blob */}
+                          <div className="absolute -top-10 -right-10 w-44 h-44 bg-[#e8d8c8]/50 rounded-full filter blur-2xl opacity-40 select-none pointer-events-none animate-float-slow"></div>
+                          
+                          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center relative z-10">
                             
-                            <div className="absolute bottom-2 left-2 flex gap-1">
-                              {c.isBestseller && (
-                                <span className="text-[8px] bg-yellow-500 text-brand-light px-2 py-0.5 rounded-md font-bold uppercase tracking-wider shadow-sm">Bán chạy</span>
-                              )}
-                              {c.isNew && (
-                                <span className="text-[8px] bg-blue-600 text-brand-light px-2 py-0.5 rounded-md font-bold uppercase tracking-wider shadow-sm">Mới nhất</span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
-                            <div>
-                              <span className="text-[10px] text-gray-500 block uppercase font-mono tracking-wider font-semibold">{c.subcategory}</span>
-                              <h4 className="text-[14px] font-bold text-main-darker leading-snug line-clamp-2 hover:text-brand-normal cursor-pointer mt-1" onClick={() => setViewedCourse(c)}>
-                                {c.title}
-                              </h4>
-                              <p className="text-[11px] text-stone-500 mt-1 italic">Giảng viên: {c.instructorName}</p>
-                              
-                              <div className="flex items-center gap-1 text-[11px] text-yellow-500 mt-1.5 font-bold">
-                                <span>{c.rating}</span>
-                                <span>★</span>
-                                <span className="text-gray-400 font-normal text-[10px]">({c.reviewCount})</span>
-                              </div>
-                            </div>
-
-                            <div className="border-t border-stone-100 pt-3 flex items-center justify-between mt-3">
-                              <div>
-                                {c.salePrice ? (
-                                  <div className="flex flex-col">
-                                    <span className="text-[13px] font-bold text-brand-dark">{formatVND(c.salePrice)}</span>
-                                    <span className="text-[10px] text-stone-400 line-through">{formatVND(c.price)}</span>
-                                  </div>
-                                ) : (
-                                  <span className="text-[13px] font-bold text-brand-dark">{formatVND(c.price)}</span>
-                                )}
-                              </div>
-
-                              <div className="flex gap-1.5 flex-nowrap">
-                                <button 
-                                  onClick={() => setViewedCourse(c)}
-                                  className="bg-[#f5ece3] hover:bg-[#dbcdc3] text-brand-dark text-[10px] font-bold py-2.5 px-4.5 rounded-xl transition-all cursor-pointer whitespace-nowrap"
+                            {/* Left Column - Content */}
+                            <div className="lg:col-span-7 space-y-4 lg:space-y-5">
+                              <div className="flex items-center gap-2">
+                                <span 
+                                  className="text-[9px] md:text-[10px] font-bold tracking-[0.2em] uppercase px-2.5 py-1 rounded-full bg-white/60 backdrop-blur-xs shadow-3xs inline-block"
+                                  style={{ color: currentBanner.accentColor }}
                                 >
-                                  Chi tiết
-                                </button>
-                                {isEnrolled ? (
-                                  <button 
-                                    onClick={() => setStudyingCourse(c)}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-2.5 px-4.5 rounded-xl transition-all whitespace-nowrap"
-                                  >
-                                    Đang học
-                                  </button>
-                                ) : (
-                                  <button 
-                                    onClick={() => handleBuyCourseNow(c.id)}
-                                    className="bg-stone-900 hover:bg-black text-white text-[10px] font-bold py-2.5 px-5 rounded-xl transition-all flex items-center justify-center cursor-pointer whitespace-nowrap"
-                                  >
-                                    Mua Ngay
-                                  </button>
+                                  TIN TỔNG TIÊU ĐIỂM
+                                </span>
+                                {displayBanners.length > 1 && (
+                                  <span className="text-[9px] uppercase font-mono px-2 py-0.5 bg-black/5 rounded-md font-bold">
+                                    Trang {safeIndex + 1}/{displayBanners.length}
+                                  </span>
                                 )}
                               </div>
+                              
+                              <h1 className="text-2xl md:text-3xl lg:text-4xl font-extrabold tracking-tight leading-[1.1]">
+                                Xin chào, <span className="underline font-semibold" style={{ textDecorationColor: currentBanner.accentColor }}>{currentUser.name}</span>!
+                                <span className="block font-serif italic font-normal text-2xl md:text-3xl lg:text-[36px] mt-2 leading-[1.15]" style={{ color: currentBanner.accentColor }}>
+                                  {currentBanner.title}
+                                </span>
+                              </h1>
+                              
+                              <p className="text-xs md:text-sm leading-relaxed font-sans max-w-xl opacity-90">
+                                {currentBanner.subtitle}
+                              </p>
+
+                              <div className="flex flex-wrap gap-2 pt-1">
+                                <button 
+                                  onClick={handleActionClick}
+                                  style={{ backgroundColor: currentBanner.accentColor }}
+                                  className="inline-flex items-center justify-center gap-2 text-white px-8 py-3 rounded-xl font-extrabold text-[11px] uppercase tracking-wider transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer hover:brightness-105"
+                                >
+                                  {currentBanner.actionText} <span className="text-sm">→</span>
+                                </button>
+                                
+                                <button 
+                                  onClick={() => {
+                                    setShowIntroVideo(true);
+                                    setIntroVideoTime(0);
+                                    setIntroAutoCloseCountdown(null);
+                                    setShowHeroPopup(false); // also close modal to view video
+                                  }}
+                                  className="inline-flex items-center justify-center gap-2 bg-white/80 hover:bg-white text-stone-700 border border-brand-light-active px-6 py-3 rounded-xl font-extrabold text-[11px] uppercase tracking-wider transition-all shadow-xs cursor-pointer"
+                                >
+                                  Xem giới thiệu <span className="text-xs">▶</span>
+                                </button>
+                              </div>
+
+                              {/* Interactive Tech Sandbox Environment Panel */}
+                              <div className="space-y-3 pt-3 pb-1 border-t border-brand-light-active/30 max-w-lg bg-white/40 backdrop-blur-3xs border border-mist p-3.5 rounded-xl shadow-xs">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-black text-deep-indigo uppercase tracking-wider block flex items-center gap-1.5">
+                                    ⚡ Môi Trường Sandbox Lab:
+                                  </span>
+                                  <span className="text-[8px] bg-pale-cyan text-forest-teal px-1.5 py-0.5 rounded-full font-bold">
+                                    Thiết lập phiên làm việc trực tuyến
+                                  </span>
+                                </div>
+                                
+                                {/* Sandbox Selections */}
+                                <div className="grid grid-cols-3 gap-1.5">
+                                  <button 
+                                    onClick={() => setSelectedDrink('espresso')}
+                                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 border cursor-pointer ${selectedDrink === 'espresso' ? 'bg-deep-indigo text-white border-deep-indigo shadow-md' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
+                                  >
+                                    <Cpu className="w-3.5 h-3.5 text-deep-indigo" />
+                                    <span>Cloud VM</span>
+                                  </button>
+                                  <button 
+                                    onClick={() => setSelectedDrink('cappuccino')}
+                                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 border cursor-pointer ${selectedDrink === 'cappuccino' ? 'bg-deep-indigo text-white border-deep-indigo shadow-md' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
+                                  >
+                                    <Layers className="w-3.5 h-3.5 text-forest-teal" />
+                                    <span>Agent AI</span>
+                                  </button>
+                                  <button 
+                                    onClick={() => setSelectedDrink('matcha')}
+                                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 border cursor-pointer ${selectedDrink === 'matcha' ? 'bg-deep-indigo text-white border-deep-indigo shadow-md' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
+                                  >
+                                    <Terminal className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span>Web Dev</span>
+                                  </button>
+                                </div>
+
+                                {/* Table Number */}
+                                <div className="pt-1.5 border-t border-stone-150 flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[9px] text-stone-500 font-bold">Server Node:</span>
+                                    <span className="text-[10px] bg-deep-indigo text-white px-1.5 py-0.5 rounded font-black">
+                                      Node #{selectedTable < 10 ? `0${selectedTable}` : selectedTable}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-1 bg-white border border-stone-200 p-0.5 rounded-lg select-none">
+                                    <button 
+                                      type="button"
+                                      onClick={() => setSelectedTable(prev => Math.max(1, prev - 1))}
+                                      disabled={selectedTable <= 1}
+                                      className="w-5 h-5 flex items-center justify-center text-[10px] font-bold text-stone-600 bg-stone-50 rounded"
+                                    >
+                                      -
+                                    </button>
+                                    <input 
+                                      type="number"
+                                      min={1}
+                                      max={99}
+                                      value={selectedTable || ''}
+                                      onChange={(e) => {
+                                        const val = parseInt(e.target.value);
+                                        setSelectedTable(isNaN(val) ? 1 : Math.min(99, Math.max(1, val)));
+                                      }}
+                                      className="w-6 text-center font-bold text-stone-850 text-[10px] bg-transparent border-0 p-0 focus:ring-0 focus:outline-hidden"
+                                    />
+                                    <button 
+                                      type="button"
+                                      onClick={() => setSelectedTable(prev => Math.min(99, prev + 1))}
+                                      disabled={selectedTable >= 99}
+                                      className="w-5 h-5 flex items-center justify-center text-[10px] font-bold text-stone-600 bg-stone-50 rounded"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Stats Row */}
+                              <div className="pt-3 border-t border-brand-light-active/40 flex gap-4 items-center text-[11px] text-stone-500">
+                                <div>
+                                  <span className="font-serif italic text-base font-bold text-[#432c28] block">15k+</span>
+                                  <span className="text-[8px] uppercase tracking-widest font-bold text-stone-400">HỌC VIÊN</span>
+                                </div>
+                                <div className="w-px h-6 bg-brand-light-active/50"></div>
+                                <div>
+                                  <span className="font-serif italic text-base font-bold text-[#432c28] block">120+</span>
+                                  <span className="text-[8px] uppercase tracking-widest font-bold text-stone-400">CHUYÊN GIA</span>
+                                </div>
+                                <div className="w-px h-6 bg-brand-light-active/50"></div>
+                                <div>
+                                  <span className="font-serif italic text-base font-bold text-[#432c28] block font-semibold text-[#8b5e3c]">4.9/5</span>
+                                  <span className="text-[8px] uppercase tracking-widest font-bold text-stone-400">ĐÁNH GIÁ</span>
+                                </div>
+                              </div>
                             </div>
+
+                            {/* Right Column - Image */}
+                            <div className="lg:col-span-5 relative flex flex-col items-center justify-center p-2">
+                              <div className="absolute inset-0 bg-white border border-brand-light-active rounded-2xl -translate-x-2 -translate-y-2 z-0"></div>
+                              <div className="relative w-full h-[220px] md:h-[260px] rounded-2xl overflow-hidden border-2 border-white shadow-md z-10">
+                                <img 
+                                  src={currentBanner.imageUrl || "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&q=80&w=1000"} 
+                                  alt={currentBanner.title} 
+                                  referrerPolicy="no-referrer"
+                                  className="w-full h-full object-cover select-none" 
+                                />
+                              </div>
+
+                              {/* Arrows */}
+                              {displayBanners.length > 1 && (
+                                <div className="absolute bottom-4 right-4 z-30 flex gap-1.5">
+                                  <button
+                                    onClick={() => setCurrentBannerIndex(prev => (prev - 1 + displayBanners.length) % displayBanners.length)}
+                                    className="w-8 h-8 bg-stone-900/85 hover:bg-stone-900 text-white rounded-full flex items-center justify-center backdrop-blur-xs transition-transform active:scale-90 cursor-pointer text-xs"
+                                  >
+                                    ←
+                                  </button>
+                                  <button
+                                    onClick={() => setCurrentBannerIndex(prev => (prev + 1) % displayBanners.length)}
+                                    className="w-8 h-8 bg-stone-900/85 hover:bg-stone-900 text-white rounded-full flex items-center justify-center backdrop-blur-xs transition-transform active:scale-90 cursor-pointer text-xs"
+                                  >
+                                    →
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
                           </div>
                         </div>
                       );
-                    })}
+                    })()}
                   </div>
-                )}
+                </div>
               </div>
-
-            </div>
+            )}
 
           </div>
         )}

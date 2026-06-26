@@ -6,6 +6,7 @@ import {
   AlertTriangle, Play, HelpCircle, Lock, Sparkles, Upload, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { User, Course, Chapter, Lesson, Quiz, QuizQuestion, PayoutRequest } from '../types';
+import { safeLocalStorage as localStorage } from '../utils/safeStorage';
 import { ApiService } from '../services/api';
 
 interface InstructorDashboardProps {
@@ -26,8 +27,8 @@ export default function InstructorDashboard({
   onClose
 }: InstructorDashboardProps) {
   
-  // Tabs: 'analytics' | 'courses' | 'grading' | 'payout' | 'builder' | 'developer' | 'students'
-  const [activeTab, setActiveTab] = useState<'analytics' | 'courses' | 'grading' | 'payout' | 'builder' | 'developer' | 'students'>('analytics');
+  // Tabs: 'analytics' | 'courses' | 'grading' | 'payout' | 'builder' | 'students'
+  const [activeTab, setActiveTab] = useState<'analytics' | 'courses' | 'grading' | 'payout' | 'builder' | 'students'>('analytics');
   
   // --- BUILDER WIZARD STATES ---
   const [builderStep, setBuilderStep] = useState<number>(1);
@@ -67,21 +68,6 @@ export default function InstructorDashboard({
   const [isVideoUploading, setIsVideoUploading] = useState<boolean>(false);
   const [videoUploadProgress, setVideoUploadProgress] = useState<number>(0);
   const [videoUploadStatus, setVideoUploadStatus] = useState<string>('');
-
-  // Backend API Integration States
-  const [apiModeState, setApiModeState] = useState<'mock' | 'api'>(() => ApiService.getConfig().mode);
-  const [apiBaseUrlState, setApiBaseUrlState] = useState<string>(() => ApiService.getConfig().baseUrl);
-  const [virtualLogs, setVirtualLogs] = useState<any[]>([]);
-
-  useEffect(() => {
-    if (activeTab === 'developer') {
-      setVirtualLogs(ApiService.getVirtualLogs());
-      const interval = setInterval(() => {
-        setVirtualLogs(ApiService.getVirtualLogs());
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [activeTab]);
 
   // Step 3: Quizzes
   const [newQuizQuestion, setNewQuizQuestion] = useState('');
@@ -638,13 +624,33 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
     };
 
     if (editingCourseId) {
-      ApiService.updateCourse(editingCourseId, payload).catch(err => console.error(err));
-      onUpdateCourse(payload);
-      alert('Đã cập nhật chỉnh sửa khóa học thành công! Giáo án đã được chuyển sang trạng thái chờ duyệt thẩm định.');
+      if (ApiService.getConfig().mode === 'api') {
+        ApiService.updateCourse(editingCourseId, payload)
+          .then((updatedFromApi) => {
+            onUpdateCourse(updatedFromApi);
+            alert('Đã cập nhật chỉnh sửa khóa học lên database thành công!');
+          })
+          .catch((err) => {
+            alert('Lỗi khi cập nhật khóa học lên database: ' + (err.message || err.toString()));
+          });
+      } else {
+        onUpdateCourse(payload);
+        alert('Đã cập nhật chỉnh sửa khóa học thành công! Giáo án đã được chuyển sang trạng thái chờ duyệt thẩm định.');
+      }
     } else {
-      ApiService.createCourseDraft(payload).catch(err => console.error(err));
-      onCreateCourseDraft(payload);
-      alert('Đã khởi tạo khóa học mới thành công! Giáo án đã được chuyển lên Ban Kế Hoạch Kiểm Duyệt thẩm định xuất bản.');
+      if (ApiService.getConfig().mode === 'api') {
+        ApiService.createCourseDraft(payload)
+          .then((createdFromApi) => {
+            onCreateCourseDraft(createdFromApi);
+            alert('Đã khởi tạo khóa học mới lên database thành công!');
+          })
+          .catch((err) => {
+            alert('Lỗi khi lưu khóa học mới vào database: ' + (err.message || err.toString()));
+          });
+      } else {
+        onCreateCourseDraft(payload);
+        alert('Đã khởi tạo khóa học mới thành công! Giáo án đã được chuyển lên Ban Kế Hoạch Kiểm Duyệt thẩm định xuất bản.');
+      }
     }
 
     // Clean up local storage drafting states
@@ -676,54 +682,53 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
     <div className="bg-white min-h-[90vh] rounded-2xl border border-brand-light-active overflow-hidden flex flex-col md:flex-row text-main-darker animate-fade-in shadow">
       
       {/* Sidebar Navigation */}
-      <div className="w-full md:w-56 bg-brand-light border-b md:border-b-0 md:border-r border-brand-light-active p-4 space-y-2 shrink-0">
-        <div className="text-center pb-4 border-b border-brand-light-active mb-4">
+      <div className="w-full md:w-56 bg-white border-b md:border-b-0 md:border-r border-brand-light-active p-3 md:p-4 shrink-0 flex flex-col md:block">
+        
+        {/* Avatar and Info: visible on desktop, hidden/compact on mobile */}
+        <div className="hidden md:block text-center pb-4 border-b border-brand-light-active mb-4">
           <img src={currentUser.avatar} alt="Avatar" className="w-14 h-14 rounded-full mx-auto mb-2 border-2 border-brand-normal" />
           <h3 className="text-xs font-bold truncate">{currentUser.name}</h3>
           <span className="text-[10px] bg-brand-normal text-brand-light font-display px-2 py-0.5 rounded-full inline-block mt-1 font-semibold">Giảng viên Premium</span>
         </div>
 
-        <button 
-          onClick={() => setActiveTab('analytics')}
-          className={`w-full text-left px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 ${activeTab === 'analytics' ? 'bg-brand-normal text-brand-light' : 'hover:bg-brand-light-hover'}`}
-        >
-          <BarChart2 className="w-4 h-4 text-stone-700" /> Báo cáo Doanh thu & KPIs
-        </button>
-        <button 
-          onClick={() => setActiveTab('courses')}
-          className={`w-full text-left px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 ${activeTab === 'courses' ? 'bg-brand-normal text-brand-light' : 'hover:bg-brand-light-hover'}`}
-        >
-          <BookOpen className="w-4 h-4 text-stone-700" /> Quản lý Khóa học của tôi
-        </button>
-        <button 
-          onClick={() => setActiveTab('grading')}
-          className={`w-full text-left px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 ${activeTab === 'grading' ? 'bg-brand-normal text-brand-light' : 'hover:bg-brand-light-hover'}`}
-        >
-          <Clock className="w-4 h-4 text-stone-700" /> Chấm Bài làm học viên
-        </button>
-        <button 
-          onClick={() => setActiveTab('students')}
-          className={`w-full text-left px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 ${activeTab === 'students' ? 'bg-brand-normal text-brand-light' : 'hover:bg-brand-light-hover'}`}
-        >
-          <Users className="w-4 h-4 text-stone-700" /> Quản lý tất cả Học viên
-        </button>
-        <button 
-          onClick={() => setActiveTab('payout')}
-          className={`w-full text-left px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 ${activeTab === 'payout' ? 'bg-brand-normal text-brand-light' : 'hover:bg-brand-light-hover'}`}
-        >
-          <DollarSign className="w-4 h-4 text-stone-700" /> Yêu cầu Rút tiền
-        </button>
-        <button 
-          onClick={() => setActiveTab('developer')}
-          className={`w-full text-left px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 ${activeTab === 'developer' ? 'bg-indigo-600 text-white' : 'hover:bg-brand-light-hover text-indigo-700'}`}
-        >
-          <Settings className="w-4 h-4 text-indigo-600 shrink-0" /> 🔌 Kết nối Backend API
-        </button>
-
-        <div className="pt-6">
-          <button onClick={onClose} className="w-full text-center border text-xs py-1.5 rounded-lg text-gray-400 hover:text-black hover:bg-white">
-            Trở lại Trang Chủ
+        {/* Buttons List: flex horizontal on mobile, vertical on desktop */}
+        <div className="flex md:flex-col overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 gap-1.5 md:gap-2 scrollbar-none scroll-smooth">
+          <button 
+            onClick={() => setActiveTab('analytics')}
+            className={`whitespace-nowrap px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 shrink-0 transition-all ${activeTab === 'analytics' ? 'bg-brand-normal text-brand-light' : 'bg-slate-50 md:bg-transparent hover:bg-brand-light-hover'}`}
+          >
+            <BarChart2 className="w-4 h-4 text-stone-700" /> Báo cáo Doanh thu
           </button>
+          <button 
+            onClick={() => setActiveTab('courses')}
+            className={`whitespace-nowrap px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 shrink-0 transition-all ${activeTab === 'courses' ? 'bg-brand-normal text-brand-light' : 'bg-slate-50 md:bg-transparent hover:bg-brand-light-hover'}`}
+          >
+            <BookOpen className="w-4 h-4 text-stone-700" /> Quản lý Khóa học
+          </button>
+          <button 
+            onClick={() => setActiveTab('grading')}
+            className={`whitespace-nowrap px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 shrink-0 transition-all ${activeTab === 'grading' ? 'bg-brand-normal text-brand-light' : 'bg-slate-50 md:bg-transparent hover:bg-brand-light-hover'}`}
+          >
+            <Clock className="w-4 h-4 text-stone-700" /> Chấm Bài làm
+          </button>
+          <button 
+            onClick={() => setActiveTab('students')}
+            className={`whitespace-nowrap px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 shrink-0 transition-all ${activeTab === 'students' ? 'bg-brand-normal text-brand-light' : 'bg-slate-50 md:bg-transparent hover:bg-brand-light-hover'}`}
+          >
+            <Users className="w-4 h-4 text-stone-700" /> Quản lý Học viên
+          </button>
+          <button 
+            onClick={() => setActiveTab('payout')}
+            className={`whitespace-nowrap px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 shrink-0 transition-all ${activeTab === 'payout' ? 'bg-brand-normal text-brand-light' : 'bg-slate-50 md:bg-transparent hover:bg-brand-light-hover'}`}
+          >
+            <DollarSign className="w-4 h-4 text-stone-700" /> Yêu cầu Rút tiền
+          </button>
+
+          <div className="md:pt-6 shrink-0 flex items-center">
+            <button onClick={onClose} className="whitespace-nowrap border text-xs py-1.5 px-3 rounded-lg text-gray-500 hover:text-black hover:bg-white bg-slate-50 md:bg-transparent">
+              Trở lại Trang Chủ
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2507,201 +2512,7 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
           );
         })()}
 
-        {/* DEVELOPER BACKEND INTEGRATION PANEL */}
-        {activeTab === 'developer' && (
-          <div className="space-y-6 animate-fade-in text-xs text-left max-w-4xl mx-auto">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-indigo-100 pb-3">
-              <div>
-                <h3 className="text-base font-display font-black text-indigo-700 flex items-center gap-1.5">
-                  <Settings className="w-5 h-5 text-indigo-600 animate-spin" style={{ animationDuration: '6s' }} /> Cấu Hình Kết Nối Backend API Thật
-                </h3>
-                <p className="text-stone-500 text-[11px] mt-0.5">Chuẩn bị tích hợp, cấu hình địa chỉ endpoint và kiểm tra luồng truyền nhận tải dữ liệu của hệ thống.</p>
-              </div>
-              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${apiModeState === 'api' ? 'bg-indigo-600 text-white animate-pulse' : 'bg-amber-100 text-amber-800'}`}>
-                Trạng thái: {apiModeState === 'api' ? '🔌 KẾT NỐI API THẬT' : '📦 MOCK MODE (LOCAL)'}
-              </span>
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              
-              {/* Left Column: Config Panel */}
-              <div className="lg:col-span-5 space-y-4">
-                <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-4">
-                  <h4 className="font-bold text-stone-800 text-xs">Phím điều khiển Tích Hợp</h4>
-                  
-                  {/* Mode Selector */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[11px] font-bold text-stone-600">Luồng lưu chuyển dữ liệu:</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          ApiService.setMode('mock');
-                          setApiModeState('mock');
-                          alert('Đã kích hoạt chế độ Giả lập (Mock Mode). Toàn bộ dữ liệu nằm cục bộ trong trình duyệt.');
-                        }}
-                        className={`py-2 rounded-xl text-center font-bold border transition-all ${apiModeState === 'mock' ? 'bg-amber-50 border-amber-400 text-amber-800' : 'bg-stone-50 hover:bg-stone-100 text-stone-600'}`}
-                      >
-                        📦 Giả lập Mock
-                      </button>
-                      
-                      <button
-                        type="button"
-                        onClick={() => {
-                          ApiService.setMode('api');
-                          setApiModeState('api');
-                          alert(`Đã bật chế độ API thật! Trình duyệt sẽ gửi Request trực tiếp tới địa chỉ: ${apiBaseUrlState} \n\nHãy đảm bảo bạn đã cấu hình CORS và kích hoạt Backend server của bạn.`);
-                        }}
-                        className={`py-2 rounded-xl text-center font-bold border transition-all ${apiModeState === 'api' ? 'bg-indigo-50 border-indigo-400 text-indigo-800' : 'bg-stone-50 hover:bg-stone-100 text-stone-600'}`}
-                      >
-                        🔌 Gửi API Thật
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Base URL */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[11px] font-bold text-stone-600">Đường dẫn gốc Backend (API Base URL):</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={apiBaseUrlState}
-                        onChange={(e) => setApiBaseUrlState(e.target.value)}
-                        placeholder="http://localhost:3000/api"
-                        className="flex-1 p-2 border rounded-xl font-mono text-xs focus:outline-none focus:border-indigo-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!apiBaseUrlState.trim()) return;
-                          ApiService.setBaseUrl(apiBaseUrlState.trim());
-                          alert('Đã cập nhật base URL kết nối Backend thành công!');
-                        }}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-3 rounded-xl transition-all"
-                      >
-                        Lưu
-                      </button>
-                    </div>
-                    <span className="text-[10px] text-stone-450 block leading-tight">Yêu cầu giao thức HTTP/HTTPS. Hãy cấu hình CORS trên backend để chấp nhận domain trình duyệt hiện tại.</span>
-                  </div>
-
-                  {/* Auth Token Token */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[11px] font-bold text-stone-600">Token bảo mật ủy quyền (Authorization Token):</label>
-                    <input
-                      type="text"
-                      defaultValue={localStorage.getItem('mindhub_api_token') || ''}
-                      onChange={(e) => {
-                        localStorage.setItem('mindhub_api_token', e.target.value);
-                      }}
-                      placeholder="eyJhbGciOiJIUzI1NiIsIn..."
-                      className="w-full p-2 border rounded-xl font-mono text-xs focus:outline-none focus:border-indigo-500"
-                    />
-                    <span className="text-[10px] text-stone-400 block leading-tight">Sẽ được tự động gửi đi trong Header yêu cầu dưới dạng: <code className="bg-stone-100 p-0.5 rounded text-red-500 font-mono">Authorization: Bearer [token]</code></span>
-                  </div>
-                </div>
-
-                {/* API Specs for Developers */}
-                <div className="bg-indigo-950 text-indigo-200 border border-indigo-900 rounded-2xl p-4 space-y-3.5">
-                  <h4 className="font-bold text-white text-xs flex items-center gap-1">📋 Đặc tả kỹ thuật Request/Response</h4>
-                  <p className="text-[10.5px] text-indigo-300">Backend của bạn cần triển khai tối thiểu các endpoint sau:</p>
-                  
-                  <div className="space-y-2 font-mono text-[10px]">
-                    <div className="p-2 bg-black/30 rounded border border-indigo-900">
-                      <div className="flex justify-between font-bold text-emerald-400">
-                        <span>GET /api/courses</span>
-                        <span className="text-[9px] bg-emerald-500/10 px-1 rounded">PUBLIC hoặc ADMIN</span>
-                      </div>
-                      <p className="text-[9px] text-indigo-300 mt-0.5">Lấy danh sách các khóa học hiện hành.</p>
-                    </div>
-
-                    <div className="p-2 bg-black/30 rounded border border-indigo-900">
-                      <div className="flex justify-between font-bold text-amber-400">
-                        <span>POST /api/courses</span>
-                        <span className="text-[9px] bg-amber-500/10 px-1 rounded">INSTRUCTOR</span>
-                      </div>
-                      <p className="text-[9px] text-indigo-300 mt-0.5">Tạo bản nháp khóa học (Course Draft) mới.</p>
-                    </div>
-
-                    <div className="p-2 bg-black/30 rounded border border-indigo-900">
-                      <div className="flex justify-between font-bold text-sky-400">
-                        <span>PUT /api/courses/:id/chapters</span>
-                        <span className="text-[9px] bg-sky-500/10 px-1 rounded">INSTRUCTOR</span>
-                      </div>
-                      <p className="text-[9px] text-indigo-300 mt-0.5">Lưu đồng bộ toàn bộ chương học & bài học video của giảng viên.</p>
-                    </div>
-
-                    <div className="p-2 bg-black/30 rounded border border-indigo-900">
-                      <div className="flex justify-between font-bold text-pink-400">
-                        <span>POST /api/media/upload-video</span>
-                        <span className="text-[9px] bg-pink-500/10 px-1 rounded">MULTIPART FORM</span>
-                      </div>
-                      <p className="text-[9px] text-indigo-300 mt-0.5">Nhận file video bài giảng, chuyển mã adaptive HLS rồi trả về m3u8 stream.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column: Console/Traffic logs */}
-              <div className="lg:col-span-7 flex flex-col space-y-4 min-h-[450px]">
-                <div className="flex-1 bg-stone-900 text-stone-200 border border-stone-800 rounded-2xl p-4 flex flex-col font-mono">
-                  <div className="flex justify-between items-center border-b border-stone-850 pb-2 mb-3">
-                    <span className="text-stone-400 text-[11px] font-bold flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" /> Virtual API Traffic Console
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        ApiService.clearVirtualLogs();
-                        setVirtualLogs([]);
-                      }}
-                      className="text-stone-450 hover:text-white text-[10px] font-bold border border-stone-700 px-2 py-0.5 rounded transition-colors"
-                    >
-                      Clear Logs
-                    </button>
-                  </div>
-
-                  {/* Terminal Area */}
-                  <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 max-h-[380px] text-[10.5px]">
-                    {virtualLogs.length === 0 ? (
-                      <div className="text-stone-500 italic text-center pt-10 text-[11px]">
-                        Chưa ghi nhận tín hiệu truyền thông API HTTP nào.<br/>
-                        Hãy tạo bản nháp khóa học, thêm chương, hoặc tải video khóa học để theo dõi Request tải lên.
-                      </div>
-                    ) : (
-                      virtualLogs.map((log) => (
-                        <div key={log.id} className="border-b border-stone-850 pb-2 space-y-1">
-                          <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-indigo-400 font-bold">[{log.time}] [{log.category}]</span>
-                            <span className={`px-1 rounded text-[9px] font-bold ${log.mode === 'api' ? 'bg-indigo-600/30 text-indigo-300' : 'bg-amber-600/20 text-amber-400'}`}>
-                              {log.mode.toUpperCase()} MODE
-                            </span>
-                          </div>
-                          <p className="text-emerald-400 font-bold">Action: {log.action}</p>
-                          {log.payload && (
-                            <pre className="p-2 bg-stone-950/80 border border-stone-850 rounded text-[9.5px] text-sky-305 max-h-36 overflow-y-auto overflow-x-auto whitespace-pre">
-                              {log.payload}
-                            </pre>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                {/* API Ready Validation Alert */}
-                <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-start gap-2.5">
-                  <span className="text-indigo-600 text-sm mt-0.5">ℹ</span>
-                  <div className="space-y-1 leading-relaxed text-indigo-900">
-                    <p className="font-bold">Lưu ý cho đội ngũ lập trình Backend:</p>
-                    <p>Toàn bộ lớp dữ liệu UI của MindHub (như Video, Thỏa thuận, Bài thi thử, Chứng chỉ PDF, Khảo nghiệm câu trả lời) đã được chuẩn bị chu đáo để hỗ trợ CORS. Nhấp chọn chế độ 'Gửi API thật' rồi cấu hình Base URL là toàn bộ ứng dụng sẽ bắt đầu giao tiếp đồng bộ trực tiếp!</p>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        )}
 
       </div>
     </div>
