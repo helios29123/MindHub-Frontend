@@ -36,24 +36,43 @@ export function revokeAllActiveUrls(): void {
   activeObjectUrls.clear();
 }
 
+function getSafeIndexedDB(): IDBFactory | null {
+  try {
+    if (typeof window !== 'undefined' && window.indexedDB) {
+      return window.indexedDB;
+    }
+  } catch (e) {
+    console.warn('[Storage Polyfill] Failed to safely access window.indexedDB:', e);
+  }
+  return null;
+}
+
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onerror = () => {
-      reject(new Error('Khởi tạo cơ sở dữ liệu IndexedDB thất bại.'));
-    };
-
-    request.onsuccess = (event: any) => {
-      resolve(event.target.result);
-    };
-
-    request.onupgradeneeded = (event: any) => {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+    try {
+      const idb = getSafeIndexedDB();
+      if (!idb) {
+        return reject(new Error('IndexedDB is not supported or is blocked in this environment.'));
       }
-    };
+      const request = idb.open(DB_NAME, DB_VERSION);
+
+      request.onerror = () => {
+        reject(new Error('Khởi tạo cơ sở dữ liệu IndexedDB thất bại.'));
+      };
+
+      request.onsuccess = (event: any) => {
+        resolve(event.target.result);
+      };
+
+      request.onupgradeneeded = (event: any) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        }
+      };
+    } catch (e) {
+      reject(e);
+    }
   });
 }
 
@@ -74,7 +93,22 @@ export function validateMp3File(file: File): Promise<{ isValid: boolean; error?:
       });
     }
 
-    const audio = new Audio();
+    let audio: HTMLAudioElement | null = null;
+    try {
+      if (typeof Audio !== 'undefined') {
+        audio = new Audio();
+      }
+    } catch (e) {
+      console.warn('[Audio Polyfill] Audio constructor is blocked or unsupported:', e);
+    }
+
+    if (!audio) {
+      return resolve({
+        isValid: false,
+        error: 'Trình duyệt hoặc môi trường sandbox của bạn không hỗ trợ kiểm tra định dạng âm thanh.'
+      });
+    }
+
     const objectUrl = URL.createObjectURL(file);
     audio.src = objectUrl;
 

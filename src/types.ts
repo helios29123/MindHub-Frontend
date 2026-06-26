@@ -1,4 +1,4 @@
-export type Role = 'student' | 'instructor' | 'moderator' | 'admin';
+export type Role = 'student' | 'instructor' | 'admin';
 
 export interface User {
   id: string;
@@ -104,7 +104,7 @@ export interface Course {
   instructorAvatar: string;
   instructorBio: string;
   price: number;
-  salePrice?: number;
+  salePrice?: number | null;
   rating: number;
   reviewCount: number;
   enrolledCount: number;
@@ -253,4 +253,78 @@ export interface Banner {
   textColor: string;
   accentColor: string;
 }
+
+export function normalizeUser(user: any): User {
+  if (!user || typeof user !== 'object') {
+    return {
+      id: 'u-guest',
+      name: 'Khách Ghé Thăm',
+      email: 'guest@mindhub.edu.vn',
+      avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Guest',
+      role: 'student',
+      streak: 0,
+      lastActiveDate: new Date().toISOString().split('T')[0],
+      interestedTopics: [],
+      notificationSettings: {
+        email: true,
+        push: true,
+        app: true,
+        scheduleReminders: true
+      }
+    };
+  }
+  
+  const name = user.name || user.full_name || user.username || 'User';
+  
+  let interestedTopics = user.interestedTopics || [];
+  if (typeof interestedTopics === 'string') {
+    try {
+      interestedTopics = JSON.parse(interestedTopics);
+    } catch {
+      interestedTopics = [];
+    }
+  }
+  if (!Array.isArray(interestedTopics)) {
+    interestedTopics = [];
+  }
+
+  let notificationSettings = user.notificationSettings;
+  if (typeof notificationSettings === 'string') {
+    try {
+      notificationSettings = JSON.parse(notificationSettings);
+    } catch {
+      notificationSettings = null;
+    }
+  }
+  if (!notificationSettings || typeof notificationSettings !== 'object') {
+    notificationSettings = {
+      email: true,
+      push: true,
+      app: true,
+      scheduleReminders: true
+    };
+  }
+
+  let role = user.role || 'student';
+  if (role === 'learner') {
+    role = 'student';
+  }
+
+  const avatar = user.avatar || user.avatar_url || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(name)}`;
+  const streak = typeof user.streak === 'number' ? user.streak : 0;
+  const lastActiveDate = user.lastActiveDate || new Date().toISOString().split('T')[0];
+
+  return {
+    ...user,
+    id: String(user.id),
+    name,
+    avatar,
+    role,
+    streak,
+    lastActiveDate,
+    interestedTopics,
+    notificationSettings
+  };
+}
+
 

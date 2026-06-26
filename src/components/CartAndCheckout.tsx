@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Heart, Trash2, Tag, CreditCard, CheckCircle, Download, Landmark, BookOpen, FileText, Gift, Info } from 'lucide-react';
 import { Course, Order, Coupon } from '../types';
+import { safeLocalStorage as localStorage } from '../utils/safeStorage';
 import { SYSTEM_COUPONS } from '../data';
 
 interface CartAndCheckoutProps {
@@ -28,7 +29,7 @@ export default function CartAndCheckout({
   const [activeDiscount, setActiveDiscount] = useState<{ code: string; percent: number } | null>(null);
   const [couponError, setCouponError] = useState('');
   const [couponSuccess, setCouponSuccess] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'bank' | 'momo' | 'vnpay'>('bank');
+  const [paymentMethod, setPaymentMethod] = useState<'momo' | 'vnpay'>('vnpay');
   
   // Checkout flow phase: 'wishlist' | 'paying' | 'receipt'
   const [phase, setPhase] = useState<'wishlist' | 'paying' | 'receipt'>(() => {
@@ -100,7 +101,7 @@ export default function CartAndCheckout({
       discountAmount: discountAmount,
       total: finalTotal,
       status: status,
-      paymentMethod: paymentMethod === 'bank' ? 'Chuyển khoản Ngân hàng' : paymentMethod === 'momo' ? 'Ví Momo' : 'VNPAY QR'
+      paymentMethod: paymentMethod === 'momo' ? 'Ví Momo' : 'VNPAY QR'
     };
 
     setCreatedOrder(order);
@@ -122,7 +123,7 @@ export default function CartAndCheckout({
             {initialCourseId ? (
               <CreditCard className="w-4.5 h-4.5 text-amber-300" />
             ) : (
-              <Heart className="w-4.5 h-4.5 text-rose-400 fill-rose-400" />
+              <Heart className="w-4.5 h-4.5 text-deep-indigo fill-deep-indigo" />
             )}
             <span className="font-display font-bold text-xs sm:text-sm">
               {initialCourseId ? "Thanh toán Ghi danh khóa học | MindHub" : "Khóa học Yêu thích & Tuyển sinh | MindHub"}
@@ -133,7 +134,7 @@ export default function CartAndCheckout({
             onClick={onClose} 
             className="text-xs bg-white/10 hover:bg-white/20 py-1.5 px-3.5 rounded-lg text-brand-light hover:text-white transition-all font-semibold"
           >
-            Đóng [✕]
+            Đóng [X]
           </button>
         </div>
 
@@ -156,7 +157,7 @@ export default function CartAndCheckout({
 
               {wishlistCourses.length === 0 ? (
                 <div className="text-center py-16 space-y-3.5">
-                  <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto text-rose-400">
+                  <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto text-deep-indigo">
                     <Heart className="w-8 h-8 opacity-75" />
                   </div>
                   <p className="text-xs font-semibold text-stone-500">Chưa có khóa học nào dưới mục Ước nguyện.</p>
@@ -224,9 +225,9 @@ export default function CartAndCheckout({
           {phase === 'paying' && checkoutCourse && (
             <div className="space-y-4">
               <div className="text-left border-b border-stone-105 pb-3">
-                <span className="text-[9px] font-mono tracking-widest font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/50">CỔNG TIẾP NHẬN GHIDANH AN TOÀN VPBANK LỐC-XÍCH</span>
+                <span className="text-[9px] font-mono tracking-widest font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/50">CỔNG TIẾP NHẬN GHIDANH AN TOÀN VNPAY CHÍNH THỨC</span>
                 <h3 className="text-base font-bold text-stone-900 mt-1.5">Tuyển sinh trực tuyến: {checkoutCourse.title}</h3>
-                <p className="text-[11px] text-stone-500 italic mt-0.5">Thời hạn: Nhận toàn quyền truy cập cập nhật bài giảng vĩnh viễn</p>
+                <p className="text-[11px] text-stone-800 font-medium italic mt-0.5">Thời hạn: Nhận toàn quyền truy cập cập nhật bài giảng vĩnh viễn</p>
               </div>
 
               {/* 2-Column Responsive Layout */}
@@ -234,58 +235,46 @@ export default function CartAndCheckout({
                 
                 {/* COLUMN 1 (Left 5 cols): Payment selection methods, Coupons inputs and note */}
                 <div className="lg:col-span-5 space-y-4">
-                  <span className="block text-xs font-bold text-stone-800">1. Chọn Cổng / Ví liên kết:</span>
+                  <span className="block text-xs font-bold text-stone-900">1. Chọn Cổng / Ví liên kết:</span>
                   
                   <div className="grid grid-cols-1 gap-2">
                     <button 
                       type="button"
-                      onClick={() => setPaymentMethod('bank')}
-                      className={`border p-2.5 rounded-xl flex items-center gap-3 text-left transition-all ${paymentMethod === 'bank' ? 'border-[#8b5e3c] bg-[#faf6f2] shadow-xs' : 'border-stone-200 hover:bg-stone-50'}`}
+                      onClick={() => setPaymentMethod('vnpay')}
+                      className={`border p-3 rounded-xl flex items-center gap-3 text-left transition-all ${paymentMethod === 'vnpay' ? 'border-[#8b5e3c] bg-[#faf6f2] ring-1 ring-[#8b5e3c] shadow-xs' : 'border-stone-200 hover:bg-stone-50'}`}
                     >
-                      <div className="p-1.5 bg-stone-100 rounded-lg"><Landmark className="w-4 h-4 text-[#432c28]" /></div>
+                      <div className="p-1.5 bg-blue-100 rounded-lg"><CreditCard className="w-4 h-4 text-blue-600" /></div>
                       <div>
-                        <span className="text-xs font-bold text-stone-800 block">Ngân Hàng Chuyển Khoản</span>
-                        <span className="text-[9.5px] text-stone-500">Mã QR ngân hàng tự động</span>
+                        <span className="text-xs font-bold text-stone-900 block">Cổng VNPAY QR Code</span>
+                        <span className="text-[9.5px] text-stone-700 font-semibold block mt-0.5">Quét dọn thanh toán bằng ứng dụng ngân hàng</span>
                       </div>
                     </button>
 
                     <button 
                       type="button"
-                      onClick={() => setPaymentMethod('momo')}
-                      className={`border p-2.5 rounded-xl flex items-center gap-3 text-left transition-all ${paymentMethod === 'momo' ? 'border-[#8b5e3c] bg-[#faf6f2] shadow-xs' : 'border-stone-200 hover:bg-stone-50'}`}
+                      disabled
+                      className="border p-3 rounded-xl flex items-center gap-3 text-left transition-all border-stone-200 opacity-60 cursor-not-allowed bg-stone-50"
                     >
                       <div className="p-1.5 bg-pink-50 text-pink-700 text-xs font-mono font-black rounded-lg w-7 h-7 flex items-center justify-center border">M</div>
                       <div>
-                        <span className="text-xs font-bold text-stone-850 block">Ví Momo Pay</span>
-                        <span className="text-[9.5px] text-stone-505">Chuyển ví mượt mà nhanh hơn</span>
-                      </div>
-                    </button>
-
-                    <button 
-                      type="button"
-                      onClick={() => setPaymentMethod('vnpay')}
-                      className={`border p-2.5 rounded-xl flex items-center gap-3 text-left transition-all ${paymentMethod === 'vnpay' ? 'border-[#8b5e3c] bg-[#faf6f2] shadow-xs' : 'border-stone-200 hover:bg-stone-50'}`}
-                    >
-                      <div className="p-1.5 bg-blue-50 rounded-lg"><CreditCard className="w-4 h-4 text-blue-600" /></div>
-                      <div>
-                        <span className="text-xs font-bold text-stone-850 block">Cổng VNPAY QR Code</span>
-                        <span className="text-[9.5px] text-stone-505">Quét dọn bằng ứng dụng ngân hàng</span>
+                        <span className="text-xs font-bold text-stone-500 block">Ví Momo Pay</span>
+                        <span className="text-[9px] text-red-600 font-black bg-red-50 border border-red-100 px-1.5 py-0.5 rounded mt-1 inline-block uppercase tracking-wider">Tính năng đang phát triển</span>
                       </div>
                     </button>
                   </div>
 
                   {/* Apply coupon voucher */}
                   <form onSubmit={handleApplyCoupon} className="border-t border-stone-200/60 pt-3 flex flex-col gap-1.5">
-                    <span className="text-xs font-bold text-stone-800 block">Danh mục mã khuyến mãi giảm giá:</span>
+                    <span className="text-xs font-bold text-stone-900 block">Danh mục mã khuyến mãi giảm giá:</span>
                     <div className="flex gap-2 text-xs">
                       <div className="relative flex-1">
-                        <Tag className="absolute left-3 top-2.5 w-3.5 h-3.5 text-stone-400" />
+                        <Tag className="absolute left-3 top-2.5 w-3.5 h-3.5 text-stone-500" />
                         <input 
                           type="text" 
                           value={couponCode}
                           onChange={(e) => setCouponCode(e.target.value)}
-                          placeholder="Mã giảm học phí hàng năm..."
-                          className="w-full text-xs pl-8 pr-3 py-1.5 border border-stone-200 bg-stone-50 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#8b5e3c]"
+                          placeholder="Mã giảm học phí..."
+                          className="w-full text-xs font-bold text-stone-900 pl-8 pr-3 py-1.5 border border-stone-300 bg-white rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#8b5e3c]"
                         />
                       </div>
                       <button type="submit" className="bg-stone-900 hover:bg-black text-white text-xs px-3.5 py-1.5 rounded-xl font-bold shadow-xs">
@@ -296,54 +285,87 @@ export default function CartAndCheckout({
                     {couponSuccess && <p className="text-[10px] text-emerald-600 font-semibold">{couponSuccess}</p>}
                   </form>
 
-                  <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200/50 text-[10px] text-amber-900 leading-normal font-serif text-justify">
+                  <div className="bg-amber-50/70 p-3 rounded-xl border border-amber-200/60 text-[10px] text-amber-950 leading-normal font-serif text-justify font-medium">
                     💡 <b>Thông báo:</b> Mã ưu đãi <b>WELCOMEMIND</b> giảm giá trực tiếp 10% học phí ghi nhận ngay. Hãy sử dụng để kiểm soát hóa đơn tốt nhất!
                   </div>
                 </div>
 
-                {/* COLUMN 2 (Right 7 cols): VPBANK Specs & simulated submit */}
-                <div className="lg:col-span-7 space-y-3 bg-stone-50 border border-stone-200 rounded-2xl p-4 sm:p-5">
-                  <span className="block text-xs font-bold text-stone-850 border-b pb-1">2. Chi tiết Lệnh nạp chuyển học phí trực tuyến:</span>
+                {/* COLUMN 2 (Right 7 cols): VNPAY Specs & simulated submit */}
+                <div className="lg:col-span-7 space-y-3 bg-stone-50 border border-stone-250 rounded-2xl p-4 sm:p-5">
+                  <span className="block text-xs font-bold text-stone-900 border-b pb-1">2. Chi tiết Lệnh thanh toán VNPAY QR:</span>
                   
-                  <div className="space-y-1.5 leading-normal text-xs text-stone-700">
-                    <div className="flex justify-between pb-1.5 border-b border-stone-250/50 font-serif">
-                      <span className="text-stone-450">Ngân hàng thụ hưởng:</span>
-                      <span className="font-bold text-stone-800">VPBANK (Việt Nam Thịnh Vượng)</span>
+                  {/* Beautiful Simulated VNPAY QR Code scanner container */}
+                  <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-3.5 rounded-xl border border-stone-200">
+                    <div className="w-24 h-24 bg-stone-50 rounded-lg border-2 border-dashed border-[#8b5e3c] flex flex-col items-center justify-center p-2 relative shrink-0">
+                      {/* Stylized QR Code Mockup */}
+                      <div className="absolute top-1 left-1 w-2 h-2 bg-[#432c28] rounded-xs"></div>
+                      <div className="absolute top-1 right-1 w-2 h-2 bg-[#432c28] rounded-xs"></div>
+                      <div className="absolute bottom-1 left-1 w-2 h-2 bg-[#432c28] rounded-xs"></div>
+                      <div className="w-16 h-16 bg-stone-900 flex flex-col justify-between p-1.5 rounded-sm">
+                        <div className="flex justify-between">
+                          <div className="w-4 h-4 bg-white rounded-xs p-0.5 flex items-center justify-center">
+                            <div className="w-full h-full bg-stone-900 rounded-2xs"></div>
+                          </div>
+                          <div className="w-4 h-4 bg-white rounded-xs p-0.5 flex items-center justify-center">
+                            <div className="w-full h-full bg-stone-900 rounded-2xs"></div>
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-end">
+                          <div className="w-4 h-4 bg-white rounded-xs p-0.5 flex items-center justify-center">
+                            <div className="w-full h-full bg-stone-900 rounded-2xs"></div>
+                          </div>
+                          <div className="w-5 h-5 bg-[#8b5e3c] rounded-xs p-0.5 flex items-center justify-center text-[6px] text-white font-black">VN</div>
+                        </div>
+                      </div>
+                      <span className="text-[7px] text-[#8b5e3c] font-black uppercase tracking-wider mt-1.5 animate-pulse">QUÉT VNPAY QR</span>
                     </div>
-                    <div className="flex justify-between pb-1.5 border-b border-stone-250/50">
-                      <span className="text-stone-450">Số tài khoản:</span>
-                      <span className="font-mono font-black text-[#432c28] text-sm tracking-wider">314159265359</span>
+                    
+                    <div className="space-y-1 text-left">
+                      <span className="text-[8.5px] bg-blue-100 text-blue-900 px-1.5 py-0.5 rounded font-black uppercase">CỔNG VNPAY CHÍNH THỨC</span>
+                      <p className="text-xs font-black text-stone-900">Mã QR Thanh toán Bảo mật</p>
+                      <p className="text-[10px] text-stone-800 leading-normal font-serif font-medium">Mở ứng dụng Ngân hàng (VCB, BIDV, VietinBank, Agribank, Techcombank...) quét mã QR để ghi danh tức thì.</p>
                     </div>
-                    <div className="flex justify-between pb-1.5 border-b border-stone-250/50">
-                      <span className="text-stone-450">Tên thụ hưởng pháp nhân:</span>
-                      <span className="font-semibold text-stone-800">CÔNG TY CPDV GIÁO DỤC MINDHUB VN</span>
+                  </div>
+
+                  <div className="space-y-1.5 leading-normal text-xs text-stone-900 font-bold">
+                    <div className="flex justify-between pb-1.5 border-b border-stone-200">
+                      <span className="text-stone-800">Cổng kết nối thanh toán:</span>
+                      <span className="text-blue-800 font-black uppercase">VNPAY QR-GATEWAY</span>
                     </div>
-                    <div className="flex justify-between pb-1.5 border-b border-stone-250/50">
-                      <span className="text-stone-400">Giá gốc học phần:</span>
-                      <span className="text-[#a8a19a] line-through font-mono">{formatVND(rawSubtotal)}</span>
+                    <div className="flex justify-between pb-1.5 border-b border-stone-200">
+                      <span className="text-stone-800">Đơn vị thụ hưởng pháp nhân:</span>
+                      <span className="text-stone-950 font-black">CÔNG TY CPDV GIÁO DỤC MINDHUB VN</span>
+                    </div>
+                    <div className="flex justify-between pb-1.5 border-b border-stone-200">
+                      <span className="text-stone-800">Mã hóa đơn giao dịch:</span>
+                      <span className="font-mono text-stone-950 font-black">MIND{checkoutCourse.id.replace('course-', '').toUpperCase()}</span>
+                    </div>
+                    <div className="flex justify-between pb-1.5 border-b border-stone-200">
+                      <span className="text-stone-800">Giá gốc học phần:</span>
+                      <span className="text-stone-600 font-black line-through font-mono">{formatVND(rawSubtotal)}</span>
                     </div>
                     
                     {activeDiscount && (
-                      <div className="flex justify-between pb-1.5 border-b border-stone-250/50 text-emerald-600 font-bold">
+                      <div className="flex justify-between pb-1.5 border-b border-stone-200 text-emerald-800 font-black">
                         <span>Voucher giảm giá áp dụng:</span>
                         <span>-{formatVND(discountAmount)} ({activeDiscount.percent}%)</span>
                       </div>
                     )}
                     
                     <div className="flex justify-between py-1 border-b-2 border-dashed border-stone-300">
-                      <span className="text-stone-700 font-bold text-xs sm:text-sm">Tổng chuyển chính xác:</span>
+                      <span className="text-stone-900 font-black text-xs sm:text-sm">Tổng chuyển chính xác:</span>
                       <span className="font-black text-[#852b21] text-sm sm:text-base">{formatVND(finalTotal)}</span>
                     </div>
                     
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-red-600 font-bold uppercase text-[10.5px]">Nội dung Chuyển tiền (Memos):</span>
-                      <span className="font-mono font-bold text-red-600 uppercase bg-red-100/70 border border-red-300/50 px-2 py-0.5 rounded text-xs select-all">MIND{checkoutCourse.id.replace('course-', '').toUpperCase()}</span>
+                      <span className="text-red-700 font-black uppercase text-[10.5px]">Nội dung thanh toán (Memos):</span>
+                      <span className="font-mono font-black text-red-700 uppercase bg-red-100/70 border border-red-300/50 px-2 py-0.5 rounded text-xs select-all">MIND{checkoutCourse.id.replace('course-', '').toUpperCase()}</span>
                     </div>
                   </div>
 
-                  <div className="bg-stone-850 text-amber-100 p-2.5 rounded-xl border border-stone-800 text-[10px] space-y-1">
-                    <p className="font-bold flex items-center gap-1"><Info className="w-3 h-3 text-amber-300" /> HƯỚNG DẪN GIẢ LẬP THANH TOÁN:</p>
-                    <p className="font-serif">Bạn có lựa chọn hai cổng thanh toán giả lập bên dưới: <b>Cổng Tự Động</b> sẽ tự động ghi danh bạn ngay lập tức, trong khi <b>Cổng Chờ Duyệt</b> tạo đơn hàng chờ cần được phê duyệt trạng thái bởi Kiểm duyệt viên/Admin (hoặc phê duyệt thủ công trong hồ sơ của bạn).</p>
+                  <div className="bg-stone-900 text-amber-100 p-3 rounded-xl border border-stone-800 text-[10px] space-y-1">
+                    <p className="font-black flex items-center gap-1"><Info className="w-3 h-3 text-amber-300" /> HƯỚNG DẪN GIẢ LẬP THANH TOÁN:</p>
+                    <p className="font-serif leading-relaxed text-stone-200 font-medium">Bạn có lựa chọn hai cổng thanh toán giả lập bên dưới: <b>Cổng Tự Động</b> sẽ tự động ghi danh bạn ngay lập tức, trong khi <b>Cổng Chờ Duyệt</b> tạo đơn hàng chờ cần được phê duyệt trạng thái bởi Kiểm duyệt viên/Admin (hoặc phê duyệt thủ công trong hồ sơ của bạn).</p>
                   </div>
 
                   {/* Actions row inside col 2 */}
@@ -376,7 +398,7 @@ export default function CartAndCheckout({
                             setPhase('wishlist');
                           }
                         }} 
-                        className="px-4 py-2 border border-stone-300 text-[10.5px] rounded-xl hover:bg-stone-100 text-stone-600 font-bold text-center cursor-pointer transition-all"
+                        className="px-4 py-2 border border-stone-300 text-[10.5px] rounded-xl hover:bg-stone-100 text-stone-750 font-bold text-center cursor-pointer transition-all"
                       >
                         {initialCourseId ? "Hủy bỏ & Quay lại" : "Quay lại wishlist"}
                       </button>
@@ -398,7 +420,7 @@ export default function CartAndCheckout({
                     <CheckCircle className="w-6 h-6 animate-scale-up" />
                   </div>
                   <h3 className="text-base sm:text-lg font-bold text-emerald-800">Ghi danh Học viên thành công!</h3>
-                  <p className="text-xs text-stone-550 leading-relaxed font-serif">
+                  <p className="text-xs text-stone-850 leading-relaxed font-serif font-medium">
                     Giao dịch đã hoàn tất và được kích hoạt tự động. Khóa học <b>{checkoutCourse.title}</b> đã chính thức mở khóa vĩnh viễn cho tài khoản của bạn!
                   </p>
                 </>
@@ -408,28 +430,28 @@ export default function CartAndCheckout({
                     <Landmark className="w-6 h-6" />
                   </div>
                   <h3 className="text-base sm:text-lg font-bold text-amber-800">Đơn hàng đang chờ xử lý thanh toán!</h3>
-                  <p className="text-xs text-stone-550 leading-relaxed font-serif">
+                  <p className="text-xs text-stone-850 leading-relaxed font-serif font-medium">
                     Yêu cầu chuyển khoản học phí cho khóa <b>{checkoutCourse.title}</b> đã được lưu lại với trạng thái <b>Chờ phê duyệt</b>. Sau khi bạn chuyển khoản chuyển tiền, dữ liệu sẽ sớm được cập nhật kích hoạt.
                   </p>
                 </>
               )}
 
               {/* Tax Invoice Sheet widget */}
-              <div className="border border-stone-250 bg-white rounded-2xl p-4 sm:p-5 text-left text-xs space-y-3.5 shadow-sm">
-                <div className="flex justify-between border-b pb-2">
-                  <span className="font-bold text-stone-800 text-xs sm:text-sm">HÓA ĐƠN ĐIỆN TỬ E-RECEIPT</span>
-                  <span className="font-mono text-stone-400 text-[10px]">{createdOrder.id}</span>
+              <div className="border border-stone-300 bg-white rounded-2xl p-4 sm:p-5 text-left text-xs space-y-3.5 shadow-sm">
+                <div className="flex justify-between border-b border-stone-250 pb-2">
+                  <span className="font-bold text-stone-900 text-xs sm:text-sm">HÓA ĐƠN ĐIỆN TỬ E-RECEIPT</span>
+                  <span className="font-mono text-stone-500 font-bold text-[10px]">{createdOrder.id}</span>
                 </div>
-                <div className="space-y-1.5 text-stone-500 font-sans">
-                  <p>Mã hóa đơn: <span className="text-stone-850 font-bold font-mono">{createdOrder.id}</span></p>
-                  <p>Trạng thái thanh toán: {createdOrder.status === 'success' ? (
-                    <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-bold font-mono uppercase text-[9.5px] border border-emerald-200">Đã thanh toán</span>
+                <div className="space-y-2 text-stone-800 font-sans">
+                  <p className="flex justify-between"><span className="font-bold text-stone-700">Mã hóa đơn:</span> <span className="text-stone-950 font-black font-mono">{createdOrder.id}</span></p>
+                  <p className="flex justify-between items-center"><span className="font-bold text-stone-700">Trạng thái thanh toán:</span> {createdOrder.status === 'success' ? (
+                    <span className="bg-emerald-100 text-emerald-850 px-2 py-0.5 rounded font-black font-mono uppercase text-[9.5px] border border-emerald-300">Đã thanh toán</span>
                   ) : (
-                    <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded font-bold font-mono uppercase text-[9.5px] border border-amber-200">Đang chờ xử lý (Pending)</span>
+                    <span className="bg-amber-100 text-amber-850 px-2 py-0.5 rounded font-black font-mono uppercase text-[9.5px] border border-amber-300">Đang chờ xử lý (Pending)</span>
                   )}</p>
-                  <p>Học viên thụ hưởng: <span className="text-stone-850 font-semibold">T. T. Sang (truongthanhsang31415@gmail.com)</span></p>
-                  <p>Ngày ghi nhận: <span className="text-stone-850 font-semibold">{createdOrder.date}</span></p>
-                  <p>Hình thức: <span className="text-stone-850 font-semibold">{createdOrder.paymentMethod}</span></p>
+                  <p className="flex justify-between"><span className="font-bold text-stone-700">Học viên thụ hưởng:</span> <span className="text-stone-950 font-black">T. T. Sang (truongthanhsang31415@gmail.com)</span></p>
+                  <p className="flex justify-between"><span className="font-bold text-stone-700">Ngày ghi nhận:</span> <span className="text-stone-950 font-black">{createdOrder.date}</span></p>
+                  <p className="flex justify-between"><span className="font-bold text-stone-700">Hình thức:</span> <span className="text-stone-950 font-black">{createdOrder.paymentMethod}</span></p>
                 </div>
                 
                 <div className="border-t border-b border-stone-100 py-2">

@@ -1,37 +1,101 @@
-@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-brand-light: #f7ede2;
-  --color-brand-light-hover: #eedecf;
-  --color-brand-light-active: #d6bda9;
-  --color-brand-normal: #8b5e3c;
-  --color-brand-hover: #734c2f;
-  --color-brand-active: #5c3b24;
-  --color-brand-dark: #432c28;
-  --color-brand-darker: #291a18;
-  
-  --color-main-light: #f5ece3;
-  --color-main-light-hover: #ebd9c8;
-  --color-main-normal: #432c28;
-  --color-main-hover: #35221f;
-  --color-main-dark: #271917;
-  --color-main-darker: #170f0e;
-  
-  --font-sans: 'Be Vietnam Pro', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Be Vietnam Pro', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
-  --font-serif: 'Playfair Display', Georgia, serif;
-  --font-academic: 'Be Vietnam Pro', sans-serif;
+  /* Colors from Column Design Token Guide */
+  --color-paper-white: #fafafc;
+  --color-card-white: #ffffff;
+  --color-deep-ink: #011821;
+  --color-carbon: #12161e;
+  --color-slate: #7c7f88;
+  --color-mist: #e3e4e8;
+  --color-fog: #a9acb6;
+  --color-graphite: #3b3e47;
+  --color-deep-indigo: #111a4a;
+  --color-ember-orange: #ec652b;
+  --color-midnight-teal: #023247;
+  --color-forest-teal: #167e6c;
+  --color-sky-blue: #7ea7e9;
+  --color-pale-cyan: #c1e8ef;
+  --color-mint: #44b48b;
+  --color-lavender: #9f7aee;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  /* Typography Fonts mapping to Inter and JetBrains Mono as specified */
+  --font-suisseintl: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-sfmono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-suisseintlmono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-inter: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Global Border Radius remap to create modern sharper aesthetics */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --radius-2xl: 10px;
+  --radius-3xl: 12px;
+
+  /* Remap the existing legacy brand and main colors for instant system-wide adaptation */
+  --color-brand-light: #c1e8ef;
+  --color-brand-light-hover: #e3e4e8;
+  --color-brand-light-active: #a9acb6;
+  --color-brand-normal: #111a4a;
+  --color-brand-hover: #023247;
+  --color-brand-active: #011821;
+  --color-brand-dark: #011821;
+  --color-brand-darker: #12161e;
+  
+  --color-main-light: #fafafc;
+  --color-main-light-hover: #e3e4e8;
+  --color-main-normal: #011821;
+  --color-main-hover: #111a4a;
+  --color-main-dark: #12161e;
+  --color-main-darker: #011821;
+}
+
+:root {
+  /* Native css custom properties */
+  --color-paper-white: #fafafc;
+  --color-card-white: #ffffff;
+  --color-deep-ink: #011821;
+  --color-carbon: #12161e;
+  --color-slate: #7c7f88;
+  --color-mist: #e3e4e8;
+  --color-fog: #a9acb6;
+  --color-graphite: #3b3e47;
+  --color-deep-indigo: #111a4a;
+  --color-ember-orange: #ec652b;
+  --color-midnight-teal: #023247;
+  --color-forest-teal: #167e6c;
+  --color-sky-blue: #7ea7e9;
+  --color-pale-cyan: #c1e8ef;
+  --color-mint: #44b48b;
+  --color-lavender: #9f7aee;
+
+  --font-suisseintl: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-sfmono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-suisseintlmono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-inter: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  /* Global sharp modern curves */
+  --radius-sm: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --radius-nav: 6px;
+  --radius-cards: 6px;
+  --radius-links: 4px;
+  --radius-badges: 9999px;
+  --radius-inputs: 6px;
+  --radius-buttons: 6px;
 }
 
 body {
-  font-family: var(--font-sans);
-  background-color: #fbf9f6;
-  color: #2b221e;
+  font-family: var(--font-suisseintl);
+  background-color: var(--color-paper-white);
+  color: var(--color-deep-ink);
 }
 
 /* Custom gorgeous scrollbar for clean aesthetics */
@@ -43,11 +107,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #dbcdc3;
-  border-radius: 4px;
+  background: var(--color-fog);
+  border-radius: 8px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #cbd5e1;
+  background: var(--color-slate);
 }
 
 /* Tactile visible scrollbars for easy grabbing */
@@ -56,17 +120,17 @@ body {
   height: 10px !important;
 }
 .tactile-scrollbar::-webkit-scrollbar-track {
-  background: #fcfaf7 !important;
+  background: var(--color-paper-white) !important;
   border-radius: 6px;
-  border: 1px solid #e2d6ca !important;
+  border: 1px solid var(--color-mist) !important;
 }
 .tactile-scrollbar::-webkit-scrollbar-thumb {
-  background: #8b5e3c !important;
+  background: var(--color-deep-indigo) !important;
   border-radius: 6px;
-  border: 2px solid #fcfaf7 !important;
+  border: 2px solid var(--color-paper-white) !important;
 }
 .tactile-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #734c2f !important;
+  background: var(--color-deep-ink) !important;
 }
 
 /* Elegant animations */
@@ -111,13 +175,13 @@ body {
 }
 
 .bg-moving-cafe {
-  background: linear-gradient(-45deg, #fbf9f6, #f3ede4, #faf2e9, #fbf9f6);
+  background: linear-gradient(-45deg, var(--color-paper-white), var(--color-card-white), var(--color-mist), var(--color-paper-white));
   background-size: 400% 400%;
   animation: progress-fluid 15s ease infinite;
 }
 
 .bg-gradient-fluid {
-  background: linear-gradient(-45deg, #f7ede2, #eedecf, #ebd9c8, #f5ece3);
+  background: linear-gradient(-45deg, var(--color-pale-cyan), var(--color-mist), var(--color-paper-white), var(--color-card-white));
   background-size: 300% 300%;
   animation: progress-fluid 12s ease infinite;
 }
@@ -127,8 +191,8 @@ body {
 }
 .hover-glow-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 30px -10px rgba(139, 94, 60, 0.15);
-  border-color: #d6bda9;
+  box-shadow: rgba(17, 26, 74, 0.1) 0px 12px 30px -10px;
+  border-color: var(--color-fog);
 }
 
 /* ☕ Premium Custom Floating Coffee Steam Animations */
@@ -148,6 +212,163 @@ body {
 }
 .animate-steam-3 {
   animation: steam-rise 2.5s ease-in-out infinite 1.4s;
+}
+
+/* ==========================================
+   TAILWIND UTILITY OVERRIDES (COLUMN THEME)
+   ========================================== */
+
+/* 1. MAP ALL COFFEE BROWN BACKGROUNDS TO MODERN DEEP INDIGO / BLUE BUTTONS */
+.bg-\[\#8b5e3c\], 
+.bg-\[\#5c3e38\], 
+.bg-\[\#5c3e21\], 
+.bg-\[\#5c3b24\], 
+.bg-\[\#734c2f\], 
+.bg-\[\#724c30\], 
+.bg-\[\#432c28\], 
+.bg-\[\#291a18\],
+.bg-brand-normal,
+.bg-brand-dark {
+  background-color: var(--color-deep-indigo) !important;
+}
+
+/* Hover effects mapped to midnight-teal */
+.hover\:bg-\[\#8b5e3c\]:hover, 
+.hover\:bg-\[\#5c3e38\]:hover, 
+.hover\:bg-\[\#5c3e21\]:hover, 
+.hover\:bg-\[\#734c2f\]:hover, 
+.hover\:bg-\[\#724c30\]:hover,
+.hover\:bg-brand-normal:hover,
+.hover\:bg-brand-dark:hover {
+  background-color: var(--color-midnight-teal) !important;
+}
+
+/* Ensure text on these buttons/elements is pure white for high contrast */
+.bg-\[\#8b5e3c\], 
+.bg-\[\#5c3e38\], 
+.bg-\[\#5c3e21\], 
+.bg-\[\#734c2f\], 
+.bg-\[\#724c30\],
+.bg-brand-normal,
+.bg-brand-dark {
+  color: #ffffff !important;
+}
+
+/* Ensure icons/SVGs inside these buttons are also white */
+.bg-\[\#8b5e3c\] svg, 
+.bg-\[\#5c3e38\] svg, 
+.bg-\[\#5c3e21\] svg, 
+.bg-\[\#734c2f\] svg, 
+.bg-\[\#724c30\] svg,
+.bg-brand-normal svg,
+.bg-brand-dark svg {
+  color: #ffffff !important;
+}
+
+/* 2. MAP TEXT COLOR AND SVG FILLS OF LEGACY COFFEE TO DEEP INDIGO / DEEP INK */
+.text-\[\#8b5e3c\], 
+.text-\[\#5c3e38\], 
+.text-\[\#5c3e21\], 
+.text-\[\#734c2f\], 
+.text-\[\#724c30\],
+.text-\[\#8b5e3c\/10\] {
+  color: var(--color-deep-indigo) !important;
+}
+.text-\[\#432c28\], 
+.text-\[\#291a18\], 
+.text-\[\#5c3a21\] {
+  color: var(--color-deep-ink) !important;
+}
+.fill-\[\#8b5e3c\] {
+  fill: var(--color-deep-indigo) !important;
+}
+
+/* Ensure pure white text on dark background blocks */
+.bg-deep-indigo, .bg-midnight-teal, .bg-\[\#181a20\], .bg-main-dark {
+  color: #ffffff !important;
+}
+
+/* 3. MAP SEPIA AND OTHER LIGHT ORANGE/BROWN BACKGROUNDS TO LIGHT CYAN / MODERN PAPER WHITE */
+.bg-\[\#faf6f2\], 
+.bg-\[\#f5ece3\], 
+.bg-\[\#faf7f2\], 
+.bg-\[\#fff9f2\], 
+.bg-\[\#fcf8f2\], 
+.bg-\[\#fbf9f6\], 
+.bg-\[\#fbf6f2\], 
+.bg-\[\#fcf5e3\], 
+.bg-\[\#fcf5e3\/60\], 
+.bg-\[\#dfd4b3\], 
+.bg-\[\#dfd4b3\/60\], 
+.bg-\[\#dfd4b3\/50\], 
+.bg-\[\#dfd4b3\/40\], 
+.bg-\[\#e6dcb8\], 
+.bg-\[\#eae0c0\], 
+.bg-\[\#d6caa4\], 
+.bg-\[\#d6caa4\/40\], 
+.bg-\[\#fcf7e8\], 
+.bg-\[\#f4ebd0\], 
+.bg-\[\#f5ebd0\], 
+.bg-\[\#ece5dd\], 
+.bg-\[\#f0fdf4\], 
+.bg-\[\#faf7f2\/95\] {
+  background-color: var(--color-paper-white) !important;
+}
+
+/* Accents use Pale Cyan as highlighted backgrounds */
+.hover\:bg-\[\#faf6f2\]:hover, 
+.hover\:bg-\[\#f5ece3\]:hover, 
+.hover\:bg-\[\#fbf6f2\]:hover, 
+.hover\:bg-\[\#dfd4b3\]:hover,
+.hover\:bg-\[\#e6dcb8\]:hover {
+  background-color: var(--color-pale-cyan) !important;
+}
+
+/* 4. OVERWRITE ALL RELEVANT BORDER COLORS */
+.border-\[\#8b5e3c\],
+.border-\[\#8b5e3c\/10\],
+.border-\[\#8b5e3c\/20\],
+.border-\[\#8b5e3c\/30\],
+.border-\[\#eedecf\/55\], 
+.border-\[\#ffd9b3\/40\], 
+.border-\[\#e8ded3\], 
+.border-\[\#faf5ec\],
+.border-\[\#cbbfa0\], 
+.border-\[\#cbbfa0\/60\], 
+.border-\[\#ebdcd0\],
+.border-brand-light-active {
+  border-color: var(--color-mist) !important;
+}
+
+/* Translucent highlights */
+.bg-\[\#8b5e3c\/10\] {
+  background-color: rgba(17, 26, 74, 0.1) !important;
+}
+.bg-\[\#8b5e3c\/5\] {
+  background-color: rgba(17, 26, 74, 0.05) !important;
+}
+
+/* 5. GENERAL BRAND AND ACCENT SYSTEM REMAPPINGS */
+.bg-brand-normal {
+  background-color: var(--color-deep-indigo) !important;
+}
+.text-brand-normal {
+  color: var(--color-deep-indigo) !important;
+}
+.border-brand-normal {
+  border-color: var(--color-deep-indigo) !important;
+}
+.bg-brand-light {
+  background-color: var(--color-pale-cyan) !important;
+}
+.text-brand-light {
+  color: #ffffff !important;
+}
+.text-main-normal {
+  color: var(--color-deep-ink) !important;
+}
+.bg-main-light {
+  background-color: var(--color-paper-white) !important;
 }
 
 
