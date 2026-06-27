@@ -424,7 +424,7 @@ export default function App() {
         sessionStorage.setItem('mindhub_welcome_shown', 'true');
         const timer = setTimeout(() => {
           setShowWelcomeToast(false);
-        }, 5000);
+        }, 3000);
         return () => clearTimeout(timer);
       }
     } else {
@@ -653,6 +653,7 @@ export default function App() {
   const [introAutoCloseCountdown, setIntroAutoCloseCountdown] = useState<number | null>(null);
   const [introVideoPaused, setIntroVideoPaused] = useState(false);
   const introVideoRef = useRef<HTMLVideoElement>(null);
+  const enrolledScrollRef = useRef<HTMLDivElement>(null);
 
   // Selected Detail Course viewer
   const [viewedCourse, setViewedCourse] = useState<Course | null>(null);
@@ -3680,18 +3681,48 @@ export default function App() {
 
             {activeTab === 'home' && (
               <>
-                {/* Elegant Header & Current Courses Side-by-Side Layout */}
-                <div className="flex flex-col lg:flex-row gap-6 items-stretch w-full">
-                  {/* Left Side: Khóa học đang tham gia (Takes remaining space) */}
-                  <div className="flex-1 bg-[#fcfcfc] border border-stone-150 rounded-3xl p-4 md:p-5 flex flex-col justify-between shadow-3xs text-left">
+                {/* Elegant Current Courses Side-by-Side Layout */}
+                <div className="w-full">
+                  {/* Left Side: Khóa học đang tham gia (Takes full space after removing right welcome box) */}
+                  <div className="w-full bg-[#fcfcfc] border border-stone-150 rounded-3xl p-4 md:p-5 flex flex-col justify-between shadow-3xs text-left">
                     <div>
                       <div className="flex justify-between items-center border-b border-stone-100 pb-3 mb-4">
                         <h3 className="text-sm md:text-base font-extrabold flex items-center gap-2 text-[#432c28]">
                           <BookOpen className="w-5 h-5 text-brand-normal" /> Khóa học đang tham gia
                         </h3>
-                        <span className="text-[10px] bg-[#f5ece3] text-[#8b5e3c] font-bold px-2.5 py-1 rounded-md">
-                          {courses.filter(c => enrolledCourseIds.includes(c.id)).length} KHÓA ĐANG HỌC
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] bg-[#f5ece3] text-[#8b5e3c] font-bold px-2.5 py-1 rounded-md">
+                            {courses.filter(c => enrolledCourseIds.includes(c.id)).length} KHÓA ĐANG HỌC
+                          </span>
+                          {courses.filter(c => enrolledCourseIds.includes(c.id)).length > 0 && (
+                            <div className="hidden md:flex items-center gap-1 ml-2">
+                              <button 
+                                onClick={() => {
+                                  if (enrolledScrollRef.current) {
+                                    enrolledScrollRef.current.scrollBy({ left: -320, behavior: 'smooth' });
+                                  }
+                                }}
+                                aria-label="Cuộn sang trái"
+                                title="Cuộn sang trái"
+                                className="w-7 h-7 rounded-full bg-stone-100 hover:bg-[#8b5e3c] text-stone-600 hover:text-white flex items-center justify-center transition-colors cursor-pointer border border-stone-200"
+                              >
+                                <ChevronLeft className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  if (enrolledScrollRef.current) {
+                                    enrolledScrollRef.current.scrollBy({ left: 320, behavior: 'smooth' });
+                                  }
+                                }}
+                                aria-label="Cuộn sang phải"
+                                title="Cuộn sang phải"
+                                className="w-7 h-7 rounded-full bg-stone-100 hover:bg-[#8b5e3c] text-stone-600 hover:text-white flex items-center justify-center transition-colors cursor-pointer border border-stone-200"
+                              >
+                                <ChevronRight className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {!courses || !Array.isArray(courses) ? (
@@ -3716,7 +3747,10 @@ export default function App() {
                           </div>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5">
+                        <div 
+                          ref={enrolledScrollRef}
+                          className="flex gap-4 md:gap-5 overflow-x-auto flex-nowrap scrollbar-hide py-2 scroll-smooth"
+                        >
                           {(() => {
                             const enrolledList = courses.filter(c => c && Array.isArray(enrolledCourseIds) && enrolledCourseIds.includes(c.id)).sort((a, b) => {
                               const timeA = (a as any).lastAccessedAt || (a as any).updatedAt || (a as any).enrolledAt || a.createdAt || '';
@@ -3747,7 +3781,7 @@ export default function App() {
                                   return (
                                     <div 
                                       key={c.id} 
-                                      className="border border-brand-light-active bg-white rounded-3xl overflow-hidden flex flex-col justify-between hover-glow-card transition-all duration-300 text-left shadow-xs"
+                                      className="w-72 sm:w-80 shrink-0 border border-brand-light-active bg-white rounded-3xl overflow-hidden flex flex-col justify-between hover-glow-card transition-all duration-300 text-left shadow-xs"
                                     >
                                       <div className="relative">
                                         <img src={c.image} alt="Course banner" className="w-full h-36 object-cover" />
@@ -3802,7 +3836,7 @@ export default function App() {
                                   role="button"
                                   tabIndex={0}
                                   aria-label="Xem tất cả danh sách khóa học đã tham gia"
-                                  className="border border-dashed border-stone-300 bg-stone-50/60 hover:bg-[#faf6f2] rounded-3xl p-6 flex flex-col items-center justify-center text-center cursor-pointer group transition-all duration-300 shadow-3xs hover:border-[#8b5e3c]"
+                                  className="w-72 sm:w-80 shrink-0 border border-dashed border-stone-300 bg-stone-50/60 hover:bg-[#faf6f2] rounded-3xl p-6 flex flex-col items-center justify-center text-center cursor-pointer group transition-all duration-300 shadow-3xs hover:border-[#8b5e3c]"
                                 >
                                   <div className="w-12 h-12 rounded-full bg-white border border-stone-250 group-hover:border-[#8b5e3c] flex items-center justify-center text-[#8b5e3c] font-black text-xl mb-3 shadow-xs group-hover:scale-110 transition-transform">
                                     ...
@@ -3820,33 +3854,6 @@ export default function App() {
                         </div>
                       )}
                     </div>
-                  </div>
-
-                  {/* Right Side: Welcome back card (Compact: 100px to 200px wide, say 200px) */}
-                  <div className="w-full lg:w-[200px] shrink-0 bg-white border border-brand-light-active p-4 rounded-3xl shadow-subtle flex flex-col justify-between text-center space-y-3">
-                    <div className="space-y-2">
-                      <div className="w-10 h-10 bg-[#f5ece3] text-[#8b5e3c] rounded-full flex items-center justify-center mx-auto font-bold text-sm">
-                        {currentUser.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="space-y-0.5">
-                        <h4 className="text-[10px] font-bold text-stone-400 uppercase tracking-wider leading-none">
-                          Chào mừng quay lại
-                        </h4>
-                        <p className="text-xs font-black text-brand-dark truncate max-w-full px-1" title={currentUser.name}>
-                          {currentUser.name}!
-                        </p>
-                      </div>
-                      <p className="text-[10.5px] text-stone-500 leading-snug">
-                        Cùng tiếp tục thắp sáng ngọn lửa tri thức hôm nay tại MindHub.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setShowHeroPopup(true)}
-                      className="w-full bg-deep-indigo hover:bg-midnight-teal text-white text-[10.5px] font-bold py-2 px-2.5 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap animate-none"
-                    >
-                      <Sparkles className="w-3 h-3 text-emerald-300 animate-pulse shrink-0" />
-                      <span>Xem Bản Tin</span>
-                    </button>
                   </div>
                 </div>
 
@@ -6411,10 +6418,7 @@ export default function App() {
           {/* Column 1: Thương hiệu / giới thiệu ngắn */}
           <div className="space-y-4">
             <div className="flex items-center gap-2.5 text-white">
-              <div className="w-8 h-8 p-1 bg-pale-cyan rounded-xl flex items-center justify-center border border-emerald-250/30 shadow-3xs">
-                <img src="/favicon.svg" alt="MindHub Logo" className="w-full h-full object-contain" />
-              </div>
-              <span className="font-suisseintl font-black text-xl tracking-tighter text-white">MindHub</span>
+              <span className="font-suisseintl font-black text-xl tracking-tighter text-white footer-section-title">MindHub</span>
             </div>
             <p className="text-stone-300 leading-relaxed text-xs font-normal">
               Hệ thống đào tạo trực tuyến thông minh kiến tạo tri thức từ việc rèn luyện thực tế kết hợp trợ lý AI Mentor đồng hành.
@@ -6426,7 +6430,7 @@ export default function App() {
 
           {/* Column 2: Khám phá */}
           <div className="space-y-3">
-            <span className="font-bold text-[#8b5e3c] uppercase text-[11px] tracking-wider block border-b border-stone-800 pb-1.5">
+            <span className="font-bold text-white footer-section-title uppercase text-[11px] tracking-wider block border-b border-stone-800 pb-1.5">
               Khám Phá
             </span>
             <div className="space-y-2 text-stone-300 font-medium">
@@ -6439,22 +6443,22 @@ export default function App() {
 
           {/* Column 3: Hỗ trợ (Từ FAQ & Popup '?') */}
           <div className="space-y-3">
-            <span className="font-bold text-[#8b5e3c] uppercase text-[11px] tracking-wider block border-b border-stone-800 pb-1.5">
+            <span className="font-bold text-white footer-section-title uppercase text-[11px] tracking-wider block border-b border-stone-800 pb-1.5">
               Hỗ Trợ & Chính Sách
             </span>
             <div className="space-y-2 text-stone-300 font-medium">
-              <button onClick={() => setShowLegal('faq')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">❓ Câu hỏi thường gặp (FAQ)</button>
-              <button onClick={() => setShowLegal('terms')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">📖 Hướng dẫn học & Điều khoản</button>
-              <button onClick={() => setShowLegal('terms')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">💳 Hướng dẫn thanh toán</button>
-              <button onClick={() => setShowLegal('refund')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">💸 Chính sách hoàn tiền 100%</button>
-              <button onClick={() => setShowLegal('contact')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">🎧 Hướng dẫn liên hệ hỗ trợ</button>
-              <button onClick={() => setShowLegal('contact')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">🐛 Báo lỗi & Gửi phản hồi</button>
+              <button onClick={() => setShowLegal('faq')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">Câu hỏi thường gặp (FAQ)</button>
+              <button onClick={() => setShowLegal('terms')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">Hướng dẫn học & Điều khoản</button>
+              <button onClick={() => setShowLegal('terms')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">Hướng dẫn thanh toán</button>
+              <button onClick={() => setShowLegal('refund')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">Chính sách hoàn tiền 100%</button>
+              <button onClick={() => setShowLegal('contact')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">Hướng dẫn liên hệ hỗ trợ</button>
+              <button onClick={() => setShowLegal('contact')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">Báo lỗi & Gửi phản hồi</button>
             </div>
           </div>
 
           {/* Column 4: Liên hệ / thông tin hệ thống */}
           <div className="space-y-3">
-            <span className="font-bold text-[#8b5e3c] uppercase text-[11px] tracking-wider block border-b border-stone-800 pb-1.5">
+            <span className="font-bold text-white footer-section-title uppercase text-[11px] tracking-wider block border-b border-stone-800 pb-1.5">
               Liên Hệ Hệ Thống
             </span>
             <div className="space-y-2 text-stone-300 font-medium leading-relaxed">
