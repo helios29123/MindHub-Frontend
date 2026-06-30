@@ -1373,6 +1373,57 @@ export const ApiService = {
       });
     }
     return progress;
+  },
+
+  /** POST /auth/send-phone-otp */
+  async sendPhoneOtp(phone: string): Promise<{ success: boolean; message: string }> {
+    devLog('Auth', 'Send Phone OTP', { phone });
+    if (config.mode === 'api') {
+      return apiFetch<{ success: boolean; message: string }>('/auth/send-phone-otp', {
+        method: 'POST',
+        body: JSON.stringify({ phone })
+      });
+    }
+    return { success: true, message: `Mã OTP đã được gửi đến số điện thoại ${phone}` };
+  },
+
+  /** POST /auth/verify-phone-otp */
+  async verifyPhoneOtp(phone: string, otp: string): Promise<{ success: boolean }> {
+    devLog('Auth', 'Verify Phone OTP', { phone, otp });
+    if (config.mode === 'api') {
+      return apiFetch<{ success: boolean }>('/auth/verify-phone-otp', {
+        method: 'POST',
+        body: JSON.stringify({ phone, otp })
+      });
+    }
+    if (otp !== '123456') {
+      throw new Error('Mã OTP không chính xác. Mã giả lập luôn là 123456');
+    }
+    return { success: true };
+  },
+
+  /** POST /role-requests/instructor */
+  async requestInstructorRole(payload: any): Promise<{ success: boolean; message: string }> {
+    devLog('Auth', 'Request Instructor Role', payload);
+    if (config.mode === 'api') {
+      return apiFetch<{ success: boolean; message: string }>('/role-requests/instructor', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+    return { success: true, message: 'Yêu cầu trở thành giảng viên đã được gửi đi chờ phê duyệt.' };
+  },
+
+  /** POST /role-requests/admin */
+  async requestAdminRole(payload: any): Promise<{ success: boolean; message: string }> {
+    devLog('Auth', 'Request Admin Role', payload);
+    if (config.mode === 'api') {
+      return apiFetch<{ success: boolean; message: string }>('/role-requests/admin', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+    return { success: true, message: 'Yêu cầu quyền Admin hệ thống đã được gửi đến Super Admin.' };
   }
 };
 

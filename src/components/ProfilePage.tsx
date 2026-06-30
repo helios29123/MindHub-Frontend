@@ -1,0 +1,631 @@
+import React, { useState } from 'react';
+import { User, Lock, Settings, FileText, Check, Flame, AlertCircle, ShieldAlert, BadgeCheck, Camera, CreditCard, Mail, Smartphone, KeyRound, Loader2, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { User as UserType } from '../types';
+import { OTPModal } from './OTPModal';
+import { ApiService } from '../services/api';
+
+const AVAILABLE_AVATARS = [
+  "https://i.pravatar.cc/150?img=11",
+  "https://i.pravatar.cc/150?img=12",
+  "https://i.pravatar.cc/150?img=33",
+  "https://i.pravatar.cc/150?img=44",
+  "https://i.pravatar.cc/150?img=55",
+  "https://i.pravatar.cc/150?img=60",
+  "https://ui-avatars.com/api/?name=User&background=random"
+];
+
+interface ProfilePageProps {
+  currentUser: UserType;
+  setCurrentUser: React.Dispatch<React.SetStateAction<UserType>>;
+  navigateTo: (route: string) => void;
+}
+
+export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: ProfilePageProps) {
+  const [activeTab, setActiveTab] = useState<'personal' | 'security' | 'roles'>('personal');
+  
+  // Forms state
+  const [editUser, setEditUser] = useState<UserType>({ ...currentUser });
+  const [saving, setSaving] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [instructorBio, setInstructorBio] = useState('');
+  const [roleRequesting, setRoleRequesting] = useState(false);
+
+  // Notifications
+  const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // OTP Modal State
+  const [showOtp, setShowOtp] = useState(false);
+  const [otpType, setOtpType] = useState<'email' | 'phone'>('email');
+  const [otpAction, setOtpAction] = useState<'verify_email' | 'verify_phone' | 'request_instructor' | 'request_admin' | 'change_password' | null>(null);
+
+  const showNotification = (msg: string, isError = false) => {
+    if (isError) {
+      setErrorMsg(msg);
+      setSuccessMsg('');
+    } else {
+      setSuccessMsg(msg);
+      setErrorMsg('');
+    }
+    setTimeout(() => {
+      setSuccessMsg('');
+      setErrorMsg('');
+    }, 5000);
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 800));
+      setCurrentUser(editUser);
+      localStorage.setItem('mindhub_user', JSON.stringify(editUser));
+      showNotification('Lưu thông tin thành công!');
+    } catch (err) {
+      showNotification('Lỗi khi lưu thông tin.', true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Start OTP Flow
+  const handleOpenOtp = async (type: 'email' | 'phone', action: typeof otpAction) => {
+    setOtpType(type);
+    setOtpAction(action);
+    
+    try {
+      if (type === 'phone') {
+        await ApiService.sendPhoneOtp(currentUser.phone || '');
+      } else {
+        await ApiService.resendVerificationEmail();
+      }
+      setShowOtp(true);
+    } catch (err: any) {
+      showNotification(err.message || `Lỗi khi gửi mã ${type}.`, true);
+    }
+  };
+
+  const handleVerifyOtp = async (otpCode: string): Promise<boolean> => {
+    if (otpType === 'phone') {
+      const res = await ApiService.verifyPhoneOtp(currentUser.phone || '', otpCode);
+      return res.success;
+    } else {
+      // Mock email verification with OTP code (normally it's a link, but we mock it here for UI flow)
+      return new Promise((resolve, reject) => {
+        setTimeout(() => {
+          if (otpCode === '123456') resolve(true);
+          else reject(new Error('Mã OTP không chính xác. Mã đúng là 123456.'));
+        }, 1000);
+      });
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (otpType === 'phone') {
+      await ApiService.sendPhoneOtp(currentUser.phone || '');
+    } else {
+      await ApiService.resendVerificationEmail();
+    }
+  };
+
+  const handleOtpSuccess = async () => {
+    setShowOtp(false);
+    
+    let updatedUser = { ...currentUser };
+    
+    if (otpAction === 'verify_email') {
+      updatedUser.isEmailVerified = true;
+      showNotification('Xác minh Email thành công!');
+    } else if (otpAction === 'verify_phone') {
+      updatedUser.isPhoneVerified = true;
+      showNotification('Xác minh Số điện thoại thành công!');
+    } else if (otpAction === 'request_instructor') {
+      try {
+        setRoleRequesting(true);
+        await ApiService.requestInstructorRole({ userId: currentUser.id, bio: instructorBio });
+        updatedUser.roleRequestStatus = 'pending_instructor';
+        showNotification('Đã gửi yêu cầu đăng ký Giảng viên thành công! Vui lòng chờ phê duyệt.');
+      } catch (err) {
+        showNotification('Lỗi khi gửi yêu cầu.', true);
+      } finally {
+        setRoleRequesting(false);
+      }
+    } else if (otpAction === 'request_admin') {
+      try {
+        setRoleRequesting(true);
+        await ApiService.requestAdminRole({ userId: currentUser.id });
+        updatedUser.roleRequestStatus = 'pending_admin';
+        showNotification('Đã gửi yêu cầu quyền Admin!');
+      } catch (err) {
+        showNotification('Lỗi khi gửi yêu cầu.', true);
+      } finally {
+        setRoleRequesting(false);
+      }
+    } else if (otpAction === 'change_password') {
+      try {
+        setSaving(true);
+        await ApiService.changeMyPassword({ oldPassword, newPassword });
+        showNotification('Cập nhật mật khẩu mới thành công!');
+        setOldPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } catch (err: any) {
+        showNotification(err.message || 'Lỗi đổi mật khẩu', true);
+      } finally {
+        setSaving(false);
+      }
+    }
+    
+    setCurrentUser(updatedUser);
+    localStorage.setItem('mindhub_user', JSON.stringify(updatedUser));
+  };
+
+  const handleChangePasswordClick = () => {
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      showNotification('Vui lòng điền đầy đủ thông tin mật khẩu!', true);
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showNotification('Mật khẩu mới và Nhập lại mật khẩu không trùng khớp!', true);
+      return;
+    }
+    if (currentUser.isPhoneVerified && currentUser.phone) {
+      handleOpenOtp('phone', 'change_password');
+    } else if (currentUser.isEmailVerified) {
+      handleOpenOtp('email', 'change_password');
+    } else {
+      showNotification('Bạn cần xác minh Email hoặc Số điện thoại trước khi đổi mật khẩu.', true);
+    }
+  };
+
+  const handleRequestRole = (roleType: 'instructor' | 'admin') => {
+    if (!currentUser.isEmailVerified) {
+      showNotification('Vui lòng xác minh Email trước khi yêu cầu cấp quyền!', true);
+      setActiveTab('security');
+      return;
+    }
+    if (!currentUser.isPhoneVerified) {
+      showNotification('Vui lòng xác minh Số điện thoại trước khi yêu cầu cấp quyền!', true);
+      setActiveTab('security');
+      return;
+    }
+    // All verified, request OTP to confirm role change request
+    handleOpenOtp('phone', roleType === 'instructor' ? 'request_instructor' : 'request_admin');
+  };
+
+  return (
+    <div className="min-h-screen bg-stone-50 py-8 px-4 sm:px-6 lg:px-8 mt-16 pb-20">
+      <div className="max-w-6xl mx-auto">
+        {/* Header / Page Title */}
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-display font-black text-stone-900 tracking-tight">Cài đặt tài khoản</h1>
+            <p className="text-stone-500 mt-1">Quản lý hồ sơ, bảo mật và các tùy chọn cá nhân của bạn.</p>
+          </div>
+        </div>
+
+        {/* Global Notifications */}
+        {successMsg && (
+          <div className="mb-6 p-4 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-200 flex items-center gap-3 animate-fade-in">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+            <p className="font-medium text-sm">{successMsg}</p>
+          </div>
+        )}
+        {errorMsg && (
+          <div className="mb-6 p-4 bg-rose-50 text-rose-800 rounded-xl border border-rose-200 flex items-center gap-3 animate-fade-in">
+            <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+            <p className="font-medium text-sm">{errorMsg}</p>
+          </div>
+        )}
+
+        <div className="flex flex-col lg:flex-row gap-8">
+          
+          {/* Sidebar Menu */}
+          <div className="lg:w-1/4 flex-shrink-0">
+            <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden sticky top-24">
+              
+              {/* Mini Profile Card */}
+              <div className="p-6 border-b border-stone-100 flex flex-col items-center text-center">
+                <div className="relative mb-3">
+                  <img 
+                    src={currentUser.avatar} 
+                    alt={currentUser.name} 
+                    className="w-20 h-20 rounded-full object-cover border-4 border-stone-50 shadow-md"
+                  />
+                  {currentUser.role === 'admin' && (
+                    <div className="absolute -bottom-1 -right-1 bg-rose-500 text-white p-1 rounded-full border-2 border-white" title="Admin">
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                    </div>
+                  )}
+                  {currentUser.role === 'instructor' && (
+                    <div className="absolute -bottom-1 -right-1 bg-brand-normal text-white p-1 rounded-full border-2 border-white" title="Giảng viên">
+                      <BadgeCheck className="w-3.5 h-3.5" />
+                    </div>
+                  )}
+                </div>
+                <h2 className="font-bold text-stone-900 text-lg truncate w-full">{currentUser.name}</h2>
+                <p className="text-stone-500 text-sm truncate w-full">{currentUser.email}</p>
+                <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-stone-100 rounded-full text-xs font-semibold text-stone-600">
+                  {currentUser.role === 'admin' ? 'Super Admin' : currentUser.role === 'instructor' ? 'Giảng viên' : 'Học viên'}
+                </div>
+              </div>
+
+              {/* Navigation Tabs */}
+              <nav className="p-2 space-y-1">
+                <button
+                  onClick={() => setActiveTab('personal')}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition-colors ${activeTab === 'personal' ? 'bg-brand-light text-[#432c28]' : 'text-stone-600 hover:bg-stone-50'}`}
+                >
+                  <User className="w-5 h-5" /> Hồ sơ cá nhân
+                </button>
+                <button
+                  onClick={() => setActiveTab('security')}
+                  className={`w-full flex items-center justify-between px-4 py-3 text-sm font-semibold rounded-xl transition-colors ${activeTab === 'security' ? 'bg-brand-light text-[#432c28]' : 'text-stone-600 hover:bg-stone-50'}`}
+                >
+                  <div className="flex items-center gap-3"><Lock className="w-5 h-5" /> Bảo mật</div>
+                  {(!currentUser.isEmailVerified || !currentUser.isPhoneVerified) && (
+                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab('roles')}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition-colors ${activeTab === 'roles' ? 'bg-brand-light text-[#432c28]' : 'text-stone-600 hover:bg-stone-50'}`}
+                >
+                  <ShieldAlert className="w-5 h-5" /> Vai trò & Quyền
+                </button>
+              </nav>
+            </div>
+          </div>
+
+          {/* Content Area */}
+          <div className="lg:w-3/4">
+            
+            {/* PERSONAL TAB */}
+            {activeTab === 'personal' && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 md:p-8">
+                  <h3 className="text-xl font-bold text-stone-900 border-b border-stone-100 pb-4 mb-6">Thông tin cơ bản</h3>
+                  
+                  <form onSubmit={handleSaveProfile} className="space-y-6">
+                    {/* Avatar selection */}
+                    <div>
+                      <label className="block text-sm font-semibold text-stone-700 mb-3">Ảnh đại diện</label>
+                      <div className="flex flex-wrap gap-4 items-center">
+                        <div className="relative">
+                          <img src={editUser.avatar} alt="Current" className="w-16 h-16 rounded-full object-cover border-2 border-brand-normal" />
+                          <div className="absolute inset-0 bg-black/20 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
+                            <Camera className="w-5 h-5 text-white" />
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          {AVAILABLE_AVATARS.map((av, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => setEditUser({ ...editUser, avatar: av })}
+                              className={`w-10 h-10 rounded-full overflow-hidden border-2 transition-transform hover:scale-110 ${editUser.avatar === av ? 'border-brand-normal ring-2 ring-brand-light' : 'border-transparent'}`}
+                            >
+                              <img src={av} alt="Avatar option" className="w-full h-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-semibold text-stone-700 mb-1.5">Họ và tên</label>
+                        <input
+                          type="text"
+                          value={editUser.name}
+                          onChange={(e) => setEditUser({...editUser, name: e.target.value})}
+                          className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:border-brand-normal focus:ring-1 focus:ring-brand-normal focus:outline-none transition-colors"
+                          required
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-semibold text-stone-700 mb-1.5">
+                          Email <span className="text-xs font-normal text-stone-500">(Không thể tự đổi)</span>
+                        </label>
+                        <input
+                          type="email"
+                          value={editUser.email}
+                          disabled
+                          className="w-full px-4 py-2.5 rounded-xl border border-stone-200 bg-stone-50 text-stone-500 cursor-not-allowed"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-stone-700 mb-1.5">Giới thiệu ngắn (Bio)</label>
+                      <textarea
+                        value={editUser.bio || ''}
+                        onChange={(e) => setEditUser({...editUser, bio: e.target.value})}
+                        rows={3}
+                        className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:border-brand-normal focus:ring-1 focus:ring-brand-normal focus:outline-none transition-colors resize-none"
+                        placeholder="Một vài điều về bản thân bạn..."
+                      ></textarea>
+                    </div>
+
+                    <div className="pt-4 border-t border-stone-100 flex justify-end">
+                      <button 
+                        type="submit" 
+                        disabled={saving}
+                        className="bg-brand-normal hover:bg-brand-hover text-white font-bold py-2.5 px-6 rounded-xl transition-colors shadow-sm disabled:opacity-70 flex items-center gap-2"
+                      >
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                        {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+
+            {/* SECURITY TAB */}
+            {activeTab === 'security' && (
+              <div className="space-y-6 animate-fade-in">
+                
+                {/* Verification Status */}
+                <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 md:p-8">
+                  <h3 className="text-xl font-bold text-stone-900 mb-2">Trạng thái xác thực</h3>
+                  <p className="text-sm text-stone-500 mb-6">Xác minh tài khoản của bạn để mở khóa các tính năng như đăng ký Giảng viên.</p>
+
+                  <div className="space-y-4">
+                    {/* Email Verification */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-stone-100 bg-stone-50 gap-4">
+                      <div className="flex items-start gap-4">
+                        <div className={`p-2 rounded-full ${currentUser.isEmailVerified ? 'bg-emerald-100 text-emerald-600' : 'bg-stone-200 text-stone-400'}`}>
+                          <Mail className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-stone-900">Địa chỉ Email</p>
+                          <p className="text-sm text-stone-500 mt-0.5">{currentUser.email}</p>
+                          {currentUser.isEmailVerified ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 mt-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Đã xác minh
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-rose-500 mt-1.5">
+                              <AlertCircle className="w-3.5 h-3.5" /> Chưa xác minh
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {!currentUser.isEmailVerified && (
+                        <button 
+                          onClick={() => handleOpenOtp('email', 'verify_email')}
+                          className="px-4 py-2 bg-stone-900 hover:bg-black text-white text-sm font-bold rounded-xl transition-colors whitespace-nowrap self-start sm:self-center"
+                        >
+                          Xác minh ngay
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Phone Verification */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-stone-100 bg-stone-50 gap-4">
+                      <div className="flex items-start gap-4">
+                        <div className={`p-2 rounded-full ${currentUser.isPhoneVerified ? 'bg-emerald-100 text-emerald-600' : 'bg-stone-200 text-stone-400'}`}>
+                          <Smartphone className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-stone-900">Số điện thoại</p>
+                          <p className="text-sm text-stone-500 mt-0.5">{currentUser.phone || 'Chưa cung cấp'}</p>
+                          {currentUser.isPhoneVerified ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 mt-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Đã xác minh
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-500 mt-1.5">
+                              <AlertCircle className="w-3.5 h-3.5" /> Yêu cầu xác minh bằng OTP
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {!currentUser.isPhoneVerified && (
+                        <div className="flex items-center gap-2 self-start sm:self-center w-full sm:w-auto">
+                          {!currentUser.phone ? (
+                            <input
+                              type="text"
+                              placeholder="Nhập SĐT..."
+                              value={editUser.phone || ''}
+                              onChange={e => setEditUser({...editUser, phone: e.target.value})}
+                              className="px-3 py-2 text-sm border border-stone-200 rounded-xl focus:border-brand-normal focus:outline-none w-full sm:w-32"
+                            />
+                          ) : null}
+                          <button 
+                            onClick={async () => {
+                              if (!currentUser.phone && !editUser.phone) {
+                                showNotification('Vui lòng nhập số điện thoại trước!', true);
+                                return;
+                              }
+                              if (!currentUser.phone && editUser.phone) {
+                                // Save phone temporarily to current user state before OTP
+                                setCurrentUser({...currentUser, phone: editUser.phone});
+                              }
+                              // Wait a tick for state update if we just set it
+                              setTimeout(() => handleOpenOtp('phone', 'verify_phone'), 0);
+                            }}
+                            className="px-4 py-2 bg-stone-900 hover:bg-black text-white text-sm font-bold rounded-xl transition-colors whitespace-nowrap"
+                          >
+                            Gửi mã OTP
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Change Password */}
+                <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 md:p-8">
+                  <div className="flex items-center gap-3 mb-6 pb-4 border-b border-stone-100">
+                    <div className="p-2 bg-amber-100 text-amber-600 rounded-xl">
+                      <KeyRound className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-stone-900">Đổi mật khẩu</h3>
+                      <p className="text-sm text-stone-500">Cập nhật mật khẩu để bảo vệ tài khoản.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 max-w-md">
+                    <div>
+                      <label className="block text-sm font-semibold text-stone-700 mb-1.5">Mật khẩu hiện tại</label>
+                      <input
+                        type="password"
+                        value={oldPassword}
+                        onChange={e => setOldPassword(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:border-brand-normal focus:outline-none"
+                        placeholder="••••••••"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-stone-700 mb-1.5">Mật khẩu mới</label>
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:border-brand-normal focus:outline-none"
+                        placeholder="Tối thiểu 8 ký tự"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-stone-700 mb-1.5">Nhập lại mật khẩu mới</label>
+                      <input
+                        type="password"
+                        value={confirmPassword}
+                        onChange={e => setConfirmPassword(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:border-brand-normal focus:outline-none"
+                        placeholder="••••••••"
+                      />
+                    </div>
+                    <div className="pt-2">
+                      <button 
+                        onClick={handleChangePasswordClick}
+                        className="bg-stone-900 hover:bg-black text-white font-bold py-2.5 px-6 rounded-xl transition-colors shadow-sm"
+                      >
+                        Cập nhật mật khẩu
+                      </button>
+                      <p className="text-xs text-stone-400 mt-3 flex items-center gap-1">
+                        <ShieldAlert className="w-3.5 h-3.5" /> Yêu cầu xác thực OTP trước khi đổi.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+
+            {/* ROLES TAB */}
+            {activeTab === 'roles' && (
+              <div className="space-y-6 animate-fade-in">
+                
+                <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 md:p-8">
+                  <h3 className="text-xl font-bold text-stone-900 mb-2">Vai trò hệ thống</h3>
+                  <p className="text-sm text-stone-500 mb-6">Trạng thái quyền hạn và các yêu cầu nâng cấp tài khoản của bạn.</p>
+
+                  <div className="p-4 rounded-xl border border-brand-light bg-[#fffbf5] flex items-start gap-4 mb-8">
+                    <BadgeCheck className="w-6 h-6 text-brand-normal flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-bold text-stone-900">Quyền hiện tại: <span className="text-brand-normal">{currentUser.role === 'admin' ? 'Super Admin' : currentUser.role === 'instructor' ? 'Giảng viên' : 'Học viên'}</span></h4>
+                      <p className="text-sm text-stone-600 mt-1">
+                        {currentUser.role === 'student' && 'Bạn có thể tham gia các khóa học, thảo luận và mua sắm trên MindHub.'}
+                        {currentUser.role === 'instructor' && 'Bạn có toàn quyền đăng tải khóa học, quản lý doanh thu và tương tác với học viên.'}
+                        {currentUser.role === 'admin' && 'Bạn có quyền quản trị tối cao đối với toàn bộ hệ thống MindHub.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Request Instructor Block */}
+                  {currentUser.role === 'student' && (
+                    <div className="border border-stone-200 rounded-2xl overflow-hidden">
+                      <div className="bg-stone-50 p-4 border-b border-stone-200 flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <Flame className="w-5 h-5 text-[#8b5e3c]" />
+                          <h4 className="font-bold text-stone-900">Trở thành Giảng viên MindHub</h4>
+                        </div>
+                        {currentUser.roleRequestStatus === 'pending_instructor' && (
+                          <span className="text-xs font-bold bg-amber-100 text-amber-700 px-3 py-1 rounded-full">Đang chờ duyệt</span>
+                        )}
+                      </div>
+                      
+                      <div className="p-6">
+                        {currentUser.roleRequestStatus === 'pending_instructor' ? (
+                          <div className="text-center py-6">
+                            <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                              <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                            </div>
+                            <h5 className="font-bold text-stone-900 mb-2">Yêu cầu của bạn đang được xét duyệt</h5>
+                            <p className="text-sm text-stone-500 max-w-sm mx-auto">Đội ngũ Admin sẽ kiểm tra thông tin và phản hồi lại cho bạn trong vòng 1-3 ngày làm việc.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            <p className="text-sm text-stone-600">Chia sẻ kiến thức của bạn với hàng ngàn học viên và tạo ra nguồn thu nhập thụ động.</p>
+                            <div>
+                              <label className="block text-sm font-semibold text-stone-700 mb-1.5">Giới thiệu chuyên môn của bạn</label>
+                              <textarea
+                                rows={3}
+                                value={instructorBio}
+                                onChange={e => setInstructorBio(e.target.value)}
+                                className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:border-brand-normal focus:ring-1 focus:outline-none"
+                                placeholder="Hãy cho chúng tôi biết về kinh nghiệm và chuyên môn giảng dạy của bạn..."
+                              ></textarea>
+                            </div>
+                            
+                            <div className="flex items-center gap-2 mt-2 p-3 bg-blue-50 rounded-xl text-xs text-blue-800">
+                              <ShieldAlert className="w-4 h-4 flex-shrink-0" />
+                              <span>Yêu cầu xác thực Email và OTP Số điện thoại để hoàn tất.</span>
+                            </div>
+
+                            <button 
+                              onClick={() => handleRequestRole('instructor')}
+                              disabled={roleRequesting}
+                              className="mt-4 bg-[#8b5e3c] hover:bg-[#6c482d] text-white font-bold py-2.5 px-6 rounded-xl transition-colors shadow-sm disabled:opacity-70 flex items-center gap-2"
+                            >
+                              Gửi yêu cầu kiểm duyệt
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Request Admin Block (Demo only for student/instructor) */}
+                  {currentUser.role !== 'admin' && (
+                    <div className="mt-6 text-center">
+                      <button 
+                        onClick={() => handleRequestRole('admin')}
+                        className="text-xs text-stone-400 hover:text-stone-700 underline font-medium"
+                      >
+                        Yêu cầu cấp quyền Admin hệ thống (Dành cho nội bộ)
+                      </button>
+                    </div>
+                  )}
+                  
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      </div>
+
+      {/* Verification OTP Modal */}
+      <OTPModal
+        isOpen={showOtp}
+        onClose={() => setShowOtp(false)}
+        type={otpType}
+        contactInfo={otpType === 'phone' ? (currentUser.phone || editUser.phone || '') : currentUser.email}
+        onVerify={handleVerifyOtp}
+        onVerifySuccess={handleOtpSuccess}
+        onResend={handleResendOtp}
+      />
+    </div>
+  );
+}
