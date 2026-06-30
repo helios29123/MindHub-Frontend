@@ -109,6 +109,11 @@ export const INITIAL_COURSES: Course[] = [
             type: 'video',
             duration: '14:25',
             videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+            qualities: [
+              { label: '360p', url: 'https://www.w3schools.com/html/mov_bbb.mp4' },
+              { label: '720p', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4' },
+              { label: '1080p', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4' }
+            ],
             isPreview: true,
             resources: [
               { id: 'res-1', title: 'Giấy thông hành khóa học PDF', url: '#', size: '1.8 MB' },
@@ -273,6 +278,11 @@ export const INITIAL_COURSES: Course[] = [
             type: 'video',
             duration: '10:50',
             videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+            qualities: [
+              { label: '360p', url: 'https://www.w3schools.com/html/mov_bbb.mp4' },
+              { label: '720p', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4' },
+              { label: '1080p', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4' }
+            ],
             isPreview: true,
             content: 'Giới thiệu các loại AI hỗ trợ thiết kế giúp designer bứt phá năng suất.'
           },
@@ -339,6 +349,11 @@ export const INITIAL_COURSES: Course[] = [
             type: 'video',
             duration: '12:00',
             videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+            qualities: [
+              { label: '360p', url: 'https://www.w3schools.com/html/mov_bbb.mp4' },
+              { label: '720p', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4' },
+              { label: '1080p', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4' }
+            ],
             isPreview: true,
             content: 'Giải thích tại sao Agent thông minh hơn nhờ khả năng sử dụng công cụ bên ngoài (Tools).'
           }

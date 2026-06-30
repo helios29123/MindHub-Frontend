@@ -75,7 +75,7 @@ function ModeratorTab({
   };
 
   return (
-    <div className="bg-white min-h-[75vh] rounded-2xl border border-brand-light-active overflow-hidden flex flex-col md:flex-row text-main-darker animate-fade-in shadow">
+    <div className="bg-white min-h-[75vh] rounded-2xl border border-brand-light-active overflow-hidden flex flex-col md:flex-row text-main-darker animate-fade-in shadow relative">
       
       {/* Tab Selectors Left Sidebar */}
       <div className="w-full md:w-56 bg-white border-b md:border-b-0 md:border-r border-brand-light-active p-4 space-y-2 shrink-0">
@@ -459,9 +459,9 @@ function ModeratorTab({
           </div>
         )}
 
-        {/* MODERATOR COURSE INSPECTION MODAL */}
+        {/* MODERATOR COURSE INSPECTION MODAL (CONVERTED TO SUB-VIEW) */}
         {inspectingCourse && (
-          <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-[9999] flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+          <div className="absolute inset-0 bg-stone-50 z-[50] flex flex-col p-4 animate-fade-in overflow-y-auto tactile-scrollbar">
             <div className="bg-white rounded-2xl max-w-2xl w-full p-5 sm:p-6 space-y-4 text-left border shadow-2xl max-h-[92vh] overflow-y-auto tactile-scrollbar">
               <div className="flex justify-between items-start border-b pb-3">
                 <div>
@@ -595,9 +595,9 @@ function ModeratorTab({
           </div>
         )}
 
-        {/* REJECTION REASON DETAIL MODAL SIMULATION */}
+        {/* REJECTION REASON DETAIL MODAL SIMULATION (CONVERTED TO SUB-VIEW) */}
         {rejectingCourseId && (
-          <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-[9999] flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+          <div className="absolute inset-0 bg-stone-50 z-[50] flex items-center justify-center p-4 animate-fade-in">
             <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 text-left border shadow-2xl">
               <h3 className="font-display font-semibold text-main-normal text-sm flex items-center gap-1 text-red-600">
                 <AlertTriangle className="w-4 h-4 text-red-600 animate-pulse" /> Nhập Lý Do Từ Chối Phê Duyệt
@@ -1620,7 +1620,7 @@ export default function AdminDashboard({
   };
 
   return (
-    <div className="bg-white min-h-[85vh] rounded-2xl border border-brand-light-active overflow-hidden flex flex-col xl:flex-row text-main-darker animate-fade-in shadow">
+    <div className="bg-white min-h-[85vh] rounded-2xl border border-brand-light-active overflow-hidden flex flex-col xl:flex-row text-main-darker animate-fade-in shadow relative">
       
       {/* Sidebar navigation */}
       <div className="w-full xl:w-64 bg-white border-b xl:border-b-0 xl:border-r border-brand-light-active p-4 space-y-1 shrink-0 flex flex-col justify-between">
@@ -4793,9 +4793,9 @@ export default function AdminDashboard({
 
       </div>
 
-      {/* MODAL 1: ADD / EDIT USER PROFILE */}
+      {/* MODAL 1: ADD / EDIT USER PROFILE (CONVERTED TO SUB-VIEW) */}
       {showUserModal && (
-        <div className="fixed inset-0 bg-stone-900/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div className="absolute inset-0 bg-stone-50 z-[50] flex flex-col items-center justify-start py-10 px-4 overflow-y-auto tactile-scrollbar animate-fade-in">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 text-left space-y-4 shadow-xl border animate-fade-in">
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="font-black text-sm text-stone-900 flex items-center gap-1.5">
@@ -4909,9 +4909,9 @@ export default function AdminDashboard({
         </div>
       )}
 
-      {/* MODAL 2: ADD / EDIT COURSE DETAIL */}
+      {/* MODAL 2: ADD / EDIT COURSE DETAIL (CONVERTED TO SUB-VIEW) */}
       {showCourseModal && (
-        <div className="fixed inset-0 bg-stone-900/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div className="absolute inset-0 bg-stone-50 z-[50] flex flex-col items-center justify-start py-10 px-4 overflow-y-auto tactile-scrollbar animate-fade-in">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 text-left space-y-4 shadow-xl border animate-fade-in max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="font-extrabold text-sm text-stone-900 flex items-center gap-1.5">
@@ -5157,3 +5157,5 @@ export default function AdminDashboard({
 function priceNumAndClean(p: any): number {
   return Number(p) || 0;
 }
+
+

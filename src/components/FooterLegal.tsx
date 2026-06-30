@@ -29,10 +29,10 @@ export default function FooterLegal({ initialTab = 'terms', onClose }: FooterLeg
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-[10005] flex items-center justify-center p-3 sm:p-4">
+    <div className="min-h-screen bg-[#fcf8f2] flex items-center justify-center p-4">
       <div 
-        id="legal-modal-card" 
-        className="bg-white w-full max-w-4xl h-[88vh] md:h-[82vh] rounded-2xl shadow-2xl border border-brand-light-active overflow-hidden flex flex-col animate-fade-in text-main-darker"
+        id="legal-container" 
+        className="bg-white w-full max-w-5xl rounded-2xl shadow-xl border border-brand-light-active overflow-hidden flex flex-col animate-fade-in text-main-darker min-h-[600px]"
       >
         {/* Header toolbar */}
         <div className="bg-[#432c28] p-4.5 text-brand-light flex justify-between items-center shrink-0">
@@ -45,7 +45,7 @@ export default function FooterLegal({ initialTab = 'terms', onClose }: FooterLeg
             onClick={onClose} 
             className="text-stone-300 hover:text-white bg-white/10 hover:bg-white/20 text-xs px-2.5 py-1.5 rounded-lg transition-colors"
           >
-            Đóng [X]
+            Quay lại
           </button>
         </div>
 

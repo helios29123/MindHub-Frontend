@@ -472,10 +472,10 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
   };
 
   return (
-    <div id="auth-modal-overlay" className="fixed inset-0 bg-black/75 backdrop-blur-md z-[9999] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div className="min-h-[85vh] bg-stone-50 flex items-center justify-center p-4">
       <div 
-        id="auth-modal" 
-        className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-brand-light-active overflow-hidden flex flex-col my-auto max-h-[92vh] animate-fade-in text-main-darker"
+        id="auth-container" 
+        className="bg-white w-full max-w-4xl rounded-2xl shadow-xl border border-brand-light-active overflow-hidden flex flex-col sm:flex-row text-main-darker animate-fade-in"
       >
         {/* Banner with Brand Theme */}
         <div className="bg-deep-indigo p-5 text-brand-light flex items-center justify-between border-b-4 border-emerald-500 shrink-0">
@@ -1157,3 +1157,4 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
     </div>
   );
 }
+

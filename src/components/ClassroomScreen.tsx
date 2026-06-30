@@ -65,10 +65,34 @@ export default function ClassroomScreen({ course, currentUser, onClose, enrolled
     return isFirst ? 45 : 0;
   }); // in seconds
   const [videoSpeed, setVideoSpeed] = useState<number>(1.0);
-  const [videoResolution, setVideoResolution] = useState<string>('1080p');
-  const totalVideoDuration = 360; // 6 mins pseudo duration
+  const [videoResolution, setVideoResolution] = useState<string>('Auto');
+  const [totalVideoDuration, setTotalVideoDuration] = useState<number>(0);
+  const [isBuffering, setIsBuffering] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  const currentVideoUrl = useMemo(() => {
+    if (!activeLesson || activeLesson.type !== 'video' || !activeLesson.videoUrl) return '';
+    if (!activeLesson.qualities || activeLesson.qualities.length === 0) return activeLesson.videoUrl;
+    if (videoResolution === 'Auto') return activeLesson.videoUrl;
+    const selected = activeLesson.qualities.find(q => q.label === videoResolution);
+    return selected ? selected.url : activeLesson.videoUrl;
+  }, [activeLesson, videoResolution]);
+
+  const handleResolutionChange = (newRes: string) => {
+    if (!videoRef.current || newRes === videoResolution) return;
+    const currentTime = videoRef.current.currentTime;
+    const wasPlaying = !videoRef.current.paused;
+    setVideoResolution(newRes);
+    
+    setTimeout(() => {
+      if (videoRef.current) {
+        videoRef.current.currentTime = currentTime;
+        if (wasPlaying) {
+          videoRef.current.play().catch(e => console.log('Autoplay prevented', e));
+        }
+      }
+    }, 50);
+  };
   // Fullscreen management while keeping custom overlay controls
   const [isFullscreen, setIsFullscreen] = useState(false);
   const videoContainerRef = useRef<HTMLDivElement>(null);
@@ -242,26 +266,12 @@ export default function ClassroomScreen({ course, currentUser, onClose, enrolled
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Auto progression mockup tracker effect
+  // Video playback effects
   useEffect(() => {
-    let interval: any;
-    if (isPlaying) {
-      interval = setInterval(() => {
-        setVideoTime(prev => {
-          if (prev >= totalVideoDuration) {
-            setIsPlaying(false);
-            // Auto complete lesson
-            if (!progress.completedLessonIds.includes(progress.currentLessonId)) {
-              handleToggleComplete(progress.currentLessonId);
-            }
-            return totalVideoDuration;
-          }
-          return prev + 1;
-        });
-      }, 1000 / videoSpeed);
+    if (videoRef.current) {
+      videoRef.current.playbackRate = videoSpeed;
     }
-    return () => clearInterval(interval);
-  }, [isPlaying, progress.currentLessonId, videoSpeed, progress.completedLessonIds]);
+  }, [videoSpeed, currentVideoUrl]);
 
   // Fullscreen event listener and toggle function
   useEffect(() => {
@@ -928,35 +938,56 @@ Nó tự biến mọi component của bạn thành 'pure memoized render' tươn
                   </div>
                 )}
 
-                <img 
-                  src={course.image} 
-                  alt="Video thumbnail" 
-                  className="absolute inset-0 w-full h-full object-cover opacity-10 filter blur-xs select-none" 
+                <video
+                  ref={videoRef}
+                  src={currentVideoUrl}
+                  className="absolute inset-0 w-full h-full object-contain bg-black z-0"
+                  onTimeUpdate={(e) => {
+                    setVideoTime(e.currentTarget.currentTime);
+                  }}
+                  onLoadedMetadata={(e) => {
+                    setTotalVideoDuration(e.currentTarget.duration);
+                    if (videoTime > 0 && e.currentTarget.currentTime === 0) {
+                      e.currentTarget.currentTime = videoTime;
+                    }
+                  }}
+                  onWaiting={() => setIsBuffering(true)}
+                  onPlaying={() => setIsBuffering(false)}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  onEnded={() => {
+                    setIsPlaying(false);
+                    if (!progress.completedLessonIds.includes(progress.currentLessonId)) {
+                      handleToggleComplete(progress.currentLessonId);
+                    }
+                  }}
+                  onClick={() => {
+                    if (videoRef.current) {
+                      if (isPlaying) videoRef.current.pause();
+                      else videoRef.current.play();
+                    }
+                  }}
                 />
 
-                {!isPlaying ? (
+                {!isPlaying && !isBuffering && (
                   <button 
-                    onClick={() => setIsPlaying(true)}
+                    onClick={() => {
+                      if (videoRef.current) {
+                        videoRef.current.play().catch(e => console.log('Autoplay prevented', e));
+                      }
+                    }}
                     className="w-16 h-16 bg-brand-normal text-brand-light rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform cursor-pointer z-10"
                   >
                     <Play className="w-8 h-8 fill-brand-light ml-1" />
                   </button>
-                ) : (
-                  <div className="text-center p-6 space-y-4 z-10">
-                    <div className="w-12 h-12 rounded-full border-4 border-t-transparent border-brand-normal animate-spin mx-auto"></div>
-                    <div>
-                      <p className="text-xs text-brand-light-active font-mono uppercase tracking-widest animate-pulse font-bold">Streaming HLS Video {videoResolution}</p>
-                      <p className="text-[10px] text-gray-400 mt-1">Đang mô phỏng xem thực tế: {formatTime(videoTime)} / {formatTime(totalVideoDuration)} ({videoSpeed}x)</p>
-                    </div>
-                  </div>
                 )}
 
-                {/* Simulated Custom Subtitles or overlays dynamic */}
-                {isPlaying && videoTime > 10 && videoTime < 30 && (
-                  <div className="absolute bottom-20 left-4 right-4 text-center z-20">
-                    <span className="bg-black/80 border border-white/10 text-xs text-white p-2 py-1 rounded-lg">
-                      "Trong kiến trúc Next.js mới, Server Actions được xác thực thông qua mã băm chống chèn phá..."
-                    </span>
+                {isBuffering && (
+                  <div className="text-center p-6 space-y-4 z-10 absolute bg-black/40 rounded-xl backdrop-blur-sm pointer-events-none">
+                    <div className="w-12 h-12 rounded-full border-4 border-t-transparent border-brand-normal animate-spin mx-auto"></div>
+                    <div>
+                      <p className="text-xs text-brand-light-active font-mono uppercase tracking-widest animate-pulse font-bold">Đang tải...</p>
+                    </div>
                   </div>
                 )}
 
@@ -977,8 +1008,8 @@ Nó tự biến mọi component của bạn thành 'pure memoized render' tươn
                       onChange={(e) => {
                         const sec = parseInt(e.target.value);
                         setVideoTime(sec);
-                        if (sec < totalVideoDuration) {
-                          setIsPlaying(false);
+                        if (videoRef.current) {
+                          videoRef.current.currentTime = sec;
                         }
                       }}
                       className="flex-1 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-brand-normal"
@@ -989,7 +1020,12 @@ Nó tự biến mọi component của bạn thành 'pure memoized render' tươn
                   <div className="flex flex-row items-center justify-between gap-3 text-xs w-full select-none">
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button 
-                        onClick={() => setIsPlaying(!isPlaying)} 
+                        onClick={() => {
+                          if (videoRef.current) {
+                            if (isPlaying) videoRef.current.pause();
+                            else videoRef.current.play().catch(e => console.log('Autoplay prevented', e));
+                          }
+                        }}
                         className="hover:text-amber-400 text-white font-bold cursor-pointer transition-all flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10"
                       >
                         {isPlaying ? '⏸ Tạm dừng' : '▶ Phát'}
@@ -1021,15 +1057,21 @@ Nó tự biến mọi component của bạn thành 'pure memoized render' tươn
                         <span className="text-[9.5px] text-gray-300 font-bold uppercase tracking-wider whitespace-nowrap">Độ phân giải:</span>
                         <select 
                           value={videoResolution} 
-                          onChange={(e) => setVideoResolution(e.target.value)}
-                          className="bg-[#24262d] text-amber-300 border-none px-2 py-0.5 focus:ring-0 text-[11px] font-extrabold cursor-pointer outline-none [color-scheme:dark] rounded-md"
+                          onChange={(e) => handleResolutionChange(e.target.value)}
+                          disabled={!activeLesson?.qualities || activeLesson.qualities.length === 0}
+                          title={!activeLesson?.qualities || activeLesson.qualities.length === 0 ? "Chỉ có một độ phân giải" : "Chọn độ phân giải"}
+                          className="bg-[#24262d] text-amber-300 border-none px-2 py-0.5 focus:ring-0 text-[11px] font-extrabold cursor-pointer outline-none [color-scheme:dark] rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <option value="144p" className="bg-[#181a20] text-stone-100 font-medium">144p</option>
-                          <option value="360p" className="bg-[#181a20] text-stone-100 font-medium">360p</option>
-                          <option value="480p" className="bg-[#181a20] text-stone-100 font-medium">480p</option>
-                          <option value="720p HD" className="bg-[#181a20] text-stone-100 font-medium">720p HD</option>
-                          <option value="1080p FHD" className="bg-[#181a20] text-stone-100 font-medium">1080p FHD</option>
-                          <option value="2K (1440p)" className="bg-[#181a20] text-stone-100 font-medium font-mono">2K</option>
+                          {(!activeLesson?.qualities || activeLesson.qualities.length === 0) ? (
+                            <option value="Auto" className="bg-[#181a20] text-stone-100 font-medium">Mặc định</option>
+                          ) : (
+                            <>
+                              <option value="Auto" className="bg-[#181a20] text-stone-100 font-medium">Auto</option>
+                              {activeLesson.qualities.map((q) => (
+                                <option key={q.label} value={q.label} className="bg-[#181a20] text-stone-100 font-medium">{q.label}</option>
+                              ))}
+                            </>
+                          )}
                         </select>
                       </div>
 

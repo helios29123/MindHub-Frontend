@@ -11,6 +11,8 @@ export interface User {
   bio?: string;
   phone?: string;
   isEmailVerified?: boolean;
+  isPhoneVerified?: boolean;
+  roleRequestStatus?: 'none' | 'pending_instructor' | 'pending_admin' | 'approved' | 'rejected';
   verificationOtp?: string;
   interestedTopics: string[];
   notificationSettings: {
@@ -25,6 +27,10 @@ export interface User {
     accountHolder: string;
     balance: number;
   };
+  isTwoFactorEnabled?: boolean;
+  activeSessions?: { id: string; device: string; os: string; browser: string; ip: string; lastActive: string; isCurrent: boolean }[];
+  recoveryCodes?: string[];
+  lastPasswordChange?: string;
 }
 
 export interface Resource {
@@ -68,6 +74,7 @@ export interface Lesson {
   resources?: Resource[];
   content?: string; // markdown or text content
   docContent?: string; // Word document raw text content
+  qualities?: { label: string; url: string; }[];
 }
 
 export interface Chapter {

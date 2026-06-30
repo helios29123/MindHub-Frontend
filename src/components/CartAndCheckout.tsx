@@ -114,8 +114,8 @@ export default function CartAndCheckout({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-[9999] flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-brand-light-active overflow-hidden flex flex-col max-h-[92vh] text-main-darker animate-fade-in relative">
+    <div className="min-h-screen bg-[#fcf8f2] flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-4xl rounded-2xl shadow-xl border border-brand-light-active overflow-hidden flex flex-col text-main-darker animate-fade-in relative min-h-[600px]">
         
         {/* Header Ribbon */}
         <div className="bg-[#432c28] p-4 text-brand-light flex justify-between items-center shrink-0">
@@ -134,7 +134,7 @@ export default function CartAndCheckout({
             onClick={onClose} 
             className="text-xs bg-white/10 hover:bg-white/20 py-1.5 px-3.5 rounded-lg text-brand-light hover:text-white transition-all font-semibold"
           >
-            Đóng [X]
+            Quay lại
           </button>
         </div>
 
