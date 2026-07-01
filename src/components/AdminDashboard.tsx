@@ -895,6 +895,7 @@ export default function AdminDashboard({
   
   // User creation/editing sub-form
   const [showUserModal, setShowUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [lockingInstructor, setLockingInstructor] = useState<User | null>(null);
   const [lockingCourseAction, setLockingCourseAction] = useState<'hide' | 'pending' | 'archive' | 'none'>('hide');
   const [userForm, setUserForm] = useState({
@@ -1435,18 +1436,18 @@ export default function AdminDashboard({
     const isBanned = bannedUserIds.includes(userId);
     try {
       if (!isBanned) {
-        await ApiService.toggleUserLockAdmin(userId, true);
+        await ApiService.toggleUserLockAdmin(userId, 'lock');
         if (courseAction && courseAction !== 'none') {
           const coursesData = await ApiService.getInstructorCoursesByAdmin(userId);
-          if (coursesData.success) {
-            await Promise.all(coursesData.courses.map((c: any) => 
+          if (coursesData && coursesData.length > 0) {
+            await Promise.all(coursesData.map((c: any) => 
                ApiService.updateCourseStatusAdmin(c.id, courseAction as any)
             ));
             alert('Đã cập nhật trạng thái các khóa học của giảng viên!');
           }
         }
       } else {
-        await ApiService.toggleUserLockAdmin(userId, false);
+        await ApiService.toggleUserLockAdmin(userId, 'unlock');
       }
       
       setBannedUserIds(prev => {
