@@ -20,17 +20,77 @@ export interface ApiConfig {
   mode: 'mock' | 'api';
   baseUrl: string;
   authToken?: string;
+  refreshToken?: string;
   isLogEnabled: boolean;
 }
 
-// Read configuration from local storage or environment variables
-const initialMode = 'mock';
-const initialBaseUrl = localStorage.getItem('mindhub_api_base_url') || (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000/api';
+export interface LessonVideoUrlResponse {
+  stream_url: string;
+  expires_in?: number;
+}
+
+export interface LessonWatermarkInfo {
+  text: string;
+  mode?: 'static' | 'moving' | string;
+  opacity?: number;
+  alpha?: number;
+  refresh_seconds?: number;
+}
+
+// Read configuration from local storage or environment variables.
+// Production note:
+// - On https://mindhub.io.vn, the frontend must call Laravel through /BE/public/api.
+// - Avoid keeping stale localhost/mock values from localStorage after deploying.
+const isBrowser = typeof window !== 'undefined';
+const currentHostname = isBrowser ? window.location.hostname : '';
+const currentOrigin = isBrowser ? window.location.origin : '';
+const isMindHubProductionHost = currentHostname === 'mindhub.io.vn' || currentHostname.endsWith('.mindhub.io.vn');
+
+const envMode = ((import.meta as any).env?.VITE_API_MODE || '').toLowerCase();
+const envBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL || '';
+
+const storedMode = localStorage.getItem('mindhub_api_mode');
+const storedBaseUrl = localStorage.getItem('mindhub_api_base_url');
+
+function normalizeApiMode(value?: string | null): 'mock' | 'api' {
+  return value === 'api' ? 'api' : 'mock';
+}
+
+function defaultApiBaseUrl(): string {
+  if (isMindHubProductionHost && currentOrigin) {
+    return `${currentOrigin}/BE/public/api`;
+  }
+
+  return 'http://localhost:8000/api';
+}
+
+function normalizeBaseUrl(url: string): string {
+  return (url || defaultApiBaseUrl()).replace(/\/+$/, '');
+}
+
+const shouldIgnoreStoredLocalhostBaseUrl =
+  isMindHubProductionHost &&
+  !!storedBaseUrl &&
+  /(localhost|127\.0\.0\.1)/i.test(storedBaseUrl);
+
+const initialMode = normalizeApiMode(
+  envMode || (isMindHubProductionHost ? 'api' : storedMode) || 'mock'
+);
+
+const initialBaseUrl = normalizeBaseUrl(
+  (!shouldIgnoreStoredLocalhostBaseUrl && storedBaseUrl) ||
+    envBaseUrl ||
+    defaultApiBaseUrl()
+);
 
 const config: ApiConfig = {
-  mode: 'mock',
+  mode: initialMode,
   baseUrl: initialBaseUrl,
-  authToken: localStorage.getItem('mindhub_api_token') || undefined,
+  authToken:
+    localStorage.getItem('mindhub_api_token') ||
+    localStorage.getItem('mindhub_access_token') ||
+    undefined,
+  refreshToken: localStorage.getItem('mindhub_refresh_token') || undefined,
   isLogEnabled: true,
 };
 
@@ -62,20 +122,89 @@ const devLog = (category: string, action: string, payload?: any) => {
 };
 
 /**
- * Universal Unified HTTP Client Utility with Automatic Authorization header injection
+ * Laravel APIs in this project commonly return either:
+ * - raw payload: { id, title, ... } / [...]
+ * - envelope payload: { success, message, data: ... }
+ *
+ * This helper returns `data` when the response is enveloped, otherwise returns
+ * the original JSON. That keeps old frontend calls working while supporting
+ * the current MindHub backend response format.
+ */
+function unwrapApiResponse<T>(payload: any): T {
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    !Array.isArray(payload) &&
+    Object.prototype.hasOwnProperty.call(payload, 'data')
+  ) {
+    return payload.data as T;
+  }
+
+  return payload as T;
+}
+
+function buildApiUrl(endpoint: string): string {
+  const baseUrl = normalizeBaseUrl(config.baseUrl);
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  return `${baseUrl}${cleanEndpoint}`;
+}
+
+function extractAuthToken(payload: any): string | undefined {
+  return (
+    payload?.token ||
+    payload?.access_token ||
+    payload?.accessToken ||
+    payload?.auth_token ||
+    payload?.data?.token ||
+    payload?.data?.access_token ||
+    payload?.data?.accessToken
+  );
+}
+
+function extractRefreshToken(payload: any): string | undefined {
+  return (
+    payload?.refresh_token ||
+    payload?.refreshToken ||
+    payload?.data?.refresh_token ||
+    payload?.data?.refreshToken
+  );
+}
+
+function normalizeAuthResult(payload: any): { user: User; token: string; refresh_token?: string; raw?: any } {
+  const data = unwrapApiResponse<any>(payload);
+  const token = extractAuthToken(data) || extractAuthToken(payload) || '';
+  const refreshToken = extractRefreshToken(data) || extractRefreshToken(payload);
+  const user = data?.user || payload?.user || payload?.data?.user;
+
+  return {
+    ...(data || {}),
+    user,
+    token,
+    refresh_token: refreshToken,
+    raw: payload,
+  } as any;
+}
+
+/**
+ * Universal Unified HTTP Client Utility with Automatic Authorization header injection.
+ * The <video> tag cannot send Authorization headers, so protected videos must use
+ * `/learn/lessons/{id}/video-url` first and then set the returned signed
+ * `stream_url` directly as <video src>.
  */
 async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   if (config.mode === 'mock') {
     throw new Error('apiFetch called while in mock mode.');
   }
 
-  const url = `${config.baseUrl}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;
+  const url = buildApiUrl(endpoint);
   const headers = new Headers(options.headers || {});
-  
-  if (!(options.body instanceof FormData)) {
+
+  headers.set('Accept', 'application/json');
+
+  if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
-  
+
   if (config.authToken) {
     headers.set('Authorization', `Bearer ${config.authToken}`);
   }
@@ -85,27 +214,43 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
     headers,
   });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    let errJson;
+  const responseText = await response.text();
+  let responseJson: any = null;
+
+  if (responseText) {
     try {
-      errJson = JSON.parse(errText);
+      responseJson = JSON.parse(responseText);
     } catch {
-      /* ignore */
+      responseJson = responseText;
     }
-    const errMsg = errJson?.message || errJson?.error || `HTTP error! status: ${response.status}`;
-    devLog('Error Response', errMsg, { status: response.status, url });
-    throw new Error(errMsg);
   }
 
-  // Handle No Content / Empty HTTP 204 response safely
-  if (response.status === 204) {
+  if (!response.ok) {
+    const errMsg =
+      responseJson?.message ||
+      responseJson?.error ||
+      `HTTP error! status: ${response.status}`;
+
+    devLog('Error Response', errMsg, { status: response.status, url, response: responseJson });
+
+    const error = new Error(errMsg) as Error & {
+      status?: number;
+      response?: any;
+      url?: string;
+    };
+    error.status = response.status;
+    error.response = responseJson;
+    error.url = url;
+    throw error;
+  }
+
+  // Handle No Content / Empty HTTP 204 response safely.
+  if (response.status === 204 || responseText === '') {
     return { success: true } as unknown as T;
   }
 
-  return response.json() as Promise<T>;
+  return unwrapApiResponse<T>(responseJson);
 }
-
 export const ApiService = {
   // -------------------------------------------------------------
   // SYSTEM & CONNECTION UTILS
@@ -115,28 +260,40 @@ export const ApiService = {
   },
 
   setMode(mode: 'mock' | 'api') {
-    config.mode = 'mock';
-    localStorage.setItem('mindhub_api_mode', 'mock');
-    devLog('Config', 'Changed API mode (forced to mock)', { mode: 'mock' });
-    window.dispatchEvent(new CustomEvent('mindhub-api-mode-changed', { detail: 'mock' }));
+    config.mode = mode;
+    localStorage.setItem('mindhub_api_mode', mode);
+    devLog('Config', 'Changed API mode', { mode });
+    window.dispatchEvent(new CustomEvent('mindhub-api-mode-changed', { detail: mode }));
   },
 
   setBaseUrl(url: string) {
-    config.baseUrl = url;
-    localStorage.setItem('mindhub_api_base_url', url);
-    devLog('Config', 'Changed API Base URL', { url });
-    window.dispatchEvent(new CustomEvent('mindhub-api-base-url-changed', { detail: url }));
+    const normalizedUrl = normalizeBaseUrl(url);
+    config.baseUrl = normalizedUrl;
+    localStorage.setItem('mindhub_api_base_url', normalizedUrl);
+    devLog('Config', 'Changed API Base URL', { url: normalizedUrl });
+    window.dispatchEvent(new CustomEvent('mindhub-api-base-url-changed', { detail: normalizedUrl }));
   },
 
-  setAuthToken(token: string | null) {
+  setAuthToken(token: string | null, refreshToken?: string | null) {
     if (token) {
       config.authToken = token;
       localStorage.setItem('mindhub_api_token', token);
+      localStorage.setItem('mindhub_access_token', token);
     } else {
       config.authToken = undefined;
       localStorage.removeItem('mindhub_api_token');
+      localStorage.removeItem('mindhub_access_token');
     }
-    devLog('Config', 'Token authorization updated', { hasToken: !!token });
+
+    if (refreshToken) {
+      config.refreshToken = refreshToken;
+      localStorage.setItem('mindhub_refresh_token', refreshToken);
+    } else if (refreshToken === null) {
+      config.refreshToken = undefined;
+      localStorage.removeItem('mindhub_refresh_token');
+    }
+
+    devLog('Config', 'Token authorization updated', { hasToken: !!token, hasRefreshToken: !!refreshToken });
   },
 
   getVirtualLogs(): Array<{ id: string; time: string; mode: string; category: string; action: string; payload: string }> {
@@ -200,12 +357,13 @@ export const ApiService = {
   async register(payload: any): Promise<{ user: User; token: string }> {
     devLog('Auth', 'Register new student', { email: payload.email });
     if (config.mode === 'api') {
-      const res = await apiFetch<{ user: User; token: string }>('/auth/register', {
+      const res = await apiFetch<any>('/auth/register', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      this.setAuthToken(res.token);
-      return res;
+      const auth = normalizeAuthResult(res);
+      this.setAuthToken(auth.token, auth.refresh_token);
+      return auth;
     }
     return { user: { id: 'u-1', name: payload.name, email: payload.email, role: 'student', bio: '' } as any, token: 'mock-token' };
   },
@@ -214,12 +372,13 @@ export const ApiService = {
   async login(payload: any): Promise<{ user: User; token: string }> {
     devLog('Auth', 'Login credentials authentication', { email: payload.email });
     if (config.mode === 'api') {
-      const res = await apiFetch<{ user: User; token: string }>('/auth/login', {
+      const res = await apiFetch<any>('/auth/login', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      this.setAuthToken(res.token);
-      return res;
+      const auth = normalizeAuthResult(res);
+      this.setAuthToken(auth.token, auth.refresh_token);
+      return auth;
     }
     return { user: { id: 'u-1', name: 'User Mock', email: payload.email, role: 'student' } as any, token: 'mock-token' };
   },
@@ -253,9 +412,13 @@ export const ApiService = {
   async refreshToken(): Promise<{ token: string }> {
     devLog('Auth', 'Request Token Refresh rotation');
     if (config.mode === 'api') {
-      const res = await apiFetch<{ token: string }>('/auth/refresh', { method: 'POST' });
-      this.setAuthToken(res.token);
-      return res;
+      const res = await apiFetch<any>('/auth/refresh', {
+        method: 'POST',
+        body: config.refreshToken ? JSON.stringify({ refresh_token: config.refreshToken }) : undefined,
+      });
+      const auth = normalizeAuthResult(res);
+      this.setAuthToken(auth.token, auth.refresh_token);
+      return { token: auth.token };
     }
     return { token: 'mock-refreshed-token' };
   },
@@ -324,12 +487,13 @@ export const ApiService = {
   async authWithGoogle(token: string): Promise<{ user: User; token: string }> {
     devLog('Auth', 'Google OAuth single-sign-on integration');
     if (config.mode === 'api') {
-      const res = await apiFetch<{ user: User; token: string }>('/auth/google', {
+      const res = await apiFetch<any>('/auth/google', {
         method: 'POST',
         body: JSON.stringify({ token }),
       });
-      this.setAuthToken(res.token);
-      return res;
+      const auth = normalizeAuthResult(res);
+      this.setAuthToken(auth.token, auth.refresh_token);
+      return auth;
     }
     return { user: { id: 'u-google', name: 'Google Student', email: 'student@gmail.com', role: 'student' } as any, token: 'mock-google-token' };
   },
@@ -562,6 +726,13 @@ export const ApiService = {
     return { totalCourses: 0, completedLessons: 0, studyHours: 0, streakDays: 1 };
   },
 
+  /** GET /me/courses/{courseId}/learning-overview */
+  async getCourseLearningOverview(courseId: string): Promise<any> {
+    devLog('Learning', `Get enrolled course learning overview for course: ${courseId}`);
+    if (config.mode === 'api') return apiFetch<any>(`/me/courses/${courseId}/learning-overview`);
+    return { course: null, sections: [], progress: null, current_lesson: null, next_lesson: null };
+  },
+
   /** GET /me/dynamic-alerts */
   async getMyLearningAlerts(): Promise<any[]> {
     devLog('Learning', 'Search for system and deadline alerts');
@@ -611,6 +782,16 @@ export const ApiService = {
     throw new Error('Secure classroom payload requires active API authentication.');
   },
 
+  /** GET /learn/lessons/{id}/video-url */
+  async getLessonVideoUrl(lessonId: string): Promise<LessonVideoUrlResponse> {
+    devLog('Learning', `Get signed stream URL for secure lesson video: ${lessonId}`);
+    if (config.mode === 'api') {
+      return apiFetch<LessonVideoUrlResponse>(`/learn/lessons/${lessonId}/video-url`);
+    }
+
+    return { stream_url: '', expires_in: 0 };
+  },
+
   /** GET /learn/lessons/{id}/check-access */
   async verifyClassroomAccess(lessonId: string): Promise<{ has_access: boolean }> {
     devLog('Learning', `Assert system eligibility node of Lesson ID: ${lessonId}`);
@@ -638,7 +819,10 @@ export const ApiService = {
     if (config.mode === 'api') {
       return apiFetch<{ success: boolean }>(`/learn/lessons/${lessonId}/progress`, {
         method: 'PATCH',
-        body: JSON.stringify({ current_time: currentSeconds }),
+        body: JSON.stringify({
+          current_second: currentSeconds,
+          current_time: currentSeconds,
+        }),
       });
     }
     return { success: true };
@@ -661,10 +845,10 @@ export const ApiService = {
   },
 
   /** GET /learn/lessons/{lessonId}/watermark-info */
-  async getLiveWatermarkMetadata(lessonId: string): Promise<{ text: string; alpha: number }> {
+  async getLiveWatermarkMetadata(lessonId: string): Promise<LessonWatermarkInfo> {
     devLog('Learning', `Pull licensing watermark to overlay video player of lesson: ${lessonId}`);
-    if (config.mode === 'api') return apiFetch<{ text: string; alpha: number }>(`/learn/lessons/${lessonId}/watermark-info`);
-    return { text: 'STUDENT_MOCK', alpha: 0.15 };
+    if (config.mode === 'api') return apiFetch<LessonWatermarkInfo>(`/learn/lessons/${lessonId}/watermark-info`);
+    return { text: 'STUDENT_MOCK', mode: 'moving', opacity: 0.15, alpha: 0.15, refresh_seconds: 30 };
   },
 
   /** GET /learning-logs/my */
@@ -1340,7 +1524,7 @@ export const ApiService = {
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
               const res = JSON.parse(xhr.responseText);
-              resolve(res);
+              resolve(unwrapApiResponse<any>(res));
             } catch (err) {
               reject(new Error('Invalid response payload from media server.'));
             }
