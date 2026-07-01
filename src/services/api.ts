@@ -726,11 +726,21 @@ export const ApiService = {
     return { totalCourses: 0, completedLessons: 0, studyHours: 0, streakDays: 1 };
   },
 
-  /** GET /me/courses/{courseId}/learning-overview */
+  /** Compatibility helper: uses GET /learn/courses/{id}/outline + GET /learn/courses/{id}/progress */
   async getCourseLearningOverview(courseId: string): Promise<any> {
-    devLog('Learning', `Get enrolled course learning overview for course: ${courseId}`);
-    if (config.mode === 'api') return apiFetch<any>(`/me/courses/${courseId}/learning-overview`);
-    return { course: null, sections: [], progress: null, current_lesson: null, next_lesson: null };
+    devLog('Learning', `Build enrolled course overview from existing backend APIs: ${courseId}`);
+    if (config.mode === 'api') {
+      const [outlineResult, progressResult] = await Promise.allSettled([
+        apiFetch<any>(`/learn/courses/${courseId}/outline`),
+        apiFetch<any>(`/learn/courses/${courseId}/progress`),
+      ]);
+      return {
+        course_id: courseId,
+        outline: outlineResult.status === 'fulfilled' ? outlineResult.value : null,
+        progress: progressResult.status === 'fulfilled' ? progressResult.value : null,
+      };
+    }
+    return { course_id: courseId, outline: null, progress: null };
   },
 
   /** GET /me/dynamic-alerts */

@@ -60,9 +60,14 @@ export interface Lesson {
   id: string;
   title: string;
   type: 'video' | 'quiz' | 'assignment' | 'doc';
+  lesson_type?: 'video' | 'quiz' | 'assignment' | 'doc' | string;
   duration: string; // e.g. "12:30" or "5 Qs"
   videoUrl?: string;
+  video_url?: string | null;
+  video_access_endpoint?: string | null;
+  video_duration_seconds?: number | null;
   isPreview?: boolean;
+  is_preview?: boolean | number;
   quiz?: Quiz;
   assignment?: Assignment;
   resources?: Resource[];

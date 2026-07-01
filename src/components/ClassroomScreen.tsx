@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Course, Lesson, StudentProgress, MentorMessage, QAMessage, User } from '../types';
 import { safeLocalStorage as localStorage } from '../utils/safeStorage';
+import { ApiService, LessonWatermarkInfo } from '../services/api';
 
 interface ClassroomScreenProps {
   course: Course;
@@ -54,7 +55,7 @@ export default function ClassroomScreen({ course, currentUser, onClose, enrolled
   const isInstructorOrAdmin = currentUser.role === 'admin' || currentUser.role === 'instructor';
   const hasFullCourseAccess = isEnrolled || isInstructorOrAdmin;
 
-  // Mock video state
+  // Secure video state: backend returns signed stream_url, not raw video_url.
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoTime, setVideoTime] = useState(() => {
     const savedTime = localStorage.getItem(`mindhub_video_progress_${course.id}_${progress.currentLessonId}`);
@@ -66,8 +67,16 @@ export default function ClassroomScreen({ course, currentUser, onClose, enrolled
   }); // in seconds
   const [videoSpeed, setVideoSpeed] = useState<number>(1.0);
   const [videoResolution, setVideoResolution] = useState<string>('1080p');
-  const totalVideoDuration = 360; // 6 mins pseudo duration
+  const fallbackVideoDuration = 360;
+  const [videoDuration, setVideoDuration] = useState<number>(fallbackVideoDuration);
+  const totalVideoDuration = videoDuration || fallbackVideoDuration;
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [streamUrl, setStreamUrl] = useState<string>('');
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [videoRetried, setVideoRetried] = useState(false);
+  const [watermarkInfo, setWatermarkInfo] = useState<LessonWatermarkInfo | null>(null);
+  const lastProgressSyncRef = useRef<number>(0);
 
   // Fullscreen management while keeping custom overlay controls
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -213,6 +222,86 @@ export default function ClassroomScreen({ course, currentUser, onClose, enrolled
     });
   };
 
+  const loadSecureVideoUrl = async (lessonId: string, isRetry = false) => {
+    if (!lessonId) return;
+    const target = allLessons.find(l => l.id === lessonId);
+    const targetType = (target as any)?.type || (target as any)?.lesson_type;
+    if (!target || targetType !== 'video') return;
+    if (!hasFullCourseAccess) {
+      setStreamUrl('');
+      setVideoError('Bạn cần sở hữu khóa học để xem video bài học bảo mật.');
+      return;
+    }
+    try {
+      setVideoLoading(true);
+      setVideoError(null);
+      if (!isRetry) {
+        setVideoRetried(false);
+        setStreamUrl('');
+        setWatermarkInfo(null);
+      }
+      const videoUrlResponse = await ApiService.getLessonVideoUrl(lessonId);
+      const signedUrl =
+        (videoUrlResponse as any)?.stream_url ||
+        (videoUrlResponse as any)?.data?.stream_url;
+      if (!signedUrl) {
+        throw new Error('Backend không trả về stream_url cho bài học này.');
+      }
+      setStreamUrl(signedUrl);
+      try {
+        const watermark = await ApiService.getLiveWatermarkMetadata(lessonId);
+        setWatermarkInfo(watermark);
+      } catch {
+        setWatermarkInfo(null);
+      }
+    } catch (error: any) {
+      const status = error?.status || error?.response?.status;
+      let message = error?.message || 'Không thể tải video bài học.';
+      if (status === 401) {
+        message = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+      } else if (status === 403) {
+        message = 'Bạn chưa có quyền xem video bài học này hoặc signed URL đã hết hạn.';
+      } else if (status === 404) {
+        message = 'Không tìm thấy video trong private storage.';
+      } else if (status === 422) {
+        message = 'Bài học này không phải video hoặc dữ liệu video chưa hợp lệ.';
+      }
+      setStreamUrl('');
+      setVideoError(message);
+    } finally {
+      setVideoLoading(false);
+    }
+  };
+  const handleSecureVideoError = () => {
+    if (!activeLesson?.id) return;
+    if (videoRetried) {
+      setVideoError('Video không phát được. Signed URL có thể đã hết hạn hoặc file không tồn tại.');
+      return;
+    }
+    setVideoRetried(true);
+    loadSecureVideoUrl(activeLesson.id, true);
+  };
+  const syncVideoProgressToBackend = (lessonId: string, currentSecond: number) => {
+    if (!lessonId || !hasFullCourseAccess) return;
+    const roundedSecond = Math.floor(currentSecond);
+    if (roundedSecond < 1) return;
+    if (Math.abs(roundedSecond - lastProgressSyncRef.current) < 15) return;
+    lastProgressSyncRef.current = roundedSecond;
+    ApiService.saveVideoPlaybackRatio(lessonId, roundedSecond).catch(() => {
+      // Local progress is still kept even when backend sync fails.
+    });
+  };
+  const handleVideoTimeUpdate = (event: React.SyntheticEvent<HTMLVideoElement>) => {
+    const currentSecond = Math.floor(event.currentTarget.currentTime || 0);
+    setVideoTime(currentSecond);
+    syncVideoProgressToBackend(progress.currentLessonId, currentSecond);
+  };
+  const handleVideoEnded = () => {
+    setIsPlaying(false);
+    if (progress.currentLessonId && !progress.completedLessonIds.includes(progress.currentLessonId)) {
+      handleToggleComplete(progress.currentLessonId);
+    }
+  };
   // Save video play progress to localStorage whenever it changes
   useEffect(() => {
     if (progress.currentLessonId && videoTime > 0) {
@@ -220,7 +309,7 @@ export default function ClassroomScreen({ course, currentUser, onClose, enrolled
     }
   }, [videoTime, progress.currentLessonId, course.id]);
 
-  // Load video play progress whenever currentLessonId changes & save as last played lesson for "Học tiếp bài gần nhất"
+  // Load video play progress whenever currentLessonId changes & fetch secure signed video URL
   useEffect(() => {
     if (progress.currentLessonId) {
       const savedTime = localStorage.getItem(`mindhub_video_progress_${course.id}_${progress.currentLessonId}`);
@@ -231,9 +320,21 @@ export default function ClassroomScreen({ course, currentUser, onClose, enrolled
         setVideoTime(isFirst ? 45 : 0);
       }
       setIsPlaying(false);
+      setStreamUrl('');
+      setVideoError(null);
+      setVideoLoading(false);
+      setVideoRetried(false);
+      setWatermarkInfo(null);
+      setVideoDuration(fallbackVideoDuration);
+      lastProgressSyncRef.current = 0;
       localStorage.setItem(`mindhub_last_lesson_${course.id}`, progress.currentLessonId);
+      const target = allLessons.find(l => l.id === progress.currentLessonId);
+      const targetType = (target as any)?.type || (target as any)?.lesson_type;
+      if (targetType === 'video' && hasFullCourseAccess) {
+        loadSecureVideoUrl(progress.currentLessonId);
+      }
     }
-  }, [progress.currentLessonId, course.id, course.chapters]);
+  }, [progress.currentLessonId, course.id, course.chapters, hasFullCourseAccess]);
 
   // Video controller mockup
   const formatTime = (seconds: number) => {
@@ -242,26 +343,17 @@ export default function ClassroomScreen({ course, currentUser, onClose, enrolled
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Auto progression mockup tracker effect
+  // Keep custom play button in sync with the real HTML5 video element.
   useEffect(() => {
-    let interval: any;
+    const video = videoRef.current;
+    if (!video || !streamUrl) return;
+    video.playbackRate = videoSpeed;
     if (isPlaying) {
-      interval = setInterval(() => {
-        setVideoTime(prev => {
-          if (prev >= totalVideoDuration) {
-            setIsPlaying(false);
-            // Auto complete lesson
-            if (!progress.completedLessonIds.includes(progress.currentLessonId)) {
-              handleToggleComplete(progress.currentLessonId);
-            }
-            return totalVideoDuration;
-          }
-          return prev + 1;
-        });
-      }, 1000 / videoSpeed);
+      video.play().catch(() => setIsPlaying(false));
+    } else {
+      video.pause();
     }
-    return () => clearInterval(interval);
-  }, [isPlaying, progress.currentLessonId, videoSpeed, progress.completedLessonIds]);
+  }, [isPlaying, streamUrl, videoSpeed]);
 
   // Fullscreen event listener and toggle function
   useEffect(() => {
@@ -928,34 +1020,85 @@ Nó tự biến mọi component của bạn thành 'pure memoized render' tươn
                   </div>
                 )}
 
-                <img 
-                  src={course.image} 
-                  alt="Video thumbnail" 
-                  className="absolute inset-0 w-full h-full object-cover opacity-10 filter blur-xs select-none" 
-                />
+                {streamUrl ? (
+                  <video
+                    ref={videoRef}
+                    key={streamUrl}
+                    src={streamUrl}
+                    className="absolute inset-0 w-full h-full object-contain bg-black"
+                    playsInline
+                    preload="metadata"
+                    onLoadedMetadata={(event) => {
+                      const duration = Math.floor(event.currentTarget.duration || 0);
+                      if (duration > 0) {
+                        setVideoDuration(duration);
+                      }
+                      if (videoTime > 0 && (!duration || videoTime < duration)) {
+                        event.currentTarget.currentTime = videoTime;
+                      }
+                    }}
+                    onTimeUpdate={handleVideoTimeUpdate}
+                    onEnded={handleVideoEnded}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onError={handleSecureVideoError}
+                  />
+                ) : (
+                  <img 
+                    src={course.image} 
+                    alt="Video thumbnail" 
+                    className="absolute inset-0 w-full h-full object-cover opacity-10 filter blur-xs select-none" 
+                  />
+                )}
 
-                {!isPlaying ? (
+                {videoLoading && (
+                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center text-center p-6 bg-black/70">
+                    <div className="w-12 h-12 rounded-full border-4 border-t-transparent border-brand-normal animate-spin mx-auto"></div>
+                    <p className="text-xs text-brand-light-active font-mono uppercase tracking-widest animate-pulse font-bold mt-4">
+                      Đang lấy signed stream URL...
+                    </p>
+                  </div>
+                )}
+                {videoError && !videoLoading && (
+                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center text-center p-6 bg-black/80">
+                    <AlertTriangle className="w-10 h-10 text-amber-400 mb-3" />
+                    <p className="text-xs text-white font-bold max-w-md leading-relaxed">{videoError}</p>
+                    <button
+                      type="button"
+                      onClick={() => activeLesson?.id && loadSecureVideoUrl(activeLesson.id, true)}
+                      className="mt-4 bg-brand-normal hover:bg-brand-hover text-brand-light text-[11px] font-bold py-2 px-4 rounded-lg transition-all"
+                    >
+                      Lấy lại link video
+                    </button>
+                  </div>
+                )}
+                {!isPlaying && streamUrl && !videoLoading && !videoError && (
                   <button 
                     onClick={() => setIsPlaying(true)}
                     className="w-16 h-16 bg-brand-normal text-brand-light rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform cursor-pointer z-10"
                   >
                     <Play className="w-8 h-8 fill-brand-light ml-1" />
                   </button>
-                ) : (
-                  <div className="text-center p-6 space-y-4 z-10">
-                    <div className="w-12 h-12 rounded-full border-4 border-t-transparent border-brand-normal animate-spin mx-auto"></div>
-                    <div>
-                      <p className="text-xs text-brand-light-active font-mono uppercase tracking-widest animate-pulse font-bold">Streaming HLS Video {videoResolution}</p>
-                      <p className="text-[10px] text-gray-400 mt-1">Đang mô phỏng xem thực tế: {formatTime(videoTime)} / {formatTime(totalVideoDuration)} ({videoSpeed}x)</p>
-                    </div>
+                )}
+                {isPlaying && streamUrl && !videoError && (
+                  <div className="absolute top-3 left-3 z-20 bg-black/55 border border-white/10 text-[10px] text-emerald-300 px-2.5 py-1 rounded-full font-bold tracking-wider">
+                    PRIVATE SIGNED STREAM • {videoResolution}
+                  </div>
+                )}
+                {watermarkInfo?.text && streamUrl && (
+                  <div
+                    className="absolute right-4 top-14 z-20 pointer-events-none select-none text-white text-[11px] font-semibold bg-black/25 border border-white/10 rounded-lg px-3 py-1.5 backdrop-blur-sm"
+                    style={{ opacity: watermarkInfo.opacity ?? watermarkInfo.alpha ?? 0.25 }}
+                  >
+                    {watermarkInfo.text}
                   </div>
                 )}
 
-                {/* Simulated Custom Subtitles or overlays dynamic */}
+                {/* Optional subtitle / overlay preview */}
                 {isPlaying && videoTime > 10 && videoTime < 30 && (
-                  <div className="absolute bottom-20 left-4 right-4 text-center z-20">
+                  <div className="absolute bottom-20 left-4 right-4 text-center z-20 pointer-events-none">
                     <span className="bg-black/80 border border-white/10 text-xs text-white p-2 py-1 rounded-lg">
-                      "Trong kiến trúc Next.js mới, Server Actions được xác thực thông qua mã băm chống chèn phá..."
+                      Đang phát video bài học bảo mật từ private storage.
                     </span>
                   </div>
                 )}
@@ -977,7 +1120,9 @@ Nó tự biến mọi component của bạn thành 'pure memoized render' tươn
                       onChange={(e) => {
                         const sec = parseInt(e.target.value);
                         setVideoTime(sec);
-                        if (sec < totalVideoDuration) {
+                        if (videoRef.current && streamUrl) {
+                          videoRef.current.currentTime = sec;
+                        } else if (sec < totalVideoDuration) {
                           setIsPlaying(false);
                         }
                       }}
@@ -989,7 +1134,13 @@ Nó tự biến mọi component của bạn thành 'pure memoized render' tươn
                   <div className="flex flex-row items-center justify-between gap-3 text-xs w-full select-none">
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button 
-                        onClick={() => setIsPlaying(!isPlaying)} 
+                        onClick={() => {
+                          if (!streamUrl && activeLesson?.id) {
+                            loadSecureVideoUrl(activeLesson.id, true);
+                            return;
+                          }
+                          setIsPlaying(!isPlaying);
+                        }} 
                         className="hover:text-amber-400 text-white font-bold cursor-pointer transition-all flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10"
                       >
                         {isPlaying ? '⏸ Tạm dừng' : '▶ Phát'}
