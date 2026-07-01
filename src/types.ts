@@ -10,9 +10,13 @@ export interface User {
   lastActiveDate: string;
   bio?: string;
   phone?: string;
+  expertise?: string;
+  experienceYears?: string;
+  portfolioUrl?: string;
   isEmailVerified?: boolean;
   isPhoneVerified?: boolean;
-  roleRequestStatus?: 'none' | 'pending_instructor' | 'pending_admin' | 'approved' | 'rejected';
+  roleRequestStatus?: 'none' | 'pending_instructor' | 'pending_admin' | 'approved' | 'rejected' | 'pending_leave_instructor';
+  status?: 'active' | 'locked' | 'suspended';
   verificationOtp?: string;
   interestedTopics: string[];
   notificationSettings: {
@@ -106,6 +110,7 @@ export interface Course {
   description: string;
   category: string;
   subcategory: string;
+  instructorId?: string;
   instructorName: string;
   instructorTitle: string;
   instructorAvatar: string;
@@ -125,7 +130,7 @@ export interface Course {
   faqs: FAQItem[];
   requirements: string[];
   willLearn: string[];
-  status: 'draft' | 'pending' | 'active' | 'rejected';
+  status: 'draft' | 'pending' | 'active' | 'rejected' | 'hidden' | 'archived' | 'suspended';
   rejectionReason?: string;
   isHidden?: boolean;
   allowSkip?: boolean;
@@ -205,6 +210,38 @@ export interface QAMessage {
   text: string;
   timestamp: string;
   replies?: QAMessage[];
+}
+
+export interface CourseAnswer {
+  id: string;
+  questionId: string;
+  authorId: string;
+  content: string;
+  isInstructorAnswer: boolean;
+  isAdminAnswer: boolean;
+  createdAt: string;
+  author?: {
+    name: string;
+    avatar: string;
+    role: Role;
+  };
+}
+
+export interface CourseQuestion {
+  id: string;
+  courseId: string;
+  authorId: string;
+  content: string;
+  isInternal: boolean;
+  lessonId: string | null;
+  status: 'open' | 'answered' | 'hidden';
+  createdAt: string;
+  author?: {
+    name: string;
+    avatar: string;
+    role: Role;
+  };
+  answers?: CourseAnswer[];
 }
 
 export interface FlaggedItem {
@@ -332,6 +369,22 @@ export function normalizeUser(user: any): User {
     interestedTopics,
     notificationSettings
   };
+}
+
+export interface InstructorRequest {
+  id: string;
+  userId: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  bio: string;
+  expertise: string;
+  experienceYears: string;
+  portfolioUrl: string;
+  status: 'pending' | 'approved' | 'rejected';
+  rejectionReason?: string;
+  createdAt: string;
+  reviewedAt?: string;
 }
 
 

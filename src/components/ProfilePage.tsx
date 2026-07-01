@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { User, Lock, Settings, FileText, Check, Flame, AlertCircle, ShieldAlert, BadgeCheck, Camera, CreditCard, Mail, Smartphone, KeyRound, Loader2, ChevronRight, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Lock, Settings, FileText, Check, Flame, AlertCircle, ShieldAlert, BadgeCheck, Camera, CreditCard, Mail, Smartphone, KeyRound, Loader2, ChevronRight, CheckCircle2, Clock, PlayCircle, Award } from 'lucide-react';
 import { User as UserType } from '../types';
 import { OTPModal } from './OTPModal';
 import { ApiService } from '../services/api';
@@ -21,7 +21,7 @@ interface ProfilePageProps {
 }
 
 export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: ProfilePageProps) {
-  const [activeTab, setActiveTab] = useState<'personal' | 'security' | 'roles'>('personal');
+  const [activeTab, setActiveTab] = useState<'personal' | 'security' | 'roles' | 'history'>('personal');
   
   // Forms state
   const [editUser, setEditUser] = useState<UserType>({ ...currentUser });
@@ -29,8 +29,20 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [instructorBio, setInstructorBio] = useState('');
+  const [instructorBio, setInstructorBio] = useState(currentUser.bio || '');
+  const [instructorExpertise, setInstructorExpertise] = useState(currentUser.expertise || '');
+  const [instructorExperience, setInstructorExperience] = useState(currentUser.experienceYears || '');
+  const [instructorPortfolio, setInstructorPortfolio] = useState(currentUser.portfolioUrl || '');
+  const [leaveReason, setLeaveReason] = useState('');
   const [roleRequesting, setRoleRequesting] = useState(false);
+  
+  const [learningHistory, setLearningHistory] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (activeTab === 'history') {
+      ApiService.getUserActivities(currentUser.id).then(res => setLearningHistory(res));
+    }
+  }, [activeTab, currentUser.id]);
 
   // Notifications
   const [successMsg, setSuccessMsg] = useState('');
@@ -39,7 +51,7 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
   // OTP Modal State
   const [showOtp, setShowOtp] = useState(false);
   const [otpType, setOtpType] = useState<'email' | 'phone'>('email');
-  const [otpAction, setOtpAction] = useState<'verify_email' | 'verify_phone' | 'request_instructor' | 'request_admin' | 'change_password' | null>(null);
+  const [otpAction, setOtpAction] = useState<'verify_email' | 'verify_phone' | 'request_instructor' | 'request_admin' | 'change_password' | 'request_leave_instructor' | null>(null);
 
   const showNotification = (msg: string, isError = false) => {
     if (isError) {
@@ -78,9 +90,9 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
     
     try {
       if (type === 'phone') {
-        await ApiService.sendPhoneOtp(currentUser.phone || '');
+        await ApiService.sendPhoneOtp(currentUser.phone || '', action);
       } else {
-        await ApiService.resendVerificationEmail();
+        await ApiService.resendVerificationEmail(currentUser.email, action);
       }
       setShowOtp(true);
     } catch (err: any) {
@@ -89,25 +101,24 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
   };
 
   const handleVerifyOtp = async (otpCode: string): Promise<boolean> => {
-    if (otpType === 'phone') {
-      const res = await ApiService.verifyPhoneOtp(currentUser.phone || '', otpCode);
-      return res.success;
-    } else {
-      // Mock email verification with OTP code (normally it's a link, but we mock it here for UI flow)
-      return new Promise((resolve, reject) => {
-        setTimeout(() => {
-          if (otpCode === '123456') resolve(true);
-          else reject(new Error('Mã OTP không chính xác. Mã đúng là 123456.'));
-        }, 1000);
-      });
+    try {
+      if (otpType === 'phone') {
+        const res = await ApiService.verifyPhoneOtp(currentUser.phone || '', otpCode, otpAction);
+        return res.success;
+      } else {
+        const res = await ApiService.verifyEmailOtp(currentUser.email, otpAction, otpCode);
+        return res.success;
+      }
+    } catch (err: any) {
+      throw err;
     }
   };
 
   const handleResendOtp = async () => {
     if (otpType === 'phone') {
-      await ApiService.sendPhoneOtp(currentUser.phone || '');
+      await ApiService.sendPhoneOtp(currentUser.phone || '', otpAction);
     } else {
-      await ApiService.resendVerificationEmail();
+      await ApiService.resendVerificationEmail(currentUser.email, otpAction);
     }
   };
 
@@ -125,7 +136,16 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
     } else if (otpAction === 'request_instructor') {
       try {
         setRoleRequesting(true);
-        await ApiService.requestInstructorRole({ userId: currentUser.id, bio: instructorBio });
+        await ApiService.requestInstructorRole({ 
+          userId: currentUser.id, 
+          fullName: currentUser.name, 
+          email: currentUser.email, 
+          phone: currentUser.phone || editUser.phone || '', 
+          bio: instructorBio,
+          expertise: instructorExpertise,
+          experienceYears: instructorExperience,
+          portfolioUrl: instructorPortfolio
+        });
         updatedUser.roleRequestStatus = 'pending_instructor';
         showNotification('Đã gửi yêu cầu đăng ký Giảng viên thành công! Vui lòng chờ phê duyệt.');
       } catch (err) {
@@ -139,6 +159,22 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
         await ApiService.requestAdminRole({ userId: currentUser.id });
         updatedUser.roleRequestStatus = 'pending_admin';
         showNotification('Đã gửi yêu cầu quyền Admin!');
+      } catch (err) {
+        showNotification('Lỗi khi gửi yêu cầu.', true);
+      } finally {
+        setRoleRequesting(false);
+      }
+    } else if (otpAction === 'request_leave_instructor') {
+      try {
+        setRoleRequesting(true);
+        await ApiService.requestLeaveInstructorRole({
+          userId: currentUser.id,
+          fullName: currentUser.name,
+          email: currentUser.email,
+          reason: leaveReason
+        });
+        updatedUser.roleRequestStatus = 'pending_leave_instructor';
+        showNotification('Đã gửi yêu cầu rời vai trò Giảng viên thành công! Vui lòng chờ phê duyệt.');
       } catch (err) {
         showNotification('Lỗi khi gửi yêu cầu.', true);
       } finally {
@@ -181,7 +217,7 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
     }
   };
 
-  const handleRequestRole = (roleType: 'instructor' | 'admin') => {
+  const handleRequestRole = (roleType: 'instructor' | 'admin' | 'leave_instructor') => {
     if (!currentUser.isEmailVerified) {
       showNotification('Vui lòng xác minh Email trước khi yêu cầu cấp quyền!', true);
       setActiveTab('security');
@@ -193,7 +229,7 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
       return;
     }
     // All verified, request OTP to confirm role change request
-    handleOpenOtp('phone', roleType === 'instructor' ? 'request_instructor' : 'request_admin');
+    handleOpenOtp('phone', roleType === 'instructor' ? 'request_instructor' : roleType === 'admin' ? 'request_admin' : 'request_leave_instructor');
   };
 
   return (
@@ -275,6 +311,12 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
                   className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition-colors ${activeTab === 'roles' ? 'bg-brand-light text-[#432c28]' : 'text-stone-600 hover:bg-stone-50'}`}
                 >
                   <ShieldAlert className="w-5 h-5" /> Vai trò & Quyền
+                </button>
+                <button
+                  onClick={() => setActiveTab('history')}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition-colors ${activeTab === 'history' ? 'bg-brand-light text-[#432c28]' : 'text-stone-600 hover:bg-stone-50'}`}
+                >
+                  <Clock className="w-5 h-5" /> Lịch sử học tập
                 </button>
               </nav>
             </div>
@@ -544,7 +586,7 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
 
                   {/* Request Instructor Block */}
                   {currentUser.role === 'student' && (
-                    <div className="border border-stone-200 rounded-2xl overflow-hidden">
+                    <div className="border border-stone-200 rounded-2xl overflow-hidden mt-6">
                       <div className="bg-stone-50 p-4 border-b border-stone-200 flex justify-between items-center">
                         <div className="flex items-center gap-2">
                           <Flame className="w-5 h-5 text-[#8b5e3c]" />
@@ -577,6 +619,38 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
                                 placeholder="Hãy cho chúng tôi biết về kinh nghiệm và chuyên môn giảng dạy của bạn..."
                               ></textarea>
                             </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                              <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1.5">Lĩnh vực chuyên môn</label>
+                                <input
+                                  type="text"
+                                  value={instructorExpertise}
+                                  onChange={e => setInstructorExpertise(e.target.value)}
+                                  className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:border-brand-normal focus:ring-1 focus:outline-none"
+                                  placeholder="VD: Lập trình, Thiết kế..."
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1.5">Năm kinh nghiệm</label>
+                                <input
+                                  type="text"
+                                  value={instructorExperience}
+                                  onChange={e => setInstructorExperience(e.target.value)}
+                                  className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:border-brand-normal focus:ring-1 focus:outline-none"
+                                  placeholder="VD: 5 năm"
+                                />
+                              </div>
+                            </div>
+                            <div className="mt-4">
+                              <label className="block text-sm font-semibold text-stone-700 mb-1.5">Liên kết Portfolio / CV</label>
+                              <input
+                                type="text"
+                                value={instructorPortfolio}
+                                onChange={e => setInstructorPortfolio(e.target.value)}
+                                className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:border-brand-normal focus:ring-1 focus:outline-none"
+                                placeholder="https://..."
+                              />
+                            </div>
                             
                             <div className="flex items-center gap-2 mt-2 p-3 bg-blue-50 rounded-xl text-xs text-blue-800">
                               <ShieldAlert className="w-4 h-4 flex-shrink-0" />
@@ -596,6 +670,132 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
                     </div>
                   )}
 
+                  {/* Instructor Profile Block */}
+                  {currentUser.role === 'instructor' && (
+                    <div className="border border-stone-200 rounded-2xl overflow-hidden mt-6">
+                      <div className="bg-stone-50 p-4 border-b border-stone-200 flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <Flame className="w-5 h-5 text-[#8b5e3c]" />
+                          <h4 className="font-bold text-stone-900">Thông tin Giảng viên</h4>
+                        </div>
+                      </div>
+                      
+                      <div className="p-6 space-y-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-stone-700 mb-1.5">Giới thiệu chuyên môn</label>
+                          <textarea
+                            rows={3}
+                            value={instructorBio}
+                            onChange={e => setInstructorBio(e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:border-brand-normal focus:ring-1 focus:outline-none"
+                            placeholder="Hãy cho chúng tôi biết về kinh nghiệm và chuyên môn giảng dạy của bạn..."
+                          ></textarea>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                          <div>
+                            <label className="block text-sm font-semibold text-stone-700 mb-1.5">Lĩnh vực chuyên môn</label>
+                            <input
+                              type="text"
+                              value={instructorExpertise}
+                              onChange={e => setInstructorExpertise(e.target.value)}
+                              className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:border-brand-normal focus:ring-1 focus:outline-none"
+                              placeholder="VD: Lập trình, Thiết kế..."
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-semibold text-stone-700 mb-1.5">Năm kinh nghiệm</label>
+                            <input
+                              type="text"
+                              value={instructorExperience}
+                              onChange={e => setInstructorExperience(e.target.value)}
+                              className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:border-brand-normal focus:ring-1 focus:outline-none"
+                              placeholder="VD: 5 năm"
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-4">
+                          <label className="block text-sm font-semibold text-stone-700 mb-1.5">Liên kết Portfolio / CV</label>
+                          <input
+                            type="text"
+                            value={instructorPortfolio}
+                            onChange={e => setInstructorPortfolio(e.target.value)}
+                            className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:border-brand-normal focus:ring-1 focus:outline-none"
+                            placeholder="https://..."
+                          />
+                        </div>
+                        
+                        <button 
+                          onClick={() => {
+                            alert('Lưu thông tin giảng viên thành công! (Mock)');
+                          }}
+                          className="mt-4 bg-[#8b5e3c] hover:bg-[#6c482d] text-white font-bold py-2.5 px-6 rounded-xl transition-colors shadow-sm flex items-center gap-2"
+                        >
+                          Cập nhật Hồ sơ
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Leave Instructor Block */}
+                  {currentUser.role === 'instructor' && (
+                    <div className="border border-rose-200 rounded-2xl overflow-hidden mt-6 bg-rose-50/30">
+                      <div className="bg-rose-50 p-4 border-b border-rose-200 flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="w-5 h-5 text-rose-600" />
+                          <h4 className="font-bold text-rose-900">Yêu cầu ngừng làm Giảng viên</h4>
+                        </div>
+                        {currentUser.roleRequestStatus === 'pending_leave_instructor' && (
+                          <span className="text-xs font-bold bg-amber-100 text-amber-700 px-3 py-1 rounded-full">Đang chờ duyệt</span>
+                        )}
+                      </div>
+                      
+                      <div className="p-6">
+                        {currentUser.roleRequestStatus === 'pending_leave_instructor' ? (
+                          <div className="text-center py-6">
+                            <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                              <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                            </div>
+                            <h3 className="text-lg font-bold text-stone-900 mb-2">Đang chờ Admin phê duyệt</h3>
+                            <p className="text-stone-500 max-w-md mx-auto">
+                              Yêu cầu ngừng làm giảng viên của bạn đã được gửi và đang chờ Admin xử lý. 
+                              Chúng tôi sẽ xem xét các khóa học đang hoạt động của bạn trước khi phê duyệt.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            <p className="text-sm text-stone-600">
+                              Nếu bạn không còn muốn tiếp tục giảng dạy trên MindHub, bạn có thể gửi yêu cầu ngừng làm giảng viên. Xin lưu ý: Admin sẽ xem xét và quyết định trạng thái các khóa học hiện tại của bạn.
+                            </p>
+                            <div>
+                              <label className="block text-sm font-semibold text-stone-700 mb-1.5">Lý do ngừng giảng dạy (Bắt buộc)</label>
+                              <textarea
+                                rows={3}
+                                value={leaveReason}
+                                onChange={e => setLeaveReason(e.target.value)}
+                                className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:border-rose-500 focus:ring-1 focus:outline-none"
+                                placeholder="Hãy cho chúng tôi biết lý do bạn muốn ngừng..."
+                              ></textarea>
+                            </div>
+                            <button 
+                              onClick={() => {
+                                if (!leaveReason.trim()) {
+                                  showNotification('Vui lòng nhập lý do ngừng giảng dạy', true);
+                                  return;
+                                }
+                                handleRequestRole('leave_instructor');
+                              }}
+                              disabled={roleRequesting || !leaveReason.trim()}
+                              className="mt-2 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold py-2.5 px-6 rounded-xl transition-colors shadow-sm disabled:opacity-70 flex items-center gap-2"
+                            >
+                              <AlertCircle className="w-4 h-4" />
+                              Gửi yêu cầu
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Request Admin Block (Demo only for student/instructor) */}
                   {currentUser.role !== 'admin' && (
                     <div className="mt-6 text-center">
@@ -608,6 +808,62 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
                     </div>
                   )}
                   
+                </div>
+              </div>
+            )}
+            {/* HISTORY TAB */}
+            {activeTab === 'history' && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 md:p-8">
+                  <h3 className="text-xl font-bold text-stone-900 border-b border-stone-100 pb-4 mb-6 flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-indigo-500" /> Lịch sử hoạt động
+                  </h3>
+                  
+                  {learningHistory.length === 0 ? (
+                    <div className="text-center py-10 bg-stone-50 rounded-xl border border-stone-100">
+                      <Clock className="w-12 h-12 text-stone-300 mx-auto mb-3" />
+                      <p className="text-stone-500 font-medium">Chưa có hoạt động học tập nào được ghi nhận.</p>
+                      <button 
+                        onClick={() => navigateTo('home')} 
+                        className="mt-4 px-6 py-2 bg-[#8b5e3c] text-white rounded-xl text-sm font-bold shadow-md hover:bg-[#724a2d] transition-all"
+                      >
+                        Bắt đầu học ngay
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative border-l-2 border-stone-100 ml-4 pl-6 space-y-8">
+                      {learningHistory.map((activity: any, index: number) => (
+                        <div key={activity.id || index} className="relative">
+                          {/* Timeline dot */}
+                          <div className="absolute -left-[35px] top-1 w-8 h-8 rounded-full bg-white border-2 border-indigo-100 flex items-center justify-center shadow-sm">
+                            {activity.activityType === 'course_completed' ? <Award className="w-4 h-4 text-amber-500" /> : 
+                             activity.activityType === 'lesson_completed' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : 
+                             <PlayCircle className="w-4 h-4 text-indigo-500" />}
+                          </div>
+                          
+                          <div className="bg-stone-50 rounded-xl p-4 border border-stone-100 hover:border-indigo-100 transition-colors">
+                            <p className="text-[15px] text-stone-800">
+                              {activity.activityType === 'course_completed' ? 'Hoàn thành toàn bộ khóa học' : 
+                               activity.activityType === 'lesson_completed' ? 'Hoàn thành bài học trong' : 'Đã bắt đầu học'} 
+                              <span className="font-bold ml-1 text-deep-indigo">
+                                {activity.course?.title || activity.courseId}
+                              </span>
+                            </p>
+                            <span className="block mt-1 text-xs text-stone-500 font-medium">
+                              {new Date(activity.createdAt).toLocaleString('vi-VN', {
+                                hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric'
+                              })}
+                            </span>
+                            {activity.metadata && (
+                              <div className="mt-2 text-sm text-stone-600 bg-white p-2 rounded border border-stone-100">
+                                {activity.metadata}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -1,0 +1,153 @@
+datasource db {
+  provider = "sqlite"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                  String   @id @default(cuid())
+  name                String
+  email               String   @unique
+  avatar              String?
+  role                String   @default("student") // student, instructor, admin
+  streak              Int      @default(0)
+  lastActiveDate      String?
+  bio                 String?
+  phone               String?
+  expertise           String?
+  experienceYears     String?
+  portfolioUrl        String?
+  interestedTopics    String?  // JSON string
+  status              String   @default("active")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  courses             Course[] @relation("InstructorCourses")
+  enrollments         Enrollment[] @relation("UserEnrollments")
+  activities          LearningActivity[] @relation("UserActivities")
+  questions           CourseQuestion[] @relation("UserQuestions")
+  answers             CourseAnswer[] @relation("UserAnswers")
+}
+
+model Course {
+  id                  String   @id @default(cuid())
+  title               String
+  subtitle            String?
+  description         String?
+  category            String
+  subcategory         String?
+  instructorId        String
+  instructor          User     @relation("InstructorCourses", fields: [instructorId], references: [id])
+  price               Float
+  salePrice           Float?
+  rating              Float    @default(0)
+  reviewCount         Int      @default(0)
+  enrolledCount       Int      @default(0)
+  completionRate      Float    @default(0)
+  isFeatured          Boolean  @default(false)
+  isBestseller        Boolean  @default(false)
+  isNew               Boolean  @default(false)
+  image               String?
+  status              String   @default("active") // draft, active, hidden, pending
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  chapters            Chapter[]
+  enrollments         Enrollment[] @relation("CourseEnrollments")
+  activities          LearningActivity[] @relation("CourseActivities")
+  questions           CourseQuestion[] @relation("CourseQuestions")
+}
+
+model Chapter {
+  id                  String   @id @default(cuid())
+  title               String
+  courseId            String
+  course              Course   @relation(fields: [courseId], references: [id])
+  orderIndex          Int      @default(0)
+  createdAt           DateTime @default(now())
+  
+  lessons             Lesson[]
+}
+
+model Lesson {
+  id                  String   @id @default(cuid())
+  title               String
+  type                String   // video, quiz, assignment, doc
+  duration            String?
+  videoUrl            String?
+  isPreview           Boolean  @default(false)
+  content             String?
+  chapterId           String
+  chapter             Chapter  @relation(fields: [chapterId], references: [id])
+  orderIndex          Int      @default(0)
+  createdAt           DateTime @default(now())
+}
+
+model ContactMessage {
+  id                  String   @id @default(cuid())
+  name                String
+  email               String
+  subject             String
+  message             String
+  status              String   @default("pending") // pending, resolved
+  createdAt           DateTime @default(now())
+}
+
+model Enrollment {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation("UserEnrollments", fields: [userId], references: [id])
+  courseId            String
+  course              Course   @relation("CourseEnrollments", fields: [courseId], references: [id])
+  progress            Int      @default(0) // percentage 0-100
+  completedAt         DateTime?
+  certificateId       String?
+  ratingStatus        String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([userId, courseId])
+}
+
+model LearningActivity {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation("UserActivities", fields: [userId], references: [id])
+  courseId            String?
+  course              Course?  @relation("CourseActivities", fields: [courseId], references: [id])
+  lessonId            String?
+  activityType        String   // "course_started", "lesson_completed", "course_completed", "quiz_passed"
+  metadata            String?  // JSON string
+  createdAt           DateTime @default(now())
+}
+
+model CourseQuestion {
+  id          String   @id @default(cuid())
+  courseId    String
+  course      Course   @relation("CourseQuestions", fields: [courseId], references: [id])
+  authorId    String
+  author      User     @relation("UserQuestions", fields: [authorId], references: [id])
+  content     String
+  isInternal  Boolean  @default(false) // false: pre-purchase, true: post-purchase
+  lessonId    String?
+  status      String   @default("open") // open, answered, hidden
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  answers     CourseAnswer[] @relation("QuestionAnswers")
+}
+
+model CourseAnswer {
+  id          String   @id @default(cuid())
+  questionId  String
+  question    CourseQuestion @relation("QuestionAnswers", fields: [questionId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User     @relation("UserAnswers", fields: [authorId], references: [id])
+  content     String
+  isInstructorAnswer Boolean @default(false)
+  isAdminAnswer      Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

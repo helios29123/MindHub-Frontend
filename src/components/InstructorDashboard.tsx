@@ -34,26 +34,40 @@ function InstructorSecurityPanel({ currentUser }: { currentUser: User }) {
     { id: '2', device: 'iPhone 14 Pro', os: 'iOS 16', browser: 'Safari', ip: '113.190.23.1', lastActive: '2 giờ trước', isCurrent: false }
   ];
 
-  const handleVerifyEmail = () => {
+  const handleVerifyEmail = async () => {
     setEmailStatus('pending');
-    setTimeout(() => {
+    try {
+      await ApiService.resendVerificationEmail(currentUser.email, 'verify_email');
       alert('Đã gửi email xác minh đến: ' + currentUser.email);
       setEmailStatus('unverified');
-    }, 1500);
+    } catch (err: any) {
+      alert(err.message || 'Lỗi gửi email');
+      setEmailStatus('unverified');
+    }
   };
 
-  const handleEnableOtp = () => {
-    setOtpStep('setup');
+  const handleEnableOtp = async () => {
+    try {
+      await ApiService.sendPhoneOtp(currentUser.phone || '', 'setup_2fa');
+      setOtpStep('setup');
+    } catch (err: any) {
+      alert(err.message || 'Lỗi gửi mã OTP');
+    }
   };
 
-  const handleConfirmOtp = () => {
+  const handleConfirmOtp = async () => {
     if (otpCode.length === 6) {
-      setOtpEnabled(true);
-      setOtpStep('idle');
-      alert('Đã bật xác thực 2 lớp thành công!');
-      setOtpCode('');
+      try {
+        await ApiService.verifyPhoneOtp(currentUser.phone || '', otpCode, 'verify_phone');
+        setOtpEnabled(true);
+        setOtpStep('idle');
+        alert('Đã bật xác thực 2 lớp thành công!');
+        setOtpCode('');
+      } catch (err: any) {
+        alert(err.message || 'Mã OTP không hợp lệ!');
+      }
     } else {
-      alert('Mã OTP không hợp lệ!');
+      alert('Mã OTP phải có 6 chữ số!');
     }
   };
 
@@ -143,7 +157,7 @@ function InstructorSecurityPanel({ currentUser }: { currentUser: User }) {
                     <span className="text-xs font-bold text-stone-500 bg-stone-100 px-2 py-1 rounded">Đang tắt</span>
                   )}
                 </div>
-                <p className="text-sm text-stone-600 mt-1 mb-4">Bảo vệ tài khoản giảng viên của bạn bằng cách yêu cầu mã xác nhận từ ứng dụng Authenticator mỗi khi đăng nhập.</p>
+                <p className="text-sm text-stone-600 mt-1 mb-4">Bảo vệ tài khoản giảng viên của bạn bằng cách yêu cầu mã xác nhận từ SMS mỗi khi đăng nhập.</p>
                 
                 {!otpEnabled && otpStep === 'idle' && (
                   <button onClick={handleEnableOtp} className="bg-brand-normal text-brand-light font-bold py-2 px-4 rounded-lg text-sm">
@@ -153,20 +167,18 @@ function InstructorSecurityPanel({ currentUser }: { currentUser: User }) {
 
                 {otpStep === 'setup' && (
                   <div className="bg-stone-50 p-4 rounded-lg border space-y-4">
-                    <p className="text-sm font-bold">1. Quét mã QR code bằng ứng dụng Authenticator</p>
-                    <div className="w-32 h-32 bg-white border border-stone-200 rounded mx-auto flex items-center justify-center">
-                      <span className="text-xs text-stone-400 text-center">[Mock QR Code]</span>
-                    </div>
-                    <p className="text-sm font-bold">2. Nhập mã OTP gồm 6 chữ số</p>
-                    <div className="flex items-center gap-2">
+                    <p className="text-sm font-bold">Mã OTP đã được gửi về số điện thoại {currentUser.phone}</p>
+                    <p className="text-sm font-bold">Nhập mã OTP gồm 6 chữ số</p>
+                    <div className="flex gap-2 max-w-xs">
                       <input 
                         type="text" 
                         maxLength={6}
-                        placeholder="000000"
                         value={otpCode}
                         onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                        className="border p-2 rounded-lg text-center tracking-widest font-mono text-lg flex-1"
+                        className="w-full text-center text-xl tracking-widest p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-normal focus:border-transparent" 
                       />
+                    </div>
+                    <div className="flex gap-2">
                       <button onClick={handleConfirmOtp} className="bg-brand-normal text-white font-bold py-2 px-4 rounded-lg">Xác nhận</button>
                       <button onClick={() => setOtpStep('idle')} className="bg-stone-200 text-stone-700 font-bold py-2 px-4 rounded-lg">Hủy</button>
                     </div>

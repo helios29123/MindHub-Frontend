@@ -6,7 +6,7 @@ import {
   HelpCircle, AlertCircle, Edit, Flame, RefreshCw,
   Coffee, Lock, Zap, MessageSquare, Music, Disc, Volume2, VolumeX, Pause, Play, Clock,
   Upload, Trash2, SkipBack, SkipForward, Repeat, UserX, Users, Video,
-  ShoppingBag, Landmark, Download, Tag, Globe, Cpu, Layers, Terminal, Database
+  ShoppingBag, Landmark, Download, Tag, Globe, Cpu, Layers, Terminal, Database, TrendingUp
 } from 'lucide-react';
 
 import { loadAndCleanUploadedSongs, saveUploadedSong, deleteUploadedSong, validateMp3File, PlayableSong } from './utils/musicDb';
@@ -29,6 +29,10 @@ import InstructorDashboard from './components/InstructorDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import { FreePreviewModal } from './components/FreePreviewModal';
 import { ApiService } from './services/api';
+import ContactPage from './pages/ContactPage';
+import AboutPage from './pages/AboutPage';
+import { InstructorProfile } from './components/InstructorProfile';
+import CourseQA from './components/CourseQA';
 
 // Simple custom intersection observer wrapper to achieve smooth scroll animations
 interface ScrollRevealProps {
@@ -140,6 +144,9 @@ export default function App() {
     return INITIAL_USER;
   });
   const [categoriesList, setCategoriesList] = useState<string[]>(['All', 'Development', 'Design', 'Marketing', 'Artificial Intelligence', 'Business & Startup', 'Data Science', 'Cybersecurity']);
+  const [categoriesWithCount, setCategoriesWithCount] = useState<{name: string, count: number}[]>([]);
+  const [learningHistory, setLearningHistory] = useState<any[]>([]);
+  const [completedCoursesList, setCompletedCoursesList] = useState<any[]>([]);
   const [courses, setCourses] = useState<Course[]>(() => {
     try {
       const stored = localStorage.getItem('mindhub_courses_db');
@@ -284,12 +291,15 @@ export default function App() {
     if (path.startsWith('/profile') || path.startsWith('/account/profile')) return 'profile';
     if (path.startsWith('/intro')) return 'intro';
     if (path.startsWith('/my-courses')) return 'my-courses';
+    if (path.startsWith('/faq')) return 'faq';
     if (path.startsWith('/help') || path.startsWith('/legal')) return 'legal';
     if (path.startsWith('/admin')) return 'admin';
+    if (path.startsWith('/instructor-profile')) return 'instructor-profile';
     if (path.startsWith('/instructor')) return 'instructor';
     if (path.startsWith('/courses/')) return 'course-detail';
     if (path.startsWith('/explore')) return 'explore';
     if (path.startsWith('/about')) return 'about';
+    if (path.startsWith('/contact')) return 'contact';
     return 'home';
   };
 
@@ -308,7 +318,11 @@ export default function App() {
       else finalPath = '/' + path;
     }
     
-    setCurrentRoute(getRouteFromPath(finalPath));
+    const urlParams = new URLSearchParams(finalPath.split('?')[1] || '');
+    const id = urlParams.get('id');
+    if (id) setViewedInstructorId(id);
+
+    setCurrentRoute(getRouteFromPath(finalPath.split('?')[0]));
     window.history.pushState({}, '', finalPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -316,7 +330,11 @@ export default function App() {
   useEffect(() => {
     const handlePopState = () => {
       setCurrentRoute(getRouteFromPath(window.location.pathname));
+      const urlParams = new URLSearchParams(window.location.search);
+      const id = urlParams.get('id');
+      if (id) setViewedInstructorId(id);
     };
+    handlePopState(); // Initialize on mount
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
@@ -346,6 +364,11 @@ export default function App() {
   // Instructor filtering states
   const [instructorCategory, setInstructorCategory] = useState<string>('All');
   const [showOnlyFeatured, setShowOnlyFeatured] = useState<boolean>(false);
+  const [viewedInstructorId, setViewedInstructorId] = useState<string | null>(null);
+
+  // New homepage section states
+  const [featuredCourses, setFeaturedCourses] = useState<Course[]>([]);
+  const [bestsellerCourses, setBestsellerCourses] = useState<Course[]>([]);
 
   // Suggestions panel trigger states
   const [showMainSuggestions, setShowMainSuggestions] = useState<boolean>(false);
@@ -532,13 +555,28 @@ export default function App() {
     if (apiConfigMode === 'api') {
       console.log('🔌 Connecting to Live Backend Database via API...');
       
-      // Load categories from database
-      ApiService.getCategories().then(cats => {
+      // Load categories from database with count
+      ApiService.getCategoriesWithCount().then(cats => {
         if (!active) return;
         if (cats && cats.length > 0) {
+          setCategoriesWithCount(cats);
           setCategoriesList(['All', ...cats.map(c => c.name)]);
         }
       }).catch(e => console.warn('Lỗi nạp danh mục DB:', e));
+
+      // Load user enrollments and history if logged in
+      if (currentUser && currentUser.id) {
+        ApiService.getUserEnrollments(currentUser.id).then(enrollments => {
+          if (!active) return;
+          const completed = enrollments.filter(e => e.progress === 100);
+          setCompletedCoursesList(completed);
+        }).catch(e => console.warn('Lỗi nạp khóa học đã hoàn thành:', e));
+
+        ApiService.getUserActivities(currentUser.id).then(activities => {
+          if (!active) return;
+          setLearningHistory(activities);
+        }).catch(e => console.warn('Lỗi nạp lịch sử học:', e));
+      }
 
       // Load courses from database with stable mock data fallback if real API fails/is empty
       ApiService.getCourses().then(coursList => {
@@ -573,6 +611,16 @@ export default function App() {
         }
         setCourses(INITIAL_COURSES);
       });
+
+      ApiService.getFeaturedCourses().then(featured => {
+        if (!active) return;
+        setFeaturedCourses(featured);
+      }).catch(e => console.warn('Lỗi nạp khóa học nổi bật:', e));
+
+      ApiService.getBestsellerCourses().then(bestsellers => {
+        if (!active) return;
+        setBestsellerCourses(bestsellers);
+      }).catch(e => console.warn('Lỗi nạp khóa học bán chạy:', e));
 
       // Load student enrolled courses if logged in and not guest
       if (currentUser && currentUser.id !== 'u-guest') {
@@ -1661,9 +1709,6 @@ export default function App() {
     safeCoursesPage * coursesPerPage
   );
 
-  const featuredCourses = courses.filter(c => c.isFeatured && c.status === 'active' && !c.isHidden);
-  const newCourses = courses.filter(c => c.isNew && c.status === 'active' && !c.isHidden);
-
   const formatVND = (num: number) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(num);
   };
@@ -1759,6 +1804,97 @@ export default function App() {
         el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }, 100);
+  };
+
+  const renderCourseCard = (c: Course) => {
+    const isEnrolled = enrolledCourseIds.includes(c.id);
+    return (
+      <div 
+        key={c.id} 
+        className="border border-brand-light-active bg-white rounded-3xl overflow-hidden flex flex-col justify-between hover-glow-card transition-all duration-300 text-left"
+      >
+        <div className="relative">
+          <img src={c.image} alt="Course banner" className="w-full h-40 object-cover cursor-pointer" onClick={() => setViewedCourse(c)} />
+          <button 
+            onClick={() => handleToggleFavorite(c.id)}
+            className="absolute top-2 right-2 bg-white/95 p-2 rounded-full hover:bg-white text-deep-indigo scale-100 active:scale-95 transition-all shadow-md z-10"
+            title="Yêu thích"
+          >
+            <Heart className={`w-4 h-4 ${favorites.includes(c.id) ? 'fill-deep-indigo text-deep-indigo' : 'text-gray-400'}`} />
+          </button>
+          
+          <div className="absolute bottom-2 left-2 flex gap-1 pointer-events-none">
+            {c.isBestseller && (
+              <span className="text-[8px] bg-yellow-500 text-brand-light px-2 py-0.5 rounded-md font-bold uppercase tracking-wider shadow-sm">Bán chạy</span>
+            )}
+            {c.isNew && (
+              <span className="text-[8px] bg-blue-600 text-brand-light px-2 py-0.5 rounded-md font-bold uppercase tracking-wider shadow-sm">Mới nhất</span>
+            )}
+          </div>
+        </div>
+
+        <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
+          <div>
+            <span className="text-[10px] text-gray-500 block uppercase font-mono tracking-wider font-semibold">{c.subcategory}</span>
+            <h4 className="text-[14px] font-bold text-main-darker leading-snug line-clamp-2 hover:text-brand-normal cursor-pointer mt-1" onClick={() => setViewedCourse(c)}>
+              {c.title}
+            </h4>
+            <p 
+              className="text-[11px] text-stone-500 mt-1 italic cursor-pointer hover:text-brand-normal hover:underline"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigateTo(`instructor-profile?id=${c.instructorId || c.instructor?.id || ''}`);
+              }}
+            >
+              Giảng viên: {c.instructorName}
+            </p>
+            
+            <div className="flex items-center gap-1 text-[11px] text-yellow-500 mt-1.5 font-bold">
+              <span>{c.rating}</span>
+              <span>★</span>
+              <span className="text-gray-400 font-normal text-[10px]">({c.reviewCount})</span>
+            </div>
+          </div>
+
+          <div className="border-t border-stone-100 pt-3 flex items-center justify-between mt-3">
+            <div>
+              {c.salePrice ? (
+                <div className="flex flex-col">
+                  <span className="text-[13px] font-bold text-brand-dark">{formatVND(c.salePrice)}</span>
+                  <span className="text-[10px] text-stone-400 line-through">{formatVND(c.price)}</span>
+                </div>
+              ) : (
+                <span className="text-[13px] font-bold text-brand-dark">{formatVND(c.price)}</span>
+              )}
+            </div>
+
+            <div className="flex gap-1.5 flex-nowrap">
+              <button 
+                onClick={() => setViewedCourse(c)}
+                className="bg-[#f5ece3] hover:bg-[#dbcdc3] text-brand-dark text-[10px] font-bold py-2.5 px-4.5 rounded-xl transition-all cursor-pointer whitespace-nowrap"
+              >
+                Chi tiết
+              </button>
+              {isEnrolled ? (
+                <button 
+                  onClick={() => setStudyingCourse(c)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-2.5 px-4.5 rounded-xl transition-all whitespace-nowrap"
+                >
+                  Đang học
+                </button>
+              ) : (
+                <button 
+                  onClick={() => handleBuyCourseNow(c.id)}
+                  className="bg-deep-indigo hover:bg-deep-indigo/95 text-white text-[10px] font-bold py-2.5 px-5 rounded-xl transition-all flex items-center justify-center cursor-pointer whitespace-nowrap"
+                >
+                  Mua Ngay
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -1884,12 +2020,6 @@ export default function App() {
               onChange={(e) => {
                 setSearchQuery(e.target.value);
                 setShowMainSuggestions(true);
-                if (e.target.value.length > 0) {
-                  const el = document.getElementById('available-courses-section') || document.getElementById('courses-explorer');
-                  if (el) {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }
-                }
               }}
               className="w-full text-[11px] sm:text-xs pl-8 sm:pl-9 pr-7 py-1.5 bg-stone-50 hover:bg-stone-50/70 border border-brand-light-active rounded-xl focus:bg-white focus:ring-1 focus:ring-deep-indigo focus:border-deep-indigo focus:outline-none transition-all"
             />
@@ -2428,17 +2558,50 @@ export default function App() {
                   </span>
                 )}
               </button>
+
+              <button 
+                onClick={() => navigateTo('about')}
+                aria-label="Giới thiệu"
+                className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  activeTab === 'about' 
+                    ? 'bg-deep-indigo text-white border-deep-indigo shadow-3xs scale-102 font-black' 
+                    : 'bg-white hover:bg-stone-50 text-stone-650 border-stone-200'
+                }`}
+                title="Giới thiệu"
+              >
+                <Users className={`w-4 h-4 ${activeTab === 'about' ? 'text-white' : 'text-emerald-500'}`} />
+                <span className="hidden lg:inline">Giới thiệu</span>
+              </button>
+
+              <button 
+                onClick={() => navigateTo('contact')}
+                aria-label="Liên hệ"
+                className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  activeTab === 'contact' 
+                    ? 'bg-deep-indigo text-white border-deep-indigo shadow-3xs scale-102 font-black' 
+                    : 'bg-white hover:bg-stone-50 text-stone-650 border-stone-200'
+                }`}
+                title="Liên hệ"
+              >
+                <MessageSquare className={`w-4 h-4 ${activeTab === 'contact' ? 'text-white' : 'text-emerald-500'}`} />
+                <span className="hidden lg:inline">Liên hệ</span>
+              </button>
             </>
           )}
 
-          {/* Help Center icon button trigger */}
+          {/* Mindhub FAQ icon button trigger */}
           <button 
-            onClick={() => navigateTo('legal')}
-            aria-label="Trung tâm trợ giúp và FAQ"
-            className="p-2 rounded-xl bg-white hover:bg-stone-50 text-stone-750 border border-stone-200 hover:text-[#8b5e3c] relative flex items-center justify-center cursor-pointer transition-all"
-            title="Trung tâm Trợ giúp, FAQ và Tài liệu chính sách"
+            onClick={() => navigateTo('faq')}
+            aria-label="Mindhub FAQ"
+            className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+              activeTab === 'faq' 
+                ? 'bg-[#8b5e3c] text-white border-[#8b5e3c] shadow-3xs scale-102 font-black' 
+                : 'bg-white hover:bg-stone-50 text-stone-750 border-stone-200 hover:text-[#8b5e3c]'
+            }`}
+            title="Trung tâm Trợ giúp và FAQ"
           >
-            <HelpCircle className="w-4.5 h-4.5" />
+            <HelpCircle className={`w-4 h-4 ${activeTab === 'faq' ? 'text-white' : ''}`} />
+            <span className="hidden lg:inline">Mindhub FAQ</span>
           </button>
 
           {/* Notifications tray badge button toggle - Navigate to dedicated notifications page */}
@@ -3558,6 +3721,14 @@ export default function App() {
                     </div>
                   )}
 
+                  {/* Course Q&A Section */}
+                  <CourseQA 
+                    courseId={viewedCourse.id} 
+                    currentUser={currentUser} 
+                    isEnrolled={enrolledCourseIds.includes(viewedCourse.id)} 
+                    onLoginRequest={() => { setAuthMode('login'); navigateTo('auth'); }}
+                  />
+
                   {/* Course Reviews */}
                   <div className="space-y-4 text-left">
                     <h4 className="font-bold text-sm flex items-center gap-1.5 text-[#432c28]">
@@ -3875,7 +4046,16 @@ export default function App() {
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b border-mist pb-4 text-left">
                     <div>
                       <h3 className="text-xl md:text-2xl font-extrabold text-deep-ink flex items-center gap-2">
-                        <Compass className="w-6 h-6 text-deep-indigo" /> Danh Sách Khóa Học
+                        <Compass className="w-6 h-6 text-deep-indigo" /> {(() => {
+                          if (searchQuery) return `Kết quả tìm kiếm cho "${searchQuery}"`;
+                          if (selectedSubcategory !== 'All') return `Khóa học ${selectedSubcategory}`;
+                          if (selectedCategory !== 'All') return `Khóa học ${selectedCategory}`;
+                          if (coursePurchaseFilter === 'purchased') return 'Khóa học đã tham gia';
+                          if (coursePurchaseFilter === 'unpurchased') return 'Khóa học chưa tham gia';
+                          if (sortBy === 'rating') return 'Khóa học được đánh giá cao nhất';
+                          if (sortBy === 'bestseller') return 'Khóa học được học nhiều nhất';
+                          return 'Danh Sách Khóa Học';
+                        })()}
                       </h3>
                       <p className="text-stone-500 text-xs">
                         Khám phá các khóa học tinh hoa chắt lọc được thiết kế chuyên biệt cho mọi học viên.
@@ -3997,17 +4177,20 @@ export default function App() {
                     {/* Tier 1: Parent Categories */}
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider select-none shrink-0 mr-1">Danh mục chính:</span>
-                      <div className="flex flex-wrap gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                        {categoriesList.map((cat) => (
+                      <div className="flex flex-wrap gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-h-[100px] overflow-y-auto">
+                        {[{name: 'All', count: categoriesWithCount.reduce((s, c) => s + c.count, 0)}, ...categoriesWithCount].map((cat) => (
                           <button 
-                            key={cat}
+                            key={cat.name}
                             onClick={() => {
-                              setSelectedCategory(cat);
+                              setSelectedCategory(cat.name);
                               setSelectedSubcategory('All');
                             }}
-                            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${selectedCategory === cat ? 'bg-deep-indigo text-white shadow-xs scale-102 font-bold' : 'bg-stone-100 hover:bg-stone-200 text-stone-600'}`}
+                            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${selectedCategory === cat.name ? 'bg-deep-indigo text-white shadow-xs scale-102 font-bold' : 'bg-stone-100 hover:bg-stone-200 text-stone-600'}`}
                           >
-                            {cat === 'All' ? 'Tất cả phần' : cat}
+                            <span>{cat.name === 'All' ? 'Tất cả phần' : cat.name}</span>
+                            <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${selectedCategory === cat.name ? 'bg-white/20 text-white' : 'bg-stone-200 text-stone-500'}`}>
+                              {cat.count}
+                            </span>
                           </button>
                         ))}
                       </div>
@@ -4080,88 +4263,7 @@ export default function App() {
                 ) : (
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                      {paginatedCourses.map((c) => {
-                        const isEnrolled = enrolledCourseIds.includes(c.id);
-                        return (
-                          <div 
-                            key={c.id} 
-                            className="border border-brand-light-active bg-white rounded-3xl overflow-hidden flex flex-col justify-between hover-glow-card transition-all duration-300 text-left"
-                          >
-                            <div className="relative">
-                              <img src={c.image} alt="Course banner" className="w-full h-40 object-cover" />
-                              <button 
-                                onClick={() => handleToggleFavorite(c.id)}
-                                className="absolute top-2 right-2 bg-white/95 p-2 rounded-full hover:bg-white text-deep-indigo scale-100 active:scale-95 transition-all shadow-md z-10"
-                                title="Yêu thích"
-                              >
-                                <Heart className={`w-4 h-4 ${favorites.includes(c.id) ? 'fill-deep-indigo text-deep-indigo' : 'text-gray-400'}`} />
-                              </button>
-                              
-                              <div className="absolute bottom-2 left-2 flex gap-1">
-                                {c.isBestseller && (
-                                  <span className="text-[8px] bg-yellow-500 text-brand-light px-2 py-0.5 rounded-md font-bold uppercase tracking-wider shadow-sm">Bán chạy</span>
-                                )}
-                                {c.isNew && (
-                                  <span className="text-[8px] bg-blue-600 text-brand-light px-2 py-0.5 rounded-md font-bold uppercase tracking-wider shadow-sm">Mới nhất</span>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
-                              <div>
-                                <span className="text-[10px] text-gray-500 block uppercase font-mono tracking-wider font-semibold">{c.subcategory}</span>
-                                <h4 className="text-[14px] font-bold text-main-darker leading-snug line-clamp-2 hover:text-brand-normal cursor-pointer mt-1" onClick={() => setViewedCourse(c)}>
-                                  {c.title}
-                                </h4>
-                                <p className="text-[11px] text-stone-500 mt-1 italic">Giảng viên: {c.instructorName}</p>
-                                
-                                <div className="flex items-center gap-1 text-[11px] text-yellow-500 mt-1.5 font-bold">
-                                  <span>{c.rating}</span>
-                                  <span>★</span>
-                                  <span className="text-gray-400 font-normal text-[10px]">({c.reviewCount})</span>
-                                </div>
-                              </div>
-
-                              <div className="border-t border-stone-100 pt-3 flex items-center justify-between mt-3">
-                                <div>
-                                  {c.salePrice ? (
-                                    <div className="flex flex-col">
-                                      <span className="text-[13px] font-bold text-brand-dark">{formatVND(c.salePrice)}</span>
-                                      <span className="text-[10px] text-stone-400 line-through">{formatVND(c.price)}</span>
-                                    </div>
-                                  ) : (
-                                    <span className="text-[13px] font-bold text-brand-dark">{formatVND(c.price)}</span>
-                                  )}
-                                </div>
-
-                                <div className="flex gap-1.5 flex-nowrap">
-                                  <button 
-                                    onClick={() => setViewedCourse(c)}
-                                    className="bg-[#f5ece3] hover:bg-[#dbcdc3] text-brand-dark text-[10px] font-bold py-2.5 px-4.5 rounded-xl transition-all cursor-pointer whitespace-nowrap"
-                                  >
-                                    Chi tiết
-                                  </button>
-                                  {isEnrolled ? (
-                                    <button 
-                                      onClick={() => setStudyingCourse(c)}
-                                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-2.5 px-4.5 rounded-xl transition-all whitespace-nowrap"
-                                    >
-                                      Đang học
-                                    </button>
-                                  ) : (
-                                    <button 
-                                      onClick={() => handleBuyCourseNow(c.id)}
-                                      className="bg-deep-indigo hover:bg-deep-indigo/95 text-white text-[10px] font-bold py-2.5 px-5 rounded-xl transition-all flex items-center justify-center cursor-pointer whitespace-nowrap"
-                                    >
-                                      Mua Ngay
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {paginatedCourses.map((c) => renderCourseCard(c))}
                     </div>
 
                     {/* Elegant Pagination controls */}
@@ -4227,9 +4329,47 @@ export default function App() {
                 </div>
               </div>
             </ScrollReveal>
+            {/* FEATURED COURSES SECTION */}
+            {featuredCourses && featuredCourses.length > 0 && (
+              <ScrollReveal delayMs={120}>
+                <div className="bg-white border border-mist p-5 rounded-3xl space-y-4 shadow-xs mt-6">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b border-mist pb-4 text-left">
+                    <div>
+                      <h3 className="text-xl md:text-2xl font-extrabold text-deep-ink flex items-center gap-2">
+                        <Star className="w-6 h-6 text-yellow-500 fill-yellow-500" /> Khóa Học Nổi Bật
+                      </h3>
+                      <p className="text-stone-500 text-xs">
+                        Các khóa học được đội ngũ chuyên gia của MindHub đánh giá cao và đề xuất cho bạn.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {featuredCourses.map((c) => renderCourseCard(c))}
+                  </div>
+                </div>
+              </ScrollReveal>
+            )}
 
-
-
+            {/* BESTSELLER COURSES SECTION */}
+            {bestsellerCourses && bestsellerCourses.length > 0 && (
+              <ScrollReveal delayMs={140}>
+                <div className="bg-[#fdfbf7] border border-brand-light-active p-5 rounded-3xl space-y-4 shadow-xs mt-6">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b border-brand-light-active pb-4 text-left">
+                    <div>
+                      <h3 className="text-xl md:text-2xl font-extrabold text-brand-dark flex items-center gap-2">
+                        <TrendingUp className="w-6 h-6 text-brand-normal" /> Khóa Học Bán Chạy Nhất
+                      </h3>
+                      <p className="text-stone-500 text-xs">
+                        Tham gia cùng hàng ngàn học viên khác trong các khóa học thịnh hành nhất của chúng tôi.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {bestsellerCourses.map((c) => renderCourseCard(c))}
+                  </div>
+                </div>
+              </ScrollReveal>
+            )}
             {/* SECTION 2: TOP KHÓA HỌC ĐƯỢC YÊU THÍCH NHẤT */}
             <ScrollReveal delayMs={150}>
               <div className="bg-[#fcfcfc] border border-stone-150 rounded-3xl p-5 md:p-6 space-y-4 shadow-3xs">
@@ -5283,6 +5423,103 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {/* SECTION 4: KHÓA HỌC ĐÃ HOÀN THÀNH VÀ LỊCH SỬ HỌC (Dashboard Sinh Viên) */}
+            {currentUser && currentUser.role === 'student' && (
+              <div className="mt-8 space-y-8">
+                {/* Completed Courses */}
+                <ScrollReveal delayMs={200}>
+                  <div className="bg-white border border-stone-200 rounded-3xl p-5 md:p-6 shadow-3xs">
+                    <h3 className="text-base md:text-lg font-extrabold flex items-center gap-2 text-[#432c28] border-b border-stone-100 pb-3 mb-4">
+                      <Award className="w-5 h-5 text-amber-500" /> Khóa học đã hoàn thành
+                    </h3>
+                    {completedCoursesList.length === 0 ? (
+                      <div className="text-center py-6">
+                        <p className="text-stone-500 text-sm">Bạn chưa hoàn thành khóa học nào.</p>
+                        <button onClick={() => {
+                          const el = document.getElementById('available-courses-section');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        }} className="mt-3 text-[#8b5e3c] font-bold text-xs hover:underline cursor-pointer">
+                          Khám phá và tiếp tục học tập!
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {completedCoursesList.slice(0, 3).map((enrollment: any) => (
+                          <div key={enrollment.id} className="border border-stone-200 rounded-2xl p-3 flex gap-3 hover:border-[#8b5e3c] transition-colors bg-stone-50/50">
+                            <div className="w-20 h-20 rounded-xl overflow-hidden bg-stone-200 shrink-0 relative">
+                              {enrollment.course?.image ? (
+                                <img src={enrollment.course.image} className="w-full h-full object-cover" alt="" />
+                              ) : (
+                                <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600"></div>
+                              )}
+                              <div className="absolute top-1 right-1 bg-white/90 p-0.5 rounded-full shadow-sm">
+                                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                              </div>
+                            </div>
+                            <div className="flex flex-col justify-between py-1">
+                              <div>
+                                <h4 className="font-bold text-stone-800 text-xs line-clamp-2">{enrollment.course?.title}</h4>
+                                <span className="text-[10px] text-stone-500">{enrollment.course?.instructor?.name || 'Giảng viên'}</span>
+                              </div>
+                              <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md inline-block w-max">
+                                Đã hoàn thành
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </ScrollReveal>
+
+                {/* Learning History */}
+                <ScrollReveal delayMs={250}>
+                  <div className="bg-white border border-stone-200 rounded-3xl p-5 md:p-6 shadow-3xs">
+                    <div className="flex justify-between items-center border-b border-stone-100 pb-3 mb-4">
+                      <h3 className="text-base md:text-lg font-extrabold flex items-center gap-2 text-[#432c28]">
+                        <Clock className="w-5 h-5 text-indigo-500" /> Lịch sử học tập
+                      </h3>
+                      {learningHistory.length > 5 && (
+                        <button onClick={() => navigateTo('profile')} className="text-xs text-[#8b5e3c] font-bold hover:underline cursor-pointer">
+                          Xem tất cả »
+                        </button>
+                      )}
+                    </div>
+                    
+                    {learningHistory.length === 0 ? (
+                      <div className="text-center py-6">
+                        <p className="text-stone-500 text-sm">Chưa có hoạt động nào được ghi nhận.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {learningHistory.slice(0, 5).map((activity: any) => (
+                          <div key={activity.id} className="flex gap-3">
+                            <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
+                              {activity.activityType === 'course_completed' ? <Award className="w-4 h-4" /> : 
+                               activity.activityType === 'lesson_completed' ? <CheckCircle className="w-4 h-4" /> : 
+                               <PlayCircle className="w-4 h-4" />}
+                            </div>
+                            <div>
+                              <p className="text-sm text-stone-800">
+                                {activity.activityType === 'course_completed' ? 'Hoàn thành khóa học' : 
+                                 activity.activityType === 'lesson_completed' ? 'Hoàn thành bài học' : 'Bắt đầu học'} 
+                                <span className="font-bold"> {activity.course?.title}</span>
+                              </p>
+                              <span className="text-xs text-stone-500">
+                                {new Date(activity.createdAt).toLocaleDateString('vi-VN', {
+                                  hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric'
+                                })}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </ScrollReveal>
+              </div>
+            )}
           </>
         )}
 
@@ -5371,18 +5608,21 @@ export default function App() {
                 {/* Parent Category */}
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider select-none shrink-0 mr-1">Danh mục cha:</span>
-                  <div className="flex flex-wrap gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                    {categoriesList.map((cat) => (
+                  <div className="flex flex-wrap gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-h-[100px] overflow-y-auto">
+                    {[{name: 'All', count: categoriesWithCount.reduce((s, c) => s + c.count, 0)}, ...categoriesWithCount].map((cat) => (
                       <button 
-                        key={cat}
+                        key={cat.name}
                         onClick={() => {
-                          setMyCoursesParentCat(cat);
+                          setMyCoursesParentCat(cat.name);
                           setMyCoursesChildCat('All');
                           setMyCoursesPage(1);
                         }}
-                        className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${myCoursesParentCat === cat ? 'bg-deep-indigo text-white shadow-xs scale-102 font-bold' : 'bg-stone-100 hover:bg-stone-200 text-stone-600'}`}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${myCoursesParentCat === cat.name ? 'bg-deep-indigo text-white shadow-xs scale-102 font-bold' : 'bg-stone-100 hover:bg-stone-200 text-stone-600'}`}
                       >
-                        {cat === 'All' ? 'Tất cả danh mục' : cat}
+                        <span>{cat.name === 'All' ? 'Tất cả danh mục' : cat.name}</span>
+                        <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${myCoursesParentCat === cat.name ? 'bg-white/20 text-white' : 'bg-stone-200 text-stone-500'}`}>
+                          {cat.count}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -5924,6 +6164,18 @@ export default function App() {
           </div>
         )}
 
+        {/* --- CONTACT & ABOUT PAGES --- */}
+        {activeTab === 'contact' && <ContactPage />}
+        {activeTab === 'about' && <AboutPage />}
+        {activeTab === 'instructor-profile' && (
+          <InstructorProfile
+            instructorId={viewedInstructorId}
+            onBack={() => navigateTo('home')}
+            onViewCourse={(c) => setViewedCourse(c)}
+            renderCourseCard={renderCourseCard}
+          />
+        )}
+
         {/* --- 3. DEDICATED PROFILE PAGE --- */}
         {activeTab === 'profile' && (
           <ProfilePage currentUser={currentUser} setCurrentUser={setCurrentUser} navigateTo={navigateTo} />
@@ -5971,9 +6223,9 @@ export default function App() {
         )}
 
         {/* --- 6. FOOTER LEGAL --- */}
-        {activeTab === 'legal' && (
+        {(activeTab === 'legal' || activeTab === 'faq') && (
           <FooterLegal 
-            initialTab={'terms'}
+            initialTab={activeTab === 'faq' ? 'faq' : 'terms'}
             onClose={() => navigateTo('home')}
           />
         )}
@@ -6016,20 +6268,20 @@ export default function App() {
             <div className="flex items-center gap-2.5 text-white">
               <span className="font-suisseintl font-black text-xl tracking-tighter text-white footer-section-title">MindHub</span>
             </div>
-            <p className="text-stone-300 leading-relaxed text-xs font-normal">
+            <p className="text-white/80 leading-relaxed text-xs font-normal">
               Hệ thống đào tạo trực tuyến thông minh kiến tạo tri thức từ việc rèn luyện thực tế kết hợp trợ lý AI Mentor đồng hành.
             </p>
-            <p className="text-[11px] font-bold text-[#8b5e3c] italic">
+            <p className="text-[11px] font-bold text-white italic">
               "Thắp sáng ngọn lửa tri thức Việt"
             </p>
           </div>
 
           {/* Column 2: Khám phá */}
           <div className="space-y-3">
-            <span className="font-bold text-white footer-section-title uppercase text-[11px] tracking-wider block border-b border-stone-800 pb-1.5">
+            <span className="font-bold text-white footer-section-title uppercase text-[11px] tracking-wider block border-b border-white/20 pb-1.5">
               Khám Phá
             </span>
-            <div className="space-y-2 text-stone-300 font-medium">
+            <div className="space-y-2 text-white/80 font-medium">
               <button onClick={() => navigateTo('home')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">Khóa học hiện có</button>
               <button onClick={() => navigateTo('home')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">Danh mục khóa học</button>
               <button onClick={() => navigateTo('home')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">Khóa học nổi bật</button>
@@ -6039,10 +6291,10 @@ export default function App() {
 
           {/* Column 3: Hỗ trợ (Từ FAQ & Popup '?') */}
           <div className="space-y-3">
-            <span className="font-bold text-white footer-section-title uppercase text-[11px] tracking-wider block border-b border-stone-800 pb-1.5">
+            <span className="font-bold text-white footer-section-title uppercase text-[11px] tracking-wider block border-b border-white/20 pb-1.5">
               Hỗ Trợ & Chính Sách
             </span>
-            <div className="space-y-2 text-stone-300 font-medium">
+            <div className="space-y-2 text-white/80 font-medium">
               <button onClick={() => navigateTo('legal')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">Câu hỏi thường gặp (FAQ)</button>
               <button onClick={() => navigateTo('legal')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">Hướng dẫn học & Điều khoản</button>
               <button onClick={() => navigateTo('legal')} className="block hover:text-white text-left transition-colors cursor-pointer border-none bg-transparent p-0">Hướng dẫn thanh toán</button>
@@ -6054,42 +6306,42 @@ export default function App() {
 
           {/* Column 4: Liên hệ / thông tin hệ thống */}
           <div className="space-y-3">
-            <span className="font-bold text-white footer-section-title uppercase text-[11px] tracking-wider block border-b border-stone-800 pb-1.5">
+            <span className="font-bold text-white footer-section-title uppercase text-[11px] tracking-wider block border-b border-white/20 pb-1.5">
               Liên Hệ Hệ Thống
             </span>
-            <div className="space-y-2 text-stone-300 font-medium leading-relaxed">
+            <div className="space-y-2 text-white/80 font-medium leading-relaxed">
               <p className="flex items-center gap-2">
-                <span className="text-[#8b5e3c] font-bold">Email:</span> help@mindhub.edu.vn
+                <span className="text-white font-bold">Email:</span> help@mindhub.edu.vn
               </p>
               <p className="flex items-center gap-2">
-                <span className="text-[#8b5e3c] font-bold">Hotline:</span> 1900 6868 (24/7)
+                <span className="text-white font-bold">Hotline:</span> 1900 6868 (24/7)
               </p>
               <p className="flex items-start gap-2">
-                <span className="text-[#8b5e3c] font-bold shrink-0">Địa chỉ:</span> Tòa nhà Tri Thức MindHub, Khu Công Nghệ Cao, Quận 9, TP. Hồ Chí Minh
+                <span className="text-white font-bold shrink-0">Địa chỉ:</span> Tòa nhà Tri Thức MindHub, Khu Công Nghệ Cao, Quận 9, TP. Hồ Chí Minh
               </p>
-              <div className="pt-2 border-t border-stone-800 flex items-center gap-3 text-[#8b5e3c]">
-                <span className="font-bold text-[10px] uppercase">Mạng xã hội:</span>
-                <a href="#" className="hover:text-white transition-colors">Facebook</a>
-                <span>•</span>
-                <a href="#" className="hover:text-white transition-colors">YouTube</a>
-                <span>•</span>
-                <a href="#" className="hover:text-white transition-colors">LinkedIn</a>
+              <div className="pt-2 border-t border-white/20 flex items-center gap-3 text-white">
+                <span className="font-bold text-[10px] uppercase text-white/90">Mạng xã hội:</span>
+                <a href="#" className="hover:text-white text-white/80 transition-colors">Facebook</a>
+                <span className="text-white/50">•</span>
+                <a href="#" className="hover:text-white text-white/80 transition-colors">YouTube</a>
+                <span className="text-white/50">•</span>
+                <a href="#" className="hover:text-white text-white/80 transition-colors">LinkedIn</a>
               </div>
             </div>
           </div>
 
         </div>
 
-        <div className="max-w-7xl mx-auto border-t border-stone-800 mt-10 pt-6 flex flex-col sm:flex-row justify-between items-center text-[11px] text-stone-400 gap-4">
+        <div className="max-w-7xl mx-auto border-t border-white/20 mt-10 pt-6 flex flex-col sm:flex-row justify-between items-center text-[11px] text-white/60 gap-4">
           <div className="space-y-1 text-center sm:text-left">
-            <p className="font-bold text-stone-300">Công ty Cổ phần Công nghệ Giáo Dục Quốc Tế MindHub Việt Nam.</p>
+            <p className="font-bold text-white/80">Công ty Cổ phần Công nghệ Giáo Dục Quốc Tế MindHub Việt Nam.</p>
             <p>MindHub e-learning platform © 2026. Bảo lưu mọi bản quyền.</p>
           </div>
           <div className="flex gap-3 items-center">
-            <span className="text-[10px] bg-white/10 text-white p-1.5 px-3 rounded-lg block text-center font-bold tracking-wider">
+            <span className="text-[10px] bg-white/20 text-white p-1.5 px-3 rounded-lg block text-center font-bold tracking-wider border border-white/30">
               XÁC THỰC BOUTIQUE SSL
             </span>
-            <button onClick={() => alert('Xác thực chứng chỉ MindHub bằng mã hóa block chuỗi an toàn')} className="hover:underline text-stone-300 bg-transparent border-none cursor-pointer p-0">
+            <button onClick={() => alert('Xác thực chứng chỉ MindHub bằng mã hóa block chuỗi an toàn')} className="hover:underline text-white/80 hover:text-white bg-transparent border-none cursor-pointer p-0 font-medium">
               Xác thực chứng chỉ
             </button>
           </div>

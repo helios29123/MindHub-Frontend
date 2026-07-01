@@ -5,7 +5,7 @@ import {
   ShoppingBag, AlertTriangle, AlertCircle, XCircle, 
   FolderTree, Edit2, Key, BookOpen, Search, Check, Layers, ShieldCheck, Filter, Image,
   Award, TrendingUp, GraduationCap, Star, Activity,
-  MessageSquare, Compass, Eye, ShieldAlert, Clock, Info
+  MessageSquare, Compass, Eye, ShieldAlert, Clock, Info, UserPlus
 } from 'lucide-react';
 import { Course, User, PayoutRequest, AuditLog, AccountRequest, Order, Role, Banner, Notification, Coupon, FlaggedItem } from '../types';
 import { safeLocalStorage as localStorage } from '../utils/safeStorage';
@@ -694,7 +694,7 @@ export default function AdminDashboard({
   const [activeTab, setActiveTab] = useState<
     'general_admin' | 'courses_management' | 'categories_management' | 
     'users_management' | 'role_permissions' | 'payouts_requests' | 
-    'orders_management' | 'marketing_notifications' | 'banners_management' | 'account_requests' | 'audits_logs' |
+    'orders_management' | 'marketing_notifications' | 'banners_management' | 'account_requests' | 'instructor_requests' | 'audits_logs' |
     'moderator_controls' | 'api_config'
   >('general_admin');
 
@@ -702,6 +702,34 @@ export default function AdminDashboard({
   const [apiModeState, setApiModeState] = useState<'mock' | 'api'>(() => ApiService.getConfig().mode);
   const [apiBaseUrlState, setApiBaseUrlState] = useState<string>(() => ApiService.getConfig().baseUrl);
   const [virtualLogs, setVirtualLogs] = useState<any[]>([]);
+
+  // Instructor Requests
+  const [instructorRequests, setInstructorRequests] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (activeTab === 'instructor_requests') {
+      const fetchInstructorRequests = async () => {
+        try {
+          const data = await ApiService.getInstructorRequests();
+          setInstructorRequests(data);
+        } catch (err) {
+          console.error('Error fetching instructor requests:', err);
+        }
+      };
+      fetchInstructorRequests();
+    }
+  }, [activeTab]);
+
+  const handleResolveInstructorRequest = async (id: string, action: 'approve' | 'reject', reason?: string) => {
+    try {
+      const res = await ApiService.resolveInstructorRequest({ requestId: id, action, rejectionReason: reason });
+      if (res.success) {
+         setInstructorRequests(prev => prev.map(r => r.id === id ? { ...r, status: action === 'approve' ? 'approved' : 'rejected', rejectionReason: reason } : r));
+      }
+    } catch(err) {
+      console.error(err);
+    }
+  };
   const [testResult, setTestResult] = useState<{
     status: 'idle' | 'testing' | 'success' | 'failed';
     message: string;
@@ -867,7 +895,8 @@ export default function AdminDashboard({
   
   // User creation/editing sub-form
   const [showUserModal, setShowUserModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [lockingInstructor, setLockingInstructor] = useState<User | null>(null);
+  const [lockingCourseAction, setLockingCourseAction] = useState<'hide' | 'pending' | 'archive' | 'none'>('hide');
   const [userForm, setUserForm] = useState({
     name: '', email: '', avatar: '', role: 'student' as Role, phone: '', bio: '', streak: 0
   });
@@ -1402,13 +1431,47 @@ export default function AdminDashboard({
     alert(`✓ Phát sóng thông báo và kích hoạt bảng hiển thị thông tin thành công!`);
   };
 
+  const executeBlockUser = async (userId: string, courseAction?: string) => {
+    const isBanned = bannedUserIds.includes(userId);
+    try {
+      if (!isBanned) {
+        await ApiService.toggleUserLockAdmin(userId, true);
+        if (courseAction && courseAction !== 'none') {
+          const coursesData = await ApiService.getInstructorCoursesByAdmin(userId);
+          if (coursesData.success) {
+            await Promise.all(coursesData.courses.map((c: any) => 
+               ApiService.updateCourseStatusAdmin(c.id, courseAction as any)
+            ));
+            alert('Đã cập nhật trạng thái các khóa học của giảng viên!');
+          }
+        }
+      } else {
+        await ApiService.toggleUserLockAdmin(userId, false);
+      }
+      
+      setBannedUserIds(prev => {
+        const res = isBanned ? prev.filter(id => id !== userId) : [...prev, userId];
+        alert(isBanned ? '✓ Đăng nhập tài khoản đã được phục hồi hoạt động bình thường!' : '⚠️ Tài khoản đã tạm ngừng đăng nhập hệ thống.');
+        return res;
+      });
+      setLockingInstructor(null);
+    } catch (e) {
+      console.error(e);
+      alert('Có lỗi xảy ra khi gọi API.');
+    }
+  };
+
   const handleToggleBlockUser = (userId: string) => {
-    setBannedUserIds(prev => {
-      const isBanned = prev.includes(userId);
-      const res = isBanned ? prev.filter(id => id !== userId) : [...prev, userId];
-      alert(isBanned ? '✓ Đăng nhập tài khoản đã được phục hồi hoạt động bình thường!' : '⚠️ Tài khoản đã tạm ngừng đăng nhập hệ thống.');
-      return res;
-    });
+    const usr = usersList.find(u => u.id === userId);
+    const isBanned = bannedUserIds.includes(userId);
+    
+    if (!isBanned && usr && usr.role === 'instructor') {
+      setLockingInstructor(usr);
+      setLockingCourseAction('hide');
+      return;
+    }
+    
+    executeBlockUser(userId);
   };
 
   const handleSaveUser = (e: React.FormEvent) => {
@@ -1721,6 +1784,19 @@ export default function AdminDashboard({
               <span className="bg-red-100 text-red-800 text-[9px] font-bold px-1.5 py-0.5 rounded-full">
                 {accountRequests.filter(r => r.status === 'pending').length}
               </span>
+            </button>
+            <button 
+              onClick={() => setActiveTab('instructor_requests')}
+              className={`w-full text-left px-3 py-2 text-[11.5px] font-bold rounded-lg flex items-center justify-between ${activeTab === 'instructor_requests' ? 'bg-stone-900 text-white shadow-3xs' : 'hover:bg-brand-light-hover'}`}
+            >
+              <div className="flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-stone-700" /> Yêu cầu Giảng viên
+              </div>
+              {instructorRequests.filter(r => r.status === 'pending').length > 0 && (
+                <span className="bg-amber-100 text-amber-800 text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                  {instructorRequests.filter(r => r.status === 'pending').length}
+                </span>
+              )}
             </button>
             <button 
               onClick={() => setActiveTab('audits_logs')}
@@ -4490,6 +4566,86 @@ export default function AdminDashboard({
           </div>
         )}
 
+          {/* TAB 10: AUDIT LOGS */}
+        {activeTab === 'instructor_requests' && (
+          <div className="space-y-4 animate-fade-in text-xs text-left">
+            <div className="border-b pb-3">
+              <h3 className="text-base font-display font-bold text-main-normal flex items-center gap-1.5">
+                <UserPlus className="w-5 h-5 text-amber-600" />
+                Yêu cầu liên quan đến Giảng viên
+              </h3>
+              <p className="text-stone-400 text-[11px]">
+                Xem xét và phê duyệt các yêu cầu đăng ký làm giảng viên hoặc ngừng giảng dạy.
+              </p>
+            </div>
+
+            {instructorRequests.length === 0 ? (
+              <div className="text-center py-12 border border-dashed rounded-2xl bg-slate-50">
+                <CheckCircle className="w-12 h-12 text-emerald-600 mx-auto mb-2" />
+                <p className="font-semibold text-xs text-main-normal">Chưa có yêu cầu nào.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {instructorRequests.map((req) => (
+                  <div key={req.id} className="border p-4 rounded-xl bg-white shadow-3xs flex flex-col gap-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-sm">{req.fullName} <span className="text-stone-500 font-normal text-xs">({req.email})</span></h4>
+                          {req.requestType === 'leave_instructor' && (
+                            <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-bold rounded-md">Xin ngừng giảng dạy</span>
+                          )}
+                        </div>
+                        {req.requestType !== 'leave_instructor' && (
+                          <>
+                            <p className="text-stone-500 text-xs mt-1">SĐT: {req.phone} • Kinh nghiệm: {req.experienceYears}</p>
+                            <p className="text-stone-500 text-xs">Lĩnh vực: <span className="font-semibold">{req.expertise}</span></p>
+                          </>
+                        )}
+                      </div>
+                      <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase ${
+                        req.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                        req.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {req.status === 'pending' ? 'Đang chờ' : req.status === 'approved' ? 'Đã duyệt' : 'Đã từ chối'}
+                      </span>
+                    </div>
+                    <div className="bg-stone-50 p-3 rounded-lg text-xs text-stone-700">
+                      {req.requestType === 'leave_instructor' ? (
+                        <>
+                          <p className="font-semibold mb-1 text-rose-700">Lý do ngừng giảng dạy:</p>
+                          <p className="italic">{req.reason}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-semibold mb-1">Giới thiệu:</p>
+                          <p className="italic">{req.bio}</p>
+                          {req.portfolioUrl && (
+                            <p className="mt-2"><span className="font-semibold">Portfolio:</span> <a href={req.portfolioUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline">{req.portfolioUrl}</a></p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {req.status === 'pending' && (
+                      <div className="flex justify-end gap-2 mt-2">
+                        <button 
+                          onClick={() => handleResolveInstructorRequest(req.id, 'reject', 'Không đủ điều kiện')}
+                          className="px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg font-semibold"
+                        >Từ chối</button>
+                        <button 
+                          onClick={() => handleResolveInstructorRequest(req.id, 'approve')}
+                          className="px-3 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg font-semibold"
+                        >Phê duyệt</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* TAB 10: AUDIT LOGS */}
         {activeTab === 'audits_logs' && (
           <div className="space-y-4 animate-fade-in text-xs text-left">
@@ -4792,6 +4948,102 @@ export default function AdminDashboard({
         )}
 
       </div>
+
+      {/* MODAL: KHÓA GIẢNG VIÊN VÀ XỬ LÝ KHÓA HỌC */}
+      {lockingInstructor && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl relative overflow-hidden animate-fade-in">
+            <button onClick={() => setLockingInstructor(null)} className="absolute top-4 right-4 text-stone-400 hover:text-stone-800">
+              <XCircle className="w-6 h-6" />
+            </button>
+            <h2 className="text-xl font-display font-bold text-main-normal flex items-center gap-2 mb-2">
+              <ShieldAlert className="w-6 h-6 text-red-600" />
+              Khóa tài khoản Giảng viên
+            </h2>
+            <p className="text-stone-500 text-sm mb-6">
+              Bạn đang thao tác khóa tài khoản giảng viên <span className="font-bold text-stone-800">{lockingInstructor.name}</span>. 
+              Vui lòng chọn hướng xử lý đối với các khóa học hiện tại do giảng viên này quản lý.
+            </p>
+
+            <div className="space-y-4 mb-6">
+              <label className="flex items-start gap-3 p-3 border rounded-xl cursor-pointer hover:bg-stone-50 transition-colors">
+                <input 
+                  type="radio" 
+                  name="courseAction" 
+                  value="hide"
+                  checked={lockingCourseAction === 'hide'}
+                  onChange={() => setLockingCourseAction('hide')}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="font-bold text-sm text-stone-800">Ẩn khóa học</div>
+                  <div className="text-xs text-stone-500">Gỡ khóa học khỏi hiển thị công cộng, nhưng học viên đã mua vẫn xem được nội dung.</div>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-3 border rounded-xl cursor-pointer hover:bg-stone-50 transition-colors">
+                <input 
+                  type="radio" 
+                  name="courseAction" 
+                  value="pending"
+                  checked={lockingCourseAction === 'pending'}
+                  onChange={() => setLockingCourseAction('pending')}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="font-bold text-sm text-stone-800">Chuyển sang trạng thái "Chờ duyệt"</div>
+                  <div className="text-xs text-stone-500">Khóa học sẽ cần được quản trị viên kiểm tra và phê duyệt lại trước khi xuất bản.</div>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-3 border rounded-xl cursor-pointer hover:bg-stone-50 transition-colors">
+                <input 
+                  type="radio" 
+                  name="courseAction" 
+                  value="archive"
+                  checked={lockingCourseAction === 'archive'}
+                  onChange={() => setLockingCourseAction('archive')}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="font-bold text-sm text-stone-800">Lưu trữ khóa học (Archive)</div>
+                  <div className="text-xs text-stone-500">Đóng vĩnh viễn khóa học. Học viên không thể đăng ký mới, nội dung bị đóng băng.</div>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-3 border rounded-xl cursor-pointer hover:bg-stone-50 transition-colors">
+                <input 
+                  type="radio" 
+                  name="courseAction" 
+                  value="none"
+                  checked={lockingCourseAction === 'none'}
+                  onChange={() => setLockingCourseAction('none')}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="font-bold text-sm text-stone-800">Giữ nguyên hiển thị khóa học</div>
+                  <div className="text-xs text-stone-500">Khóa học vẫn bán bình thường, không thay đổi trạng thái.</div>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t pt-4">
+              <button 
+                onClick={() => setLockingInstructor(null)} 
+                className="px-5 py-2.5 rounded-xl font-bold border hover:bg-stone-50"
+              >
+                Hủy bỏ
+              </button>
+              <button 
+                onClick={() => executeBlockUser(lockingInstructor.id, lockingCourseAction)} 
+                className="px-5 py-2.5 rounded-xl font-bold bg-red-600 text-white hover:bg-red-700 flex items-center gap-2"
+              >
+                Xác nhận khóa & Xử lý
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL 1: ADD / EDIT USER PROFILE (CONVERTED TO SUB-VIEW) */}
       {showUserModal && (

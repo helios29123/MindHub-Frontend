@@ -1,4 +1,4 @@
-import { Course, Chapter, Lesson, User, QAMessage, StudentProgress, PayoutRequest, AuditLog } from '../types';
+import { Course, Chapter, Lesson, User, QAMessage, StudentProgress, PayoutRequest, AuditLog, InstructorRequest } from '../types';
 import { safeLocalStorage as localStorage } from '../utils/safeStorage';
 
 /**
@@ -303,21 +303,37 @@ export const ApiService = {
   },
 
   /** POST /auth/verify-email/resend */
-  async resendVerificationEmail(): Promise<{ success: boolean; message: string }> {
-    devLog('Auth', 'Resend email verification notification mail');
-    if (config.mode === 'api') {
-      return apiFetch<{ success: boolean; message: string }>('/auth/verify-email/resend', { method: 'POST' });
+  async resendVerificationEmail(email: string, purpose: string = 'verify_email'): Promise<{ success: boolean; message: string }> {
+    devLog('Auth', 'Resend email verification notification mail', { email, purpose });
+    try {
+      const res = await fetch('http://localhost:3000/api/auth/email/send-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, purpose })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Lỗi gửi email xác minh');
+      return data;
+    } catch (err: any) {
+      throw new Error(err.message || 'Lỗi gửi email xác minh');
     }
-    return { success: true, message: 'Thư xác thực mới đã được gửi đi.' };
   },
 
-  /** GET /auth/verify-email/{id}/{hash} */
-  async verifyEmailLink(id: string, hash: string): Promise<{ success: boolean }> {
-    devLog('Auth', `Verify email with ID: ${id}, Hash: ${hash}`);
-    if (config.mode === 'api') {
-      return apiFetch<{ success: boolean }>(`/auth/verify-email/${id}/${hash}`);
+  /** POST /auth/email/verify */
+  async verifyEmailOtp(email: string, purpose: string, token: string): Promise<{ success: boolean, ticket?: string }> {
+    devLog('Auth', `Verify email with Token: ${token}`);
+    try {
+      const res = await fetch('http://localhost:3000/api/auth/email/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, purpose, token })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Lỗi xác minh email');
+      return data;
+    } catch (err: any) {
+      throw new Error(err.message || 'Lỗi xác minh email');
     }
-    return { success: true };
   },
 
   /** POST /auth/google */
@@ -356,6 +372,48 @@ export const ApiService = {
     return [];
   },
 
+  // Get category counts
+  async getCategoriesWithCount(): Promise<{name: string, count: number}[]> {
+    if (config.mode === 'api') {
+      try {
+        return await apiFetch<{name: string, count: number}[]>('/courses/categories');
+      } catch (e) {
+        console.warn('Failed to fetch categories', e);
+        return [];
+      }
+    }
+    // Mock fallback
+    return [
+      { name: 'Development', count: 12 },
+      { name: 'Design', count: 8 },
+      { name: 'Marketing', count: 5 },
+      { name: 'Artificial Intelligence', count: 10 },
+      { name: 'Data Science', count: 3 }
+    ];
+  },
+
+  async getUserEnrollments(userId: string): Promise<any[]> {
+    if (config.mode === 'api') {
+      try {
+        return await apiFetch<any[]>(`/users/${userId}/enrollments`);
+      } catch(e) {
+        return [];
+      }
+    }
+    return [];
+  },
+
+  async getUserActivities(userId: string): Promise<any[]> {
+    if (config.mode === 'api') {
+      try {
+        return await apiFetch<any[]>(`/users/${userId}/activities`);
+      } catch(e) {
+        return [];
+      }
+    }
+    return [];
+  },
+
   /** GET /courses (search and filters) */
   async getCourses(filters?: any): Promise<Course[]> {
     devLog('Catalog', 'Fetch all active public courses', filters);
@@ -380,6 +438,13 @@ export const ApiService = {
   async getFeaturedCourses(): Promise<Course[]> {
     devLog('Catalog', 'Fetch highly rated featured courses');
     if (config.mode === 'api') return apiFetch<Course[]>('/courses/featured');
+    return [];
+  },
+
+  /** GET /courses/bestsellers */
+  async getBestsellerCourses(): Promise<Course[]> {
+    devLog('Catalog', 'Fetch best-selling courses');
+    if (config.mode === 'api') return apiFetch<Course[]>('/courses/bestsellers');
     return [];
   },
 
@@ -440,6 +505,40 @@ export const ApiService = {
     return [];
   },
 
+  /** GET /courses/{id}/questions */
+  async getCourseQuestions(id: string, isInternal?: boolean): Promise<any[]> {
+    devLog('Catalog', `Get Q&A questions for Course ID: ${id}, isInternal: ${isInternal}`);
+    if (config.mode === 'api') {
+      const qs = isInternal !== undefined ? `?isInternal=${isInternal}` : '';
+      return apiFetch<any[]>(`/courses/${id}/questions${qs}`);
+    }
+    return [];
+  },
+
+  /** POST /courses/{id}/questions */
+  async addCourseQuestion(id: string, payload: { authorId: string; content: string; isInternal: boolean; lessonId?: string }): Promise<any> {
+    devLog('Catalog', `Add Q&A question to Course ID: ${id}`, payload);
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/courses/${id}/questions`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    }
+    return { ...payload, id: 'q-mock', createdAt: new Date().toISOString(), status: 'open' };
+  },
+
+  /** POST /courses/{id}/questions/{questionId}/answers */
+  async answerCourseQuestion(id: string, questionId: string, payload: { authorId: string; content: string }): Promise<any> {
+    devLog('Catalog', `Answer Q&A question ID: ${questionId} on Course ID: ${id}`, payload);
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/courses/${id}/questions/${questionId}/answers`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    }
+    return { ...payload, id: 'a-mock', createdAt: new Date().toISOString() };
+  },
+
   /** GET /courses/{courseId}/related */
   async getRelatedCourses(courseId: string): Promise<Course[]> {
     devLog('Catalog', `Recommended related modules for course: ${courseId}`);
@@ -473,6 +572,26 @@ export const ApiService = {
     devLog('Catalog', `View public professional page/bio for trainer ID: ${instructorId}`);
     if (config.mode === 'api') return apiFetch<any>(`/instructors/${instructorId}`);
     return { name: 'Thầy Giáo Linh', bio: 'Giảng viên Yoga & Thiền Định 8 năm kinh nghiệm.' };
+  },
+
+  /** GET /instructors/{id}/courses */
+  async getInstructorCourses(instructorId: string, filters?: any): Promise<Course[]> {
+    devLog('Catalog', `Fetch courses for instructor ID: ${instructorId}`, filters);
+    if (config.mode === 'api') {
+      let endpoint = `/instructors/${instructorId}/courses`;
+      if (filters) {
+        const queryParams = new URLSearchParams();
+        Object.keys(filters).forEach(key => {
+          if (filters[key] !== undefined && filters[key] !== null) {
+            queryParams.append(key, String(filters[key]));
+          }
+        });
+        const queryStr = queryParams.toString();
+        if (queryStr) endpoint += `?${queryStr}`;
+      }
+      return apiFetch<Course[]>(endpoint);
+    }
+    return [];
   },
 
   // ==========================================
@@ -1376,42 +1495,37 @@ export const ApiService = {
   },
 
   /** POST /auth/send-phone-otp */
-  async sendPhoneOtp(phone: string): Promise<{ success: boolean; message: string }> {
-    devLog('Auth', 'Send Phone OTP', { phone });
-    if (config.mode === 'api') {
-      return apiFetch<{ success: boolean; message: string }>('/auth/send-phone-otp', {
+  async sendPhoneOtp(phone: string, purpose: string = 'verify_phone'): Promise<{ success: boolean; message: string }> {
+    devLog('Auth', 'Send Phone OTP', { phone, purpose });
+    try {
+      const res = await fetch('http://localhost:3000/api/auth/phone/send-otp', {
         method: 'POST',
-        body: JSON.stringify({ phone })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, purpose })
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Lỗi gửi OTP');
+      return data;
+    } catch (err: any) {
+      throw new Error(err.message || 'Lỗi gửi OTP');
     }
-    return { success: true, message: `Mã OTP đã được gửi đến số điện thoại ${phone}` };
   },
 
   /** POST /auth/verify-phone-otp */
-  async verifyPhoneOtp(phone: string, otp: string): Promise<{ success: boolean }> {
-    devLog('Auth', 'Verify Phone OTP', { phone, otp });
-    if (config.mode === 'api') {
-      return apiFetch<{ success: boolean }>('/auth/verify-phone-otp', {
+  async verifyPhoneOtp(phone: string, otp: string, purpose: string = 'verify_phone'): Promise<{ success: boolean, ticket?: string }> {
+    devLog('Auth', 'Verify Phone OTP', { phone, otp, purpose });
+    try {
+      const res = await fetch('http://localhost:3000/api/auth/phone/verify-otp', {
         method: 'POST',
-        body: JSON.stringify({ phone, otp })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp, purpose })
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Mã OTP không chính xác');
+      return data;
+    } catch (err: any) {
+      throw new Error(err.message || 'Mã OTP không chính xác');
     }
-    if (otp !== '123456') {
-      throw new Error('Mã OTP không chính xác. Mã giả lập luôn là 123456');
-    }
-    return { success: true };
-  },
-
-  /** POST /role-requests/instructor */
-  async requestInstructorRole(payload: any): Promise<{ success: boolean; message: string }> {
-    devLog('Auth', 'Request Instructor Role', payload);
-    if (config.mode === 'api') {
-      return apiFetch<{ success: boolean; message: string }>('/role-requests/instructor', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
-    }
-    return { success: true, message: 'Yêu cầu trở thành giảng viên đã được gửi đi chờ phê duyệt.' };
   },
 
   /** POST /role-requests/admin */
@@ -1424,6 +1538,153 @@ export const ApiService = {
       });
     }
     return { success: true, message: 'Yêu cầu quyền Admin hệ thống đã được gửi đến Super Admin.' };
+  },
+
+  /** POST /roles/request-instructor */
+  async requestInstructorRole(payload: any): Promise<{ success: boolean; message: string }> {
+    devLog('Auth', 'Request Instructor Role', payload);
+    if (config.mode === 'api') {
+      return apiFetch<{ success: boolean; message: string }>('/roles/request-instructor', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+    
+    // Fallback for mock mode
+    const requests = JSON.parse(localStorage.getItem('mindhub_instructor_requests') || '[]');
+    requests.push({
+      ...payload,
+      id: 'req-' + Date.now(),
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    });
+    localStorage.setItem('mindhub_instructor_requests', JSON.stringify(requests));
+    
+    // Update current user locally
+    const userStr = localStorage.getItem('mindhub_current_user');
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      user.roleRequestStatus = 'pending_instructor';
+      localStorage.setItem('mindhub_current_user', JSON.stringify(user));
+    }
+    return { success: true, message: 'Yêu cầu trở thành giảng viên đã được gửi đi.' };
+  },
+
+  /** GET /roles/requests */
+  async getInstructorRequests(): Promise<InstructorRequest[]> {
+    devLog('Auth', 'Get Instructor Requests');
+    if (config.mode === 'api') {
+      const data = await apiFetch<any>('/roles/requests');
+      return data.requests || [];
+    }
+    return JSON.parse(localStorage.getItem('mindhub_instructor_requests') || '[]');
+  },
+
+  /** POST /roles/resolve */
+  async resolveInstructorRequest(payload: { requestId: string; action: 'approve' | 'reject'; rejectionReason?: string }): Promise<{ success: boolean; message: string }> {
+    devLog('Auth', 'Resolve Instructor Request', payload);
+    if (config.mode === 'api') {
+      return apiFetch<{ success: boolean; message: string }>('/roles/resolve', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+    
+    // Fallback mock mode
+    let requests = JSON.parse(localStorage.getItem('mindhub_instructor_requests') || '[]');
+    const index = requests.findIndex((r: any) => r.id === payload.requestId);
+    if (index >= 0) {
+      requests[index].status = payload.action === 'approve' ? 'approved' : 'rejected';
+      requests[index].rejectionReason = payload.rejectionReason;
+      requests[index].reviewedAt = new Date().toISOString();
+      localStorage.setItem('mindhub_instructor_requests', JSON.stringify(requests));
+      
+      // We would ideally update the user's role here, but we don't have the full users DB in mock mode easily available.
+      // Assuming the user logs out and in, or their current user state handles it.
+    }
+    return { success: true, message: payload.action === 'approve' ? 'Đã phê duyệt yêu cầu giảng viên.' : 'Đã từ chối yêu cầu.' };
+  },
+
+  /** POST /roles/request-leave-instructor */
+  async requestLeaveInstructorRole(payload: { userId: string; fullName: string; email: string; reason: string }): Promise<{ success: boolean; message: string }> {
+    devLog('Auth', 'Request Leave Instructor Role', payload);
+    if (config.mode === 'api') {
+      return apiFetch<{ success: boolean; message: string }>('/roles/request-leave-instructor', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+    
+    // Fallback mock mode
+    const requests = JSON.parse(localStorage.getItem('mindhub_instructor_requests') || '[]');
+    requests.push({
+      ...payload,
+      id: 'req-leave-' + Date.now(),
+      status: 'pending',
+      requestType: 'leave_instructor',
+      createdAt: new Date().toISOString()
+    });
+    localStorage.setItem('mindhub_instructor_requests', JSON.stringify(requests));
+    
+    // Update locally
+    const userStr = localStorage.getItem('mindhub_current_user');
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      user.roleRequestStatus = 'pending_leave_instructor';
+      localStorage.setItem('mindhub_current_user', JSON.stringify(user));
+    }
+    return { success: true, message: 'Yêu cầu rời vai trò giảng viên đã được gửi đi.' };
+  },
+
+  /** GET /admin/users/:userId/courses */
+  async getInstructorCoursesByAdmin(userId: string): Promise<Course[]> {
+    devLog('Admin', 'Get instructor courses', { userId });
+    if (config.mode === 'api') {
+      const data = await apiFetch<any>(`/admin/users/${userId}/courses`);
+      return data.courses || [];
+    }
+    return []; // mock courses handled locally in UI or fallback
+  },
+
+  /** POST /admin/users/:userId/lock */
+  async toggleUserLockAdmin(userId: string, action: 'lock' | 'unlock'): Promise<{ success: boolean; message: string; status: string }> {
+    devLog('Admin', `Toggle user lock: ${action}`, { userId });
+    if (config.mode === 'api') {
+      return apiFetch<{ success: boolean; message: string; status: string }>(`/admin/users/${userId}/lock`, {
+        method: 'POST',
+        body: JSON.stringify({ action })
+      });
+    }
+    return { 
+      success: true, 
+      message: action === 'lock' ? 'Tài khoản đã bị khóa.' : 'Tài khoản đã được mở khóa.', 
+      status: action === 'lock' ? 'locked' : 'active' 
+    };
+  },
+
+  /** PATCH /admin/courses/:courseId/status */
+  async updateCourseStatusAdmin(courseId: string, status: string): Promise<{ success: boolean; message: string }> {
+    devLog('Admin', `Update course status to ${status}`, { courseId });
+    if (config.mode === 'api') {
+      return apiFetch<{ success: boolean; message: string }>(`/admin/courses/${courseId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status })
+      });
+    }
+    return { success: true, message: 'Đã cập nhật trạng thái khóa học.' };
+  },
+
+  /** POST /contact */
+  async sendContactMessage(payload: { name: string; email: string; subject: string; message: string }): Promise<{ success: boolean; message?: string }> {
+    devLog('Contact', 'Gửi tin nhắn liên hệ', payload);
+    if (config.mode === 'api') {
+      return apiFetch<{ success: boolean; message?: string }>('/contact', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+    // Mock
+    return { success: true, message: 'Mock: Đã gửi liên hệ' };
   }
 };
 
