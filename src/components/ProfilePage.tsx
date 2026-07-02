@@ -584,8 +584,56 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
                     </div>
                   </div>
 
+                  {/* Workspace Navigation */}
+                  {(currentUser.roles?.includes('instructor') || currentUser.role === 'instructor' || currentUser.roles?.includes('admin') || currentUser.role === 'admin') && (
+                    <div className="border border-stone-200 rounded-2xl overflow-hidden mt-6 bg-white mb-6">
+                      <div className="bg-stone-50 p-4 border-b border-stone-200 flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <Award className="w-5 h-5 text-[#8b5e3c]" />
+                          <h4 className="font-bold text-stone-900">Không gian làm việc</h4>
+                        </div>
+                      </div>
+                      <div className="p-4 flex flex-col sm:flex-row gap-3">
+                        {(currentUser.roles?.includes('instructor') || currentUser.role === 'instructor') && (
+                          <button 
+                            onClick={() => navigateTo('instructor')}
+                            className="flex-1 flex items-center justify-between p-3 rounded-xl border border-stone-200 hover:border-brand-normal hover:bg-brand-light transition-all text-left cursor-pointer"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-brand-light text-[#8b5e3c] flex items-center justify-center shrink-0 border border-[#e8ded3]">
+                                <FileText className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h5 className="font-bold text-stone-900 text-sm">Đi đến trang Giảng viên</h5>
+                                <p className="text-[11px] text-stone-500">Quản lý khóa học, doanh thu</p>
+                              </div>
+                            </div>
+                            <ChevronRight className="w-5 h-5 text-stone-400 shrink-0" />
+                          </button>
+                        )}
+                        {(currentUser.roles?.includes('admin') || currentUser.role === 'admin') && (
+                          <button 
+                            onClick={() => navigateTo('admin')}
+                            className="flex-1 flex items-center justify-between p-3 rounded-xl border border-stone-200 hover:border-red-200 hover:bg-red-50 transition-all text-left cursor-pointer"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 border border-red-200">
+                                <ShieldAlert className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h5 className="font-bold text-stone-900 text-sm">Đi đến trang Quản trị</h5>
+                                <p className="text-[11px] text-stone-500">Quản lý toàn bộ hệ thống</p>
+                              </div>
+                            </div>
+                            <ChevronRight className="w-5 h-5 text-stone-400 shrink-0" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Request Instructor Block */}
-                  {currentUser.role === 'student' && (
+                  {currentUser.role === 'student' && !currentUser.roles?.includes('instructor') && !currentUser.roles?.includes('admin') && (
                     <div className="border border-stone-200 rounded-2xl overflow-hidden mt-6">
                       <div className="bg-stone-50 p-4 border-b border-stone-200 flex justify-between items-center">
                         <div className="flex items-center gap-2">

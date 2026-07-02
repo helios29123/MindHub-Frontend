@@ -4,7 +4,7 @@ import {
   Settings, Award, Sparkles, BookOpen, Star, Filter, ArrowUpDown, 
   Check, LogOut, FileText, ChevronRight, ChevronLeft, CheckCircle, Shield, 
   HelpCircle, AlertCircle, Edit, Flame, RefreshCw,
-  Coffee, Lock, Zap, MessageSquare, Music, Disc, Volume2, VolumeX, Pause, Play, Clock,
+  Coffee, Lock, Zap, MessageSquare, Music, Disc, Volume2, VolumeX, Pause, Play, Clock, PlayCircle,
   Upload, Trash2, SkipBack, SkipForward, Repeat, UserX, Users, Video,
   ShoppingBag, Landmark, Download, Tag, Globe, Cpu, Layers, Terminal, Database, TrendingUp
 } from 'lucide-react';
@@ -448,23 +448,7 @@ export default function App() {
     } catch (e) { console.error('Error parsing isLoggedIn:', e); return true; }
   });
 
-  // Welcome back box state
-  const [showWelcomeToast, setShowWelcomeToast] = useState(false);
-  useEffect(() => {
-    if (isLoggedIn && currentUser && currentUser.name) {
-      const alreadyShown = sessionStorage.getItem('mindhub_welcome_shown');
-      if (!alreadyShown) {
-        setShowWelcomeToast(true);
-        sessionStorage.setItem('mindhub_welcome_shown', 'true');
-        const timer = setTimeout(() => {
-          setShowWelcomeToast(false);
-        }, 3000);
-        return () => clearTimeout(timer);
-      }
-    } else {
-      setShowWelcomeToast(false);
-    }
-  }, [isLoggedIn, currentUser?.name]);
+
 
   useEffect(() => {
     localStorage.setItem('mindhub_notifications', JSON.stringify(notifications));
@@ -657,7 +641,7 @@ export default function App() {
   // Listen to global legal / support triggers for decoupled modals activation
   useEffect(() => {
     const handleOpenLegal = (e: Event) => {
-      const customEvent = e as CustomEvent<{ tab: string }>;
+      const customEvent = e as CustomEvent<{ tab: 'terms' | 'privacy' | 'refund' | 'contact' | 'faq' }>;
       if (customEvent.detail && customEvent.detail.tab) {
         setShowLegal(customEvent.detail.tab);
       }
@@ -692,6 +676,7 @@ export default function App() {
 
   const [directSelectCourseId, setDirectSelectCourseId] = useState<string | null>(null);
   const [initialCartTab, setInitialCartTab] = useState<'cart' | 'wishlist'>('cart');
+  const [showLegal, setShowLegal] = useState<'terms' | 'privacy' | 'refund' | 'contact' | 'faq' | null>(null);
 
   const [showFloatingHelp, setShowFloatingHelp] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -1843,7 +1828,7 @@ export default function App() {
               className="text-[11px] text-stone-500 mt-1 italic cursor-pointer hover:text-brand-normal hover:underline"
               onClick={(e) => {
                 e.stopPropagation();
-                navigateTo(`instructor-profile?id=${c.instructorId || c.instructor?.id || ''}`);
+                navigateTo(`instructor-profile?id=${c.instructorId || (c as any).instructor?.id || ''}`);
               }}
             >
               Giảng viên: {c.instructorName}
@@ -1924,69 +1909,9 @@ export default function App() {
       {/* Decorative vintage SVG coffee grid patterns to prevent blank emptiness */}
       <div className="absolute inset-0 opacity-[0.02] pointer-events-none select-none z-0 bg-[radial-gradient(#432c28_1.5px,transparent_1.5px)] [background-size:24px_24px]"></div>
       
-      {/* 🔮 INTERACTIVE ROLE SWITCHER TOP BAR (PROPOSAL ONLY SANDBOX) */}
-      <div className="bg-main-darker text-[#eceaea] p-2.5 px-4 md:px-6 flex flex-col sm:flex-row justify-between items-center gap-2 text-xs border-b border-brand-light/15 shrink-0 select-none z-10">
-        <div className="flex items-center gap-1.5 font-light">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
-          <span><b>Hộp cát thử nghiệm (Role Simulator Tab):</b> Thử nhanh các phân quyền UI MindHub</span>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <button 
-            id="role-switch-student"
-            onClick={() => handleSwitchRole('student')}
-            className={`px-3 py-1 rounded-full font-bold transition-all ${currentUser.role === 'student' ? 'bg-brand-normal text-brand-light scale-105 shadow' : 'bg-[#e3dfdf]/15 hover:bg-[#e3dfdf]/25'}`}
-          >
-            Học viên
-          </button>
-          <button 
-            id="role-switch-instructor"
-            onClick={() => handleSwitchRole('instructor')}
-            className={`px-3 py-1 rounded-full font-bold transition-all ${currentUser.role === 'instructor' ? 'bg-brand-normal text-brand-light scale-105 shadow' : 'bg-[#e3dfdf]/15 hover:bg-[#e3dfdf]/25'}`}
-          >
-            Giảng viên
-          </button>
-          <button 
-            id="role-switch-admin"
-            onClick={() => handleSwitchRole('admin')}
-            className={`px-3 py-1 rounded-full font-bold transition-all ${currentUser.role === 'admin' ? 'bg-brand-normal text-brand-light scale-105 shadow' : 'bg-[#e3dfdf]/15 hover:bg-[#e3dfdf]/25'}`}
-          >
-            Admin hệ thống
-          </button>
-        </div>
-      </div>
 
-      {/* --- WELCOME BACK TOAST --- */}
-      {showWelcomeToast && isLoggedIn && currentUser && (
-        <div 
-          aria-live="polite"
-          className="fixed top-20 right-6 z-[10000] bg-white border border-[#e8ded3] rounded-2xl p-4.5 shadow-2xl flex items-start gap-3.5 max-w-sm animate-bounce text-left select-none duration-1000"
-        >
-          <div className="w-10 h-10 bg-[#f5ece3] text-[#8b5e3c] rounded-full flex items-center justify-center font-bold text-base shrink-0 border border-[#eedecf]">
-            {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] bg-amber-100 text-[#8b5e3c] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
-                👋 Chào mừng trở lại
-              </span>
-              <button 
-                onClick={() => setShowWelcomeToast(false)}
-                className="text-stone-400 hover:text-stone-700 font-bold text-xs w-5 h-5 rounded-full hover:bg-stone-100 flex items-center justify-center transition-colors cursor-pointer border-none bg-transparent"
-                aria-label="Đóng thông báo"
-              >
-                ✕
-              </button>
-            </div>
-            <h4 className="text-xs font-black text-stone-850 mt-1.5 truncate">
-              Chào mừng trở lại, {currentUser?.name || 'Học viên'}!
-            </h4>
-            <p className="text-[11px] text-stone-500 mt-0.5 leading-relaxed">
-              Tiếp tục hành trình học tập của bạn hôm nay.
-            </p>
-          </div>
-        </div>
-      )}
+
+
 
       {/* --- SITE NAVIGATION HEADER --- */}
       <header className="bg-white border-b border-brand-light-active py-2 md:py-3 px-4 md:px-8 flex justify-between items-center sticky top-0 z-40 shadow-xs">
@@ -3726,7 +3651,7 @@ export default function App() {
                     courseId={viewedCourse.id} 
                     currentUser={currentUser} 
                     isEnrolled={enrolledCourseIds.includes(viewedCourse.id)} 
-                    onLoginRequest={() => { setAuthMode('login'); navigateTo('auth'); }}
+                    onLoginRequest={() => { navigateTo('auth'); }}
                   />
 
                   {/* Course Reviews */}
@@ -4526,82 +4451,7 @@ export default function App() {
                       Nền tảng học tập trực tuyến chắt lọc tinh hoa từ phương pháp giáo dục truyền thống mộc mạc và trải nghiệm công nghệ tinh tế nhất. Hôm nay bạn đang thắp sáng ngọn lửa học tập cùng MindHub!
                     </p>
 
-                    {/* Interactive Tech Sandbox Environment Panel */}
-                    <div className="space-y-3 pt-3 pb-1 border-t border-brand-light-active/30 max-w-lg bg-white/40 backdrop-blur-3xs border border-mist p-3.5 rounded-xl shadow-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black text-deep-indigo uppercase tracking-wider block flex items-center gap-1.5">
-                          ⚡ Môi Trường Sandbox Lab:
-                        </span>
-                        <span className="text-[8px] bg-pale-cyan text-forest-teal px-1.5 py-0.5 rounded-full font-bold">
-                          Thiết lập phiên làm việc trực tuyến
-                        </span>
-                      </div>
-                      
-                      {/* Sandbox Selections */}
-                      <div className="grid grid-cols-3 gap-1.5">
-                        <button 
-                          onClick={() => setSelectedDrink('espresso')}
-                          className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 border cursor-pointer ${selectedDrink === 'espresso' ? 'bg-deep-indigo text-white border-deep-indigo shadow-md' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
-                        >
-                          <Cpu className="w-3.5 h-3.5 text-deep-indigo" />
-                          <span>Cloud VM</span>
-                        </button>
-                        <button 
-                          onClick={() => setSelectedDrink('cappuccino')}
-                          className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 border cursor-pointer ${selectedDrink === 'cappuccino' ? 'bg-deep-indigo text-white border-deep-indigo shadow-md' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
-                        >
-                          <Layers className="w-3.5 h-3.5 text-forest-teal" />
-                          <span>Agent AI</span>
-                        </button>
-                        <button 
-                          onClick={() => setSelectedDrink('matcha')}
-                          className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 border cursor-pointer ${selectedDrink === 'matcha' ? 'bg-deep-indigo text-white border-deep-indigo shadow-md' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
-                        >
-                          <Terminal className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Web Dev</span>
-                        </button>
-                      </div>
 
-                      {/* Table Number */}
-                      <div className="pt-1.5 border-t border-stone-150 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[9px] text-stone-500 font-bold">Server Node:</span>
-                          <span className="text-[10px] bg-deep-indigo text-white px-1.5 py-0.5 rounded font-black">
-                            Node #{selectedTable < 10 ? `0${selectedTable}` : selectedTable}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-1 bg-white border border-stone-200 p-0.5 rounded-lg select-none">
-                          <button 
-                            type="button"
-                            onClick={() => setSelectedTable(prev => Math.max(1, prev - 1))}
-                            disabled={selectedTable <= 1}
-                            className="w-5 h-5 flex items-center justify-center text-[10px] font-bold text-stone-600 bg-stone-50 rounded cursor-pointer"
-                          >
-                            -
-                          </button>
-                          <input 
-                            type="number"
-                            min={1}
-                            max={99}
-                            value={selectedTable || ''}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value);
-                              setSelectedTable(isNaN(val) ? 1 : Math.min(99, Math.max(1, val)));
-                            }}
-                            className="w-6 text-center font-bold text-stone-850 text-[10px] bg-transparent border-0 p-0 focus:ring-0 focus:outline-hidden"
-                          />
-                          <button 
-                            type="button"
-                            onClick={() => setSelectedTable(prev => Math.min(99, prev + 1))}
-                            disabled={selectedTable >= 99}
-                            className="w-5 h-5 flex items-center justify-center text-[10px] font-bold text-stone-600 bg-stone-50 rounded cursor-pointer"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-                    </div>
 
                     {/* Stats Row moved directly here from Hero Banner */}
                     <div className="pt-3 border-t border-brand-light-active/40 flex gap-4 items-center text-[11px] text-stone-500">
@@ -5109,71 +4959,7 @@ export default function App() {
             </ScrollReveal>� 
 
 
-            {/* ❤️ WISHLIST FAVORITES PORTAL WITH DIRECT SINGLE COURSE PAYMENTS */}
-            {favorites.length > 0 && (
-              <ScrollReveal delayMs={240}>
-                <div className="space-y-4 border-t border-brand-light-active pt-6 mt-6">
-                  <h3 className="text-base md:text-lg font-extrabold flex items-center gap-1.5 text-[#432c28]">
-                    <Heart className="w-5 h-5 fill-deep-indigo text-deep-indigo" /> Danh sách khóa học yêu thích của bạn
-                  </h3>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {courses.filter(c => favorites.includes(c.id)).map(c => {
-                      const isEnrolled = enrolledCourseIds.includes(c.id);
-                      return (
-                        <div key={c.id} className="border border-brand-light-active rounded-2xl p-4 bg-white flex flex-col justify-between hover:shadow-md transition-all text-left space-y-3 relative">
-                          <button 
-                            onClick={() => handleToggleFavorite(c.id)}
-                            className="absolute top-2.5 right-2.5 bg-stone-100 p-1.5 rounded-full hover:bg-stone-200 text-stone-700 transition"
-                            title="Xóa khỏi yêu thích"
-                          >
-                            ✕
-                          </button>
-                          
-                          <div className="flex gap-3">
-                            <img src={c.image} alt="Cover" className="w-16 h-12 object-cover rounded-lg shrink-0 border" />
-                            <div className="min-w-0">
-                              <span className="text-[8px] bg-stone-100 text-stone-600 px-2 py-0.5 rounded font-mono font-bold uppercase">{c.subcategory}</span>
-                              <h4 className="font-bold text-xs text-main-normal truncate mt-1">{c.title}</h4>
-                              <p className="text-[10px] text-gray-400 mt-0.5 italic">Giảng viên: {c.instructorName}</p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between pt-2 border-t border-stone-50 text-xs">
-                            <div className="space-y-0.5">
-                              {c.salePrice ? (
-                                <div className="flex flex-col">
-                                  <span className="text-xs font-bold text-[#432c28]">{formatVND(c.salePrice)}</span>
-                                  <span className="text-[10px] text-stone-400 line-through font-mono">{formatVND(c.price)}</span>
-                                </div>
-                              ) : (
-                                <span className="text-xs font-bold text-[#432c28]">{formatVND(c.price)}</span>
-                              )}
-                            </div>
-
-                            {isEnrolled ? (
-                              <button 
-                                onClick={() => setStudyingCourse(c)}
-                                className="bg-emerald-50 text-emerald-800 text-[10px] font-bold py-2.5 px-4.5 rounded-xl transition whitespace-nowrap"
-                              >
-                                Đã sở hữu ✓
-                              </button>
-                            ) : (
-                              <button 
-                                onClick={() => handleBuyCourseNow(c.id)}
-                                className="bg-deep-indigo hover:bg-deep-indigo/95 text-white text-[10px] font-bold py-2.5 px-5 rounded-xl transition-all shadow-xs flex items-center justify-center cursor-pointer whitespace-nowrap"
-                              >
-                                Mua Ngay
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </ScrollReveal>
-            )}
 
             {/* HERO BANNER POPUP MODAL */}
             {showHeroPopup && (
@@ -5288,82 +5074,7 @@ export default function App() {
                                 </button>
                               </div>
 
-                              {/* Interactive Tech Sandbox Environment Panel */}
-                              <div className="space-y-3 pt-3 pb-1 border-t border-brand-light-active/30 max-w-lg bg-white/40 backdrop-blur-3xs border border-mist p-3.5 rounded-xl shadow-xs">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[10px] font-black text-deep-indigo uppercase tracking-wider block flex items-center gap-1.5">
-                                    ⚡ Môi Trường Sandbox Lab:
-                                  </span>
-                                  <span className="text-[8px] bg-pale-cyan text-forest-teal px-1.5 py-0.5 rounded-full font-bold">
-                                    Thiết lập phiên làm việc trực tuyến
-                                  </span>
-                                </div>
-                                
-                                {/* Sandbox Selections */}
-                                <div className="grid grid-cols-3 gap-1.5">
-                                  <button 
-                                    onClick={() => setSelectedDrink('espresso')}
-                                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 border cursor-pointer ${selectedDrink === 'espresso' ? 'bg-deep-indigo text-white border-deep-indigo shadow-md' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
-                                  >
-                                    <Cpu className="w-3.5 h-3.5 text-deep-indigo" />
-                                    <span>Cloud VM</span>
-                                  </button>
-                                  <button 
-                                    onClick={() => setSelectedDrink('cappuccino')}
-                                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 border cursor-pointer ${selectedDrink === 'cappuccino' ? 'bg-deep-indigo text-white border-deep-indigo shadow-md' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
-                                  >
-                                    <Layers className="w-3.5 h-3.5 text-forest-teal" />
-                                    <span>Agent AI</span>
-                                  </button>
-                                  <button 
-                                    onClick={() => setSelectedDrink('matcha')}
-                                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 border cursor-pointer ${selectedDrink === 'matcha' ? 'bg-deep-indigo text-white border-deep-indigo shadow-md' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`}
-                                  >
-                                    <Terminal className="w-3.5 h-3.5 text-emerald-600" />
-                                    <span>Web Dev</span>
-                                  </button>
-                                </div>
 
-                                {/* Table Number */}
-                                <div className="pt-1.5 border-t border-stone-150 flex items-center justify-between gap-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-[9px] text-stone-500 font-bold">Server Node:</span>
-                                    <span className="text-[10px] bg-deep-indigo text-white px-1.5 py-0.5 rounded font-black">
-                                      Node #{selectedTable < 10 ? `0${selectedTable}` : selectedTable}
-                                    </span>
-                                  </div>
-
-                                  <div className="flex items-center gap-1 bg-white border border-stone-200 p-0.5 rounded-lg select-none">
-                                    <button 
-                                      type="button"
-                                      onClick={() => setSelectedTable(prev => Math.max(1, prev - 1))}
-                                      disabled={selectedTable <= 1}
-                                      className="w-5 h-5 flex items-center justify-center text-[10px] font-bold text-stone-600 bg-stone-50 rounded"
-                                    >
-                                      -
-                                    </button>
-                                    <input 
-                                      type="number"
-                                      min={1}
-                                      max={99}
-                                      value={selectedTable || ''}
-                                      onChange={(e) => {
-                                        const val = parseInt(e.target.value);
-                                        setSelectedTable(isNaN(val) ? 1 : Math.min(99, Math.max(1, val)));
-                                      }}
-                                      className="w-6 text-center font-bold text-stone-850 text-[10px] bg-transparent border-0 p-0 focus:ring-0 focus:outline-hidden"
-                                    />
-                                    <button 
-                                      type="button"
-                                      onClick={() => setSelectedTable(prev => Math.min(99, prev + 1))}
-                                      disabled={selectedTable >= 99}
-                                      className="w-5 h-5 flex items-center justify-center text-[10px] font-bold text-stone-600 bg-stone-50 rounded"
-                                    >
-                                      +
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
 
                               {/* Stats Row */}
                               <div className="pt-3 border-t border-brand-light-active/40 flex gap-4 items-center text-[11px] text-stone-500">
@@ -6223,10 +5934,13 @@ export default function App() {
         )}
 
         {/* --- 6. FOOTER LEGAL --- */}
-        {(activeTab === 'legal' || activeTab === 'faq') && (
+        {(activeTab === 'legal' || activeTab === 'faq' || showLegal) && (
           <FooterLegal 
-            initialTab={activeTab === 'faq' ? 'faq' : 'terms'}
-            onClose={() => navigateTo('home')}
+            initialTab={showLegal || (activeTab === 'faq' ? 'faq' : 'terms')}
+            onClose={() => {
+              if (showLegal) setShowLegal(null);
+              else navigateTo('home');
+            }}
           />
         )}
 

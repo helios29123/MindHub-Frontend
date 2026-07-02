@@ -29,6 +29,8 @@ model User {
   activities          LearningActivity[] @relation("UserActivities")
   questions           CourseQuestion[] @relation("UserQuestions")
   answers             CourseAnswer[] @relation("UserAnswers")
+  packagePurchases    InstructorPackagePurchase[] @relation("InstructorPurchases")
+  quotaUsages         CourseCreationQuotaUsage[] @relation("InstructorQuotaUsages")
 }
 
 model Course {
@@ -58,6 +60,9 @@ model Course {
   enrollments         Enrollment[] @relation("CourseEnrollments")
   activities          LearningActivity[] @relation("CourseActivities")
   questions           CourseQuestion[] @relation("CourseQuestions")
+  
+  quotaUsageId        String?  @unique
+  quotaUsage          CourseCreationQuotaUsage? @relation("CourseQuotaUsage")
 }
 
 model Chapter {
@@ -150,4 +155,56 @@ model CourseAnswer {
   isAdminAnswer      Boolean @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model CourseCreationPackage {
+  id                  String   @id @default(cuid())
+  title               String
+  shortDescription    String?
+  description         String?
+  thumbnail           String?
+  basePrice           Float
+  courseCreationQuota Int
+  status              String   @default("active") // active, draft, hidden, archived
+  displayOrder        Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  purchases           InstructorPackagePurchase[] @relation("PackagePurchases")
+}
+
+model InstructorPackagePurchase {
+  id                  String   @id @default(cuid())
+  instructorId        String
+  instructor          User     @relation("InstructorPurchases", fields: [instructorId], references: [id])
+  packageId           String
+  package             CourseCreationPackage @relation("PackagePurchases", fields: [packageId], references: [id])
+  orderId             String?
+  transactionId       String?
+  packageTitleSnapshot String
+  basePriceSnapshot   Float
+  discountSnapshot    Float    @default(0)
+  finalPriceSnapshot  Float
+  quotaGranted        Int
+  quotaUsed           Int      @default(0)
+  quotaRemaining      Int
+  status              String   @default("pending") // pending, paid, failed, refunded
+  paidAt              DateTime?
+  refundedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  quotaUsages         CourseCreationQuotaUsage[] @relation("PurchaseQuotaUsages")
+}
+
+model CourseCreationQuotaUsage {
+  id                  String   @id @default(cuid())
+  instructorId        String
+  instructor          User     @relation("InstructorQuotaUsages", fields: [instructorId], references: [id])
+  packagePurchaseId   String
+  packagePurchase     InstructorPackagePurchase @relation("PurchaseQuotaUsages", fields: [packagePurchaseId], references: [id])
+  courseId            String   @unique
+  course              Course   @relation("CourseQuotaUsage", fields: [courseId], references: [id])
+  status              String   @default("consumed") // consumed, refunded
+  createdAt           DateTime @default(now())
 }

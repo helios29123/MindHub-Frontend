@@ -47,14 +47,14 @@ export const InstructorProfile: React.FC<InstructorProfileProps> = ({ instructor
       page,
       limit
     }).then(res => {
-      setCourses(res.courses);
-      setTotalPages(res.totalPages);
-      setTotalCourses(res.total);
+      setCourses(res);
+      setTotalPages(1);
+      setTotalCourses(res.length);
       
       // Auto-extract categories from courses if we don't have them
       // Alternatively we can use a dedicated API
-      if (res.courses.length > 0 && availableCategories.length === 1 && category === 'All' && !searchQuery) {
-        const cats = Array.from(new Set(res.courses.map(c => c.category))).filter(Boolean);
+      if (res.length > 0 && availableCategories.length === 1 && category === 'All' && !searchQuery) {
+        const cats = Array.from(new Set(res.map(c => c.category))).filter(Boolean) as string[];
         setAvailableCategories(['All', ...cats]);
       }
     }).catch(e => console.error(e))

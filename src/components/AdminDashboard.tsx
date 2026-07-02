@@ -5,7 +5,7 @@ import {
   ShoppingBag, AlertTriangle, AlertCircle, XCircle, 
   FolderTree, Edit2, Key, BookOpen, Search, Check, Layers, ShieldCheck, Filter, Image,
   Award, TrendingUp, GraduationCap, Star, Activity,
-  MessageSquare, Compass, Eye, ShieldAlert, Clock, Info, UserPlus
+  MessageSquare, Compass, Eye, ShieldAlert, Clock, Info, UserPlus, Box
 } from 'lucide-react';
 import { Course, User, PayoutRequest, AuditLog, AccountRequest, Order, Role, Banner, Notification, Coupon, FlaggedItem } from '../types';
 import { safeLocalStorage as localStorage } from '../utils/safeStorage';
@@ -37,7 +37,7 @@ function ModeratorTab({
 }: ModeratorTabProps) {
 
   // Selected tab: 'moderation_courses' | 'moderation_content' | 'account_requests'
-  const [activeTab, setActiveTab] = useState<'moderation_courses' | 'moderation_content' | 'account_requests'>('moderation_courses');
+  const [activeTab, setActiveTab] = useState<'moderation_courses' | 'moderation_content' | 'account_requests' | 'packages_management'>('moderation_courses');
   
   // Rejection modal state
   const [rejectingCourseId, setRejectingCourseId] = useState<string | null>(null);
@@ -695,7 +695,7 @@ export default function AdminDashboard({
     'general_admin' | 'courses_management' | 'categories_management' | 
     'users_management' | 'role_permissions' | 'payouts_requests' | 
     'orders_management' | 'marketing_notifications' | 'banners_management' | 'account_requests' | 'instructor_requests' | 'audits_logs' |
-    'moderator_controls' | 'api_config'
+    'moderator_controls' | 'api_config' | 'packages_management'
   >('general_admin');
 
   // Backend API Integration States
@@ -730,6 +730,7 @@ export default function AdminDashboard({
       console.error(err);
     }
   };
+  const [coursePackages, setCoursePackages] = useState<any[]>([]);
   const [testResult, setTestResult] = useState<{
     status: 'idle' | 'testing' | 'success' | 'failed';
     message: string;
@@ -764,8 +765,7 @@ export default function AdminDashboard({
     }
   }, [activeTab]);
   
-  // Commission settings & coupon states
-  const [commissionRate, setCommissionRate] = useState(30);
+  // Coupon states
   const [couponCode, setCouponCode] = useState('');
   const [couponVal, setCouponVal] = useState(15);
   const [couponDesc, setCouponDesc] = useState('');
@@ -952,10 +952,6 @@ export default function AdminDashboard({
     return successfulOrders.reduce((sum, o) => sum + o.total, 0);
   }, [successfulOrders]);
 
-  const totalCommission = React.useMemo(() => {
-    return successfulOrders.reduce((sum, o) => sum + o.total * (commissionRate / 100), 0);
-  }, [successfulOrders, commissionRate]);
-
   const totalDiscounts = React.useMemo(() => {
     return successfulOrders.reduce((sum, o) => sum + o.discountAmount, 0);
   }, [successfulOrders]);
@@ -974,16 +970,14 @@ export default function AdminDashboard({
       const prefix = `${selectedReportYear}-${monthNum}`;
       const matching = successfulOrders.filter(o => o.date.startsWith(prefix));
       const gross = matching.reduce((sum, o) => sum + o.total, 0);
-      const commission = matching.reduce((sum, o) => sum + o.total * (commissionRate / 100), 0);
       const count = matching.length;
       return {
         label: `Thg ${i + 1}`,
         gross,
-        commission,
         count
       };
     });
-  }, [successfulOrders, selectedReportYear, commissionRate]);
+  }, [successfulOrders, selectedReportYear]);
 
   const dailyRevenueData = React.useMemo(() => {
     const year = parseInt(selectedReportYear) || 2026;
@@ -995,16 +989,14 @@ export default function AdminDashboard({
       const dateStr = `${selectedReportYear}-${selectedReportMonth}-${dayNum}`;
       const matching = successfulOrders.filter(o => o.date === dateStr);
       const gross = matching.reduce((sum, o) => sum + o.total, 0);
-      const commission = matching.reduce((sum, o) => sum + o.total * (commissionRate / 100), 0);
       const count = matching.length;
       return {
         label: `${i + 1}`,
         gross,
-        commission,
         count
       };
     });
-  }, [successfulOrders, selectedReportYear, selectedReportMonth, commissionRate]);
+  }, [successfulOrders, selectedReportYear, selectedReportMonth]);
 
   const bestsellerCoursesReport = React.useMemo(() => {
     return courses.map(course => {
@@ -1018,8 +1010,8 @@ export default function AdminDashboard({
         return sum + itemPrice;
       }, 0);
       
-      const adminCommission = totalIncome * (commissionRate / 100);
-      const instructorIncome = totalIncome - adminCommission;
+      const adminCommission = totalIncome;
+      const instructorIncome = totalIncome;
 
       return {
         ...course,
@@ -1031,7 +1023,7 @@ export default function AdminDashboard({
         reviewCount: course.reviewCount || 0
       };
     });
-  }, [courses, successfulOrders, commissionRate]);
+  }, [courses, successfulOrders]);
 
   const filteredBestsellers = React.useMemo(() => {
     let result = bestsellerCoursesReport.filter(c => 
@@ -1712,6 +1704,15 @@ export default function AdminDashboard({
               <span className="bg-stone-200 text-stone-850 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full">{courses.length}</span>
             </button>
             <button 
+              onClick={() => setActiveTab('packages_management')}
+              className={`w-full text-left px-3 py-2 text-[11.5px] font-bold rounded-lg flex items-center justify-between ${activeTab === 'packages_management' ? 'bg-stone-900 text-white shadow-3xs' : 'hover:bg-brand-light-hover'}`}
+            >
+              <div className="flex items-center gap-2">
+                <Box className="w-4 h-4 text-stone-700" /> Gói Tạo Khóa Học
+              </div>
+              <span className="bg-amber-200 text-amber-850 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full">{coursePackages.length}</span>
+            </button>
+            <button 
               onClick={() => setActiveTab('categories_management')}
               className={`w-full text-left px-3 py-2 text-[11.5px] font-bold rounded-lg flex items-center gap-2 ${activeTab === 'categories_management' ? 'bg-stone-900 text-white shadow-3xs' : 'hover:bg-brand-light-hover'}`}
             >
@@ -1912,30 +1913,17 @@ export default function AdminDashboard({
             {reportSubTab === 'finance_bestseller' && (
               <>
                 {/* CORE EXECUTIVE STATS - 4 PREMIUM FINANCIAL CARDS */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="border border-amber-200 p-4 rounded-2xl bg-amber-50/40 relative overflow-hidden transition-all hover:shadow-xs group">
                     <div className="absolute top-0 right-0 p-3 opacity-15 group-hover:scale-110 duration-200">
                       <DollarSign className="w-12 h-12 text-[#8b5e3c]" />
                     </div>
-                    <span className="text-stone-400 text-[9.5px] font-bold uppercase tracking-wider block">Tổng Doanh Số (Thành Công)</span>
+                    <span className="text-stone-400 text-[9.5px] font-bold uppercase tracking-wider block">Doanh Thu Gói Tạo Khóa Học</span>
                     <span className="text-base lg:text-md font-black text-brand-dark block mt-1.5 font-mono text-[#8b5e3c]">
                       {formatVND(totalRevenue)}
                     </span>
                     <span className="text-[10px] text-emerald-600 font-semibold block mt-0.5">
                       ✓ {successfulOrders.length} đơn hàng tất toán thành công
-                    </span>
-                  </div>
-
-                  <div className="border border-stone-200 p-4 rounded-2xl bg-stone-50/60 relative overflow-hidden transition-all hover:shadow-xs group">
-                    <div className="absolute top-0 right-0 p-3 opacity-15 group-hover:scale-110 duration-200">
-                      <Landmark className="w-12 h-12 text-stone-750" />
-                    </div>
-                    <span className="text-stone-400 text-[9.5px] font-bold uppercase tracking-wider block">Doanh Thu Thu Giữ Sàn ({commissionRate}%)</span>
-                    <span className="text-base lg:text-md font-black text-stone-900 block mt-1.5 font-mono">
-                      {formatVND(totalCommission)}
-                    </span>
-                    <span className="text-[10px] text-stone-500 block mt-0.5">
-                      Trích xuất hoa hồng quản trị sàn
                     </span>
                   </div>
 
@@ -2067,9 +2055,7 @@ export default function AdminDashboard({
 
                               {activeDataSet.map((data, index) => {
                                 const grossRatio = Math.max(0.03, data.gross / maxGrossVal);
-                                const commissionRatio = Math.max(0, data.commission / maxGrossVal);
                                 const grossPercentHeight = `${grossRatio * 100}%`;
-                                const commissionPercentHeight = `${commissionRatio * 100}%`;
 
                                 return (
                                   <div key={index} className="flex-1 flex flex-col items-center relative group min-w-0">
@@ -2077,10 +2063,8 @@ export default function AdminDashboard({
                                       <p className="font-extrabold text-amber-400 border-b pb-0.5 mb-1 text-center font-mono">
                                         {revenueReportType === 'monthly' ? `Tháng ${index + 1}` : `Ngày ${data.label}/${selectedReportMonth}`}
                                       </p>
-                                      <p>Phát sinh: <strong className="font-mono text-[11px] text-white">{data.count} đơn gốc</strong></p>
-                                      <p>Tổng thu gộp: <strong className="font-mono text-[11px] text-amber-300">{formatVND(data.gross)}</strong></p>
-                                      <p>Khấu trừ hoa hồng: <strong className="font-mono text-[11px] text-emerald-400">{formatVND(data.commission)}</strong></p>
-                                      <p>Đơn vị dạy thực tế: <strong className="font-mono text-[11px] text-sky-300">{formatVND(data.gross - data.commission)}</strong></p>
+                                      <p>Phát sinh: <strong className="font-mono text-[11px] text-white">{data.count} giao dịch gói</strong></p>
+                                      <p>Tổng thu nhập: <strong className="font-mono text-[11px] text-amber-300">{formatVND(data.gross)}</strong></p>
                                     </div>
 
                                     <div className="w-full relative rounded-t-xs hover:brightness-95 duration-105 ease-out cursor-pointer h-32 flex flex-col justify-end bg-stone-200/50">
@@ -2088,10 +2072,6 @@ export default function AdminDashboard({
                                         className="w-full bg-linear-to-t from-amber-600 to-amber-400 rounded-t-xs absolute bottom-0 relative flex flex-col justify-end" 
                                         style={{ height: grossPercentHeight }}
                                       >
-                                        <div 
-                                          className="w-full bg-emerald-500 bottom-0 absolute rounded-t-xs" 
-                                          style={{ height: `${(data.commission / (data.gross || 1)) * 100}%` }}
-                                        ></div>
                                       </div>
                                     </div>
 
@@ -2126,9 +2106,7 @@ export default function AdminDashboard({
                             <tr>
                               <th className="p-2 pl-3">Chu kỳ kiểm soát</th>
                               <th className="p-2 text-center">Đã thanh toán (SL)</th>
-                              <th className="p-2 text-right">Tổng thu phí</th>
-                              <th className="p-2 text-right">Truy thu sàn ({commissionRate}%)</th>
-                              <th className="p-2 text-right">Chia sẻ Giảng viên</th>
+                              <th className="p-2 text-right">Tổng thu nhập</th>
                               <th className="p-2 text-center">Trạng thái</th>
                             </tr>
                           </thead>
@@ -2149,7 +2127,6 @@ export default function AdminDashboard({
 
                               return activeLEDGER.map((line, index) => {
                                 if (line.gross === 0) return null;
-                                const instructorShare = line.gross - line.commission;
                                 return (
                                   <tr key={index} className="hover:bg-amber-50/20 font-bold transition-colors">
                                     <td className="p-2 pl-3 font-semibold text-stone-800">
@@ -2160,12 +2137,6 @@ export default function AdminDashboard({
                                     </td>
                                     <td className="p-2 text-right text-stone-900 font-mono">
                                       {formatVND(line.gross)}
-                                    </td>
-                                    <td className="p-2 text-right text-emerald-700 font-mono">
-                                      {formatVND(line.commission)}
-                                    </td>
-                                    <td className="p-2 text-right text-[#8b5e3c] font-mono">
-                                      {formatVND(instructorShare)}
                                     </td>
                                     <td className="p-2 text-center">
                                       <span className="bg-emerald-100 text-emerald-800 text-[8px] font-black px-1.5 py-0.5 rounded-sm">
@@ -2181,99 +2152,7 @@ export default function AdminDashboard({
                       </div>
                     </div>
                   </div>
-
-                  {/* CONTROLS COLUMN (COMMISSION SETTINGS & BGP CONTROLS) */}
-                  <div className="xl:col-span-4 space-y-4 text-left">
-                    
-                    {/* CONFIGURATION COMMISSION CARD */}
-                    <div className="bg-gradient-to-br from-[#8b5e3c]/5 to-[#8b5e3c]/10 border border-[#8b5e3c]/20 p-5 rounded-2xl space-y-4">
-                      <h4 className="font-extrabold text-xs text-[#8b5e3c] flex items-center gap-1.5">
-                        <Settings className="w-4 h-4" /> Cấu hình phí dịch vụ & thu giữ sàn
-                      </h4>
-
-                      <div className="space-y-4">
-                        <div className="space-y-1.5">
-                          <label className="block text-[10.5px] font-extrabold text-stone-605">Phí thu giữ từ doanh số bán khóa học (%):</label>
-                          <div className="flex gap-1.5">
-                            <input 
-                              type="number"
-                              value={commissionRate}
-                              onChange={(e) => setCommissionRate(parseInt(e.target.value) || 0)}
-                              className="w-full text-center border text-xs font-bold px-3 py-2 rounded-xl bg-white focus:outline-hidden" 
-                              max="100"
-                              min="0"
-                            />
-                            <button 
-                              onClick={() => alert(`✓ Đã thiết lập tỉ lệ khấu trừ hoa hồng mới: ${commissionRate}%`)}
-                              className="bg-stone-900 hover:bg-stone-850 text-white text-[10.5px] font-bold py-2 px-3.5 rounded-xl transition-all duration-155 shrink-0"
-                            >
-                              Lưu lại
-                            </button>
-                          </div>
-                          <p className="text-[9.5px] text-stone-400">Thay đổi áp dụng ngay cho các lượt mua khóa học phát sinh mới hoặc đối soát rút tiền thụ động.</p>
-                        </div>
-
-                        <div className="border-t border-[#8b5e3c]/10 pt-3 space-y-2.5 text-[10px]">
-                          <span className="font-bold text-[10.5px] block text-stone-700">Cài đặt Cảnh báo & Bảo mật lõi</span>
-                          
-                          <div className="flex items-start gap-2">
-                            <input type="checkbox" defaultChecked className="rounded text-stone-900 mt-0.5 focus:ring-0 cursor-pointer" id="sec-auto" />
-                            <label htmlFor="sec-auto" className="text-stone-550 text-[10px] leading-relaxed cursor-pointer select-none">
-                              Tự động đình chỉ tài khoản có dấu hiệu bypass video lặp học trình devTools bất minh.
-                            </label>
-                          </div>
-
-                          <div className="flex items-start gap-2 pt-1 font-bold">
-                            <input type="checkbox" defaultChecked className="rounded text-stone-900 mt-0.5 focus:ring-0 cursor-pointer" id="limit-payout" />
-                            <label htmlFor="limit-payout" className="text-stone-550 text-[10px] leading-relaxed cursor-pointer select-none font-semibold">
-                              Kích hoạt hạn mức giải ngân (Rút tối đa 50,000,000 VND / lần yêu cầu để chống rửa tiền).
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* HISTORICAL CASH FLOW DISTRIBUTION PIE PREVIEW */}
-                    <div className="border border-stone-200 p-4 rounded-2xl bg-white text-[10px] space-y-3">
-                      <h5 className="font-extrabold text-[#5c3a21] flex items-center gap-1.5 border-b pb-2">
-                        <Landmark className="w-4 h-4 text-amber-700" /> Bản Phân Phối Dòng Tiền Tích Lũy
-                      </h5>
-                      
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-stone-550">Tổng dòng thu qua ví (Gross):</span>
-                          <strong className="font-mono text-[11px] text-[#8b5e3c]">{formatVND(totalRevenue)}</strong>
-                        </div>
-                        <div className="w-full bg-stone-100 rounded-full h-2 overflow-hidden flex">
-                          <div className="bg-emerald-500 h-full" style={{ width: `${commissionRate}%` }} title="Sàn giữ"></div>
-                          <div className="bg-amber-500 h-full flex-1" title="Giảng viên nhận"></div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-2 pt-2 border-t text-[9px] font-bold">
-                          <div className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                            <div className="truncate">
-                              <p className="text-stone-400">Sàn Admin ({commissionRate}%):</p>
-                              <p className="text-stone-850 font-mono mt-0.5">{formatVND(totalCommission)}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 border-l pl-2">
-                            <span className="w-2 h-2 rounded-full bg-amber-505 bg-amber-500"></span>
-                            <div className="truncate">
-                              <p className="text-stone-400">Đối tác ({100 - commissionRate}%):</p>
-                              <p className="text-stone-850 font-mono mt-0.5">{formatVND(totalRevenue - totalCommission)}</p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="bg-amber-50/40 p-2.5 rounded-lg border border-amber-200/50 mt-2 text-stone-500 leading-normal font-semibold">
-                          Hệ thống đã hỗ trợ các cổng tích hợp ngân hàng tự động. Đã tất toán hoàn thành giải ngân <strong className="text-stone-800 font-mono">{formatVND(totalPayoutCompleted)}</strong> tổng tiền lương giảng sư thụ động.
-                        </div>
-                      </div>
-                    </div>
-
                   </div>
-                </div>
 
                 {/* SECTION 4: BEST-SELLING COURSES REPORT SECTION (BÁO CÁO KHÓA HỌC BÁN CHẠY) */}
                 <div className="border border-stone-200 p-5 rounded-2xl space-y-4 bg-white/50 text-left">
@@ -2363,16 +2242,6 @@ export default function AdminDashboard({
                                 </div>
                               </div>
 
-                              <div className="space-y-1 text-[9px] border-t border-dashed pt-2.5">
-                                <div className="flex justify-between items-center text-stone-500">
-                                  <span>Thu giữ phí sàn ({commissionRate}%):</span>
-                                  <span className="font-mono">{formatVND(item.adminCommission)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-stone-800 font-extrabold">
-                                  <span>Thù lao Giảng viên ({100 - commissionRate}%):</span>
-                                  <span className="font-mono text-emerald-700">{formatVND(item.instructorIncome)}</span>
-                                </div>
-                              </div>
                             </div>
 
                             <div className="flex items-center justify-between text-[9px] border-t pt-2.5 mt-3 text-stone-400 font-bold">
@@ -3019,6 +2888,65 @@ export default function AdminDashboard({
 
               </div>
             )}
+          </div>
+        )}
+        {/* TAB: PACKAGES MANAGEMENT */}
+        {activeTab === 'packages_management' && (
+          <div className="space-y-4 animate-fade-in text-xs text-left">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-stone-100">
+              <div>
+                <h3 className="text-base font-display font-bold text-main-normal flex items-center gap-1.5">
+                  <Box className="w-5 h-5 text-stone-850" /> Quản lý Gói Khởi Tạo Khóa Học
+                </h3>
+                <p className="text-stone-400 mt-0.5">Tạo và cấu hình các gói bán lượt tạo khóa học cho giảng viên.</p>
+              </div>
+              <button
+                className="bg-[#8b5e3c] text-white hover:bg-[#6c472d] font-bold py-2 px-4 rounded-xl flex items-center gap-2 transition-all shadow-md"
+                onClick={() => alert('Chức năng thêm mới gói đang được phát triển.')}
+              >
+                <Plus className="w-4 h-4" /> Thêm Gói Mới
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {coursePackages.length === 0 ? (
+                <div className="col-span-full text-center py-12 text-stone-400 font-bold border-2 border-dashed rounded-2xl">
+                  Chưa có gói khởi tạo nào. Hãy thêm gói đầu tiên!
+                </div>
+              ) : (
+                coursePackages.map((pkg) => (
+                  <div key={pkg.id} className="bg-white border rounded-2xl p-5 hover:border-amber-400 hover:shadow-xs transition-all relative group flex flex-col">
+                    <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button className="p-1.5 bg-stone-100 text-stone-600 hover:bg-amber-100 hover:text-amber-700 rounded-lg" title="Sửa gói" onClick={() => alert('Chức năng sửa gói đang được phát triển.')}>
+                        <Settings className="w-3.5 h-3.5" />
+                      </button>
+                      <button className="p-1.5 bg-stone-100 text-stone-600 hover:bg-red-100 hover:text-red-700 rounded-lg" title="Xóa gói" onClick={() => alert('Chức năng xóa gói đang được phát triển.')}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    
+                    <h4 className="font-black text-lg text-stone-800 mb-1 pr-16">{pkg.title}</h4>
+                    <p className="text-xs text-stone-500 mb-4 flex-1">{pkg.description}</p>
+                    
+                    <div className="bg-stone-50 rounded-xl p-3 mb-4 border border-stone-100 space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-stone-500">Giá bán (VND)</span>
+                        <span className="font-black text-brand-dark font-mono text-sm">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(pkg.basePrice)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-stone-500">Số lượt tạo khóa</span>
+                        <span className="font-black text-emerald-600 font-mono text-sm">+{pkg.courseCreationQuota}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider flex justify-between items-center border-t pt-3">
+                      <span>ID: {pkg.id}</span>
+                      <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-100">Đang kích hoạt</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         )}
 

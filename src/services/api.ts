@@ -963,11 +963,16 @@ export const ApiService = {
   // MODULE 8. INSTRUCTOR STUDIO CONTROLS
   // ==========================================
 
-  /** GET /instructor/profile */
-  async getInstructorProfile(): Promise<any> {
-    devLog('Instructor', 'Fetch professional trainer profile details');
-    if (config.mode === 'api') return apiFetch<any>('/instructor/profile');
-    return { name: 'Thầy Giáo Mơ', bio: 'Nhà thiền tu' };
+  /** GET /instructor/profile or /users/:id */
+  async getInstructorProfile(instructorId?: string): Promise<any> {
+    devLog('Instructor', 'Fetch professional trainer profile details', { instructorId });
+    if (config.mode === 'api') {
+      if (instructorId) {
+        return apiFetch<any>(`/users/${instructorId}`);
+      }
+      return apiFetch<any>('/instructor/profile');
+    }
+    return { id: instructorId || 'inst-1', name: 'Thầy Giáo Mơ', bio: 'Nhà thiền tu', title: 'Chuyên gia Đào tạo', role: 'instructor', email: 'instructor@mindhub.edu.vn', avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=150' };
   },
 
   /** PATCH /instructor/profile */
@@ -1685,8 +1690,79 @@ export const ApiService = {
     }
     // Mock
     return { success: true, message: 'Mock: Đã gửi liên hệ' };
+  },
+
+  /** GET /packages */
+  async getCoursePackages(): Promise<any[]> {
+    devLog('Packages', 'Get course creation packages');
+    if (config.mode === 'api') {
+      const data = await apiFetch<any>('/packages');
+      return data.packages || [];
+    }
+    // Mock packages
+    return [
+      { id: 'pkg-1', title: 'Gói Trải Nghiệm', basePrice: 200000, courseCreationQuota: 1, status: 'active' },
+      { id: 'pkg-2', title: 'Gói Tiêu Chuẩn', basePrice: 500000, courseCreationQuota: 3, status: 'active' },
+      { id: 'pkg-3', title: 'Gói Chuyên Nghiệp', basePrice: 1500000, courseCreationQuota: 10, status: 'active' }
+    ];
+  },
+
+  /** GET /instructor/quota */
+  async getInstructorQuota(): Promise<{ remaining: number, totalPurchased: number }> {
+    devLog('Packages', 'Get instructor quota');
+    if (config.mode === 'api') {
+      return apiFetch<any>('/instructor/quota');
+    }
+    // Mock local quota
+    const quotaStr = localStorage.getItem('mindhub_instructor_quota');
+    if (!quotaStr) {
+      return { remaining: 0, totalPurchased: 0 };
+    }
+    return JSON.parse(quotaStr);
+  },
+
+  /** POST /packages/purchase */
+  async purchasePackage(payload: { packageId: string; paymentMethod: string }): Promise<{ success: boolean; message: string; quotaGranted: number }> {
+    devLog('Packages', 'Purchase package', payload);
+    if (config.mode === 'api') {
+      return apiFetch<any>('/packages/purchase', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+    
+    const packages = await this.getCoursePackages();
+    const pkg = packages.find(p => p.id === payload.packageId);
+    if (!pkg) throw new Error('Không tìm thấy gói');
+
+    let quota = await this.getInstructorQuota();
+    quota.remaining += pkg.courseCreationQuota;
+    quota.totalPurchased += pkg.courseCreationQuota;
+    localStorage.setItem('mindhub_instructor_quota', JSON.stringify(quota));
+
+    return { success: true, message: 'Đã mua gói thành công', quotaGranted: pkg.courseCreationQuota };
+  },
+
+  /** POST /instructor/deduct-quota */
+  async deductQuotaForCourse(payload: { courseId: string }): Promise<{ success: boolean }> {
+    devLog('Packages', 'Deduct quota for course creation', payload);
+    if (config.mode === 'api') {
+      return apiFetch<any>('/instructor/deduct-quota', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+    
+    let quota = await this.getInstructorQuota();
+    if (quota.remaining <= 0) {
+      throw new Error('Bạn đã hết lượt tạo khóa học. Vui lòng mua thêm gói.');
+    }
+    quota.remaining -= 1;
+    localStorage.setItem('mindhub_instructor_quota', JSON.stringify(quota));
+    return { success: true };
   }
 };
+
 
 // Declared helper interface for sections array
 interface Section {

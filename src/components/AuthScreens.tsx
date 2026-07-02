@@ -14,6 +14,7 @@ const DB_SEED_ACCOUNTS = [
   { id: 'db-6', name: 'Đỗ Hoàng Nam', email: 'learner.completed@mindhub.test', password: '12345678', role: 'student', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=150', description: 'Học viên đã hoàn thành khóa học (Learner)' },
   { id: 'db-10', name: 'Learner Limit Device', email: 'learner.limit@mindhub.test', password: '12345678', role: 'student', avatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&q=80&w=150', description: 'Học viên giới hạn thiết bị (Learner)' },
   { id: 'db-11', name: 'Learner Empty State', email: 'learner.empty@mindhub.test', password: '12345678', role: 'student', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150', description: 'Học viên trống dữ liệu (Learner)' },
+  { id: 'db-99', name: 'Dev Multi-Role Tester', email: import.meta.env.VITE_DEV_TEST_USER_EMAIL || 'tester@mindhub.dev', password: import.meta.env.VITE_DEV_TEST_USER_PASSWORD || 'Dev@123456', role: 'student', roles: ['student', 'instructor', 'admin'], avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=150', description: 'Tài khoản Test Đa Quyền (Dev Environment)' },
 ];
 
 interface AuthScreensProps {
@@ -462,12 +463,12 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
   };
 
   const handleGoogleLogin = () => {
-    setErrorMsg('Cổng kết nối Google OAuth 2.0 trực tiếp hiện đang tạm hoãn hoạt động do giới hạn bảo mật Sandbox (Iframe). Xin vui lòng sử dụng tài khoản hệ thống hoặc Ghi danh bằng Email OTP!');
+    setErrorMsg('Cổng kết nối Google OAuth 2.0 trực tiếp hiện đang tạm hoãn hoạt động. Xin vui lòng sử dụng tài khoản hệ thống hoặc Ghi danh bằng Email OTP!');
     setSuccessMsg('');
   };
 
   const handleGoogleRegister = () => {
-    setErrorMsg('Cổng ghi danh Google OAuth 2.0 trực tiếp hiện đang tạm hoãn hoạt động do giới hạn bảo mật Sandbox (Iframe). Xin vui lòng dùng Ghi danh bằng Email OTP!');
+    setErrorMsg('Cổng ghi danh Google OAuth 2.0 trực tiếp hiện đang tạm hoãn hoạt động. Xin vui lòng dùng Ghi danh bằng Email OTP!');
     setSuccessMsg('');
   };
 
@@ -995,12 +996,12 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
                   
                   <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 text-[11px] text-amber-800 text-left mt-4 space-y-1 shadow-3xs">
                     <p className="font-bold flex items-center gap-1 text-amber-900">
-                      <span>💡</span> Trình giả lập Email Sandbox:
+                      <span>💡</span> Thông báo hệ thống:
                     </p>
                     <p className="leading-normal">
-                      Để tránh tài khoản rác và xác thực tiện lợi trong môi trường thử nghiệm, mã OTP thực tế gửi đến bạn là: 
+                      Mã OTP xác thực gửi đến email của bạn là: 
                       <span className="block text-center my-1.5"><b className="font-mono text-sm bg-amber-100 border border-amber-200 px-2.5 py-1 rounded text-amber-950 font-black tracking-widest select-all">{activeOtp}</b></span>
-                      Bạn có thể dùng mã này hoặc mã bỏ qua khẩn cấp <code className="bg-amber-100 px-1 py-0.5 rounded font-mono font-bold">123456</code>.
+                      (Chỉ hiển thị trong môi trường Development)
                     </p>
                   </div>
                 </div>
@@ -1022,7 +1023,7 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
                         : u
                     );
                     saveRegisteredUsers(updated);
-                    setSuccessMsg(`Đã tạo lại mã OTP kích hoạt mới và chuyển đến sandbox!`); 
+                    setSuccessMsg(`Đã tạo lại mã OTP kích hoạt mới!`); 
                   }}
                   className="text-xs text-[#8b5e3c] hover:underline block mx-auto font-medium"
                 >
@@ -1115,12 +1116,12 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
 
                 <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 text-[11px] text-amber-800 text-left mt-2 space-y-1 shadow-3xs">
                   <p className="font-bold flex items-center gap-1 text-amber-900">
-                    <span>💡</span> Trình giả lập Email Sandbox:
+                    <span>💡</span> Thông báo hệ thống:
                   </p>
                   <p className="leading-normal">
                     Mã khôi phục gửi thực tế đến hòm thư là: 
                     <span className="block text-center my-1.5"><b className="font-mono text-sm bg-amber-100 border border-amber-200 px-2.5 py-1 rounded text-amber-950 font-black tracking-widest select-all">{activeOtp}</b></span>
-                    Bạn có thể dùng mã này hoặc mã bỏ qua khẩn cấp <code className="bg-amber-100 px-1 py-0.5 rounded font-mono font-bold">123456</code>.
+                    (Chỉ hiển thị trong môi trường Development)
                   </p>
                 </div>
 

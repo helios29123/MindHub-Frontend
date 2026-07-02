@@ -281,6 +281,122 @@ function InstructorSecurityPanel({ currentUser }: { currentUser: User }) {
   );
 }
 
+function InstructorPackagesTab({ quota, packages, onQuotaUpdate }: { quota: any, packages: any[], onQuotaUpdate: (q: any) => void }) {
+  const [selectedPackage, setSelectedPackage] = useState<any>(null);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+
+  const handlePurchase = async () => {
+    if (!selectedPackage) return;
+    try {
+      setIsPurchasing(true);
+      const res = await ApiService.purchasePackage({
+        packageId: selectedPackage.id,
+        paymentMethod: 'balance'
+      });
+      alert(res.message);
+      const newQuota = await ApiService.getInstructorQuota();
+      onQuotaUpdate(newQuota);
+      setSelectedPackage(null);
+    } catch (err: any) {
+      alert(err.message || 'Lỗi khi mua gói');
+    } finally {
+      setIsPurchasing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 animate-fade-in text-left">
+      <div className="bg-stone-50 border p-5 rounded-2xl flex items-center justify-between">
+        <div>
+          <h4 className="font-extrabold text-[#783c12] text-sm flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-amber-700" /> Quản lý Gói Khởi Tạo Khóa Học
+          </h4>
+          <p className="text-xs text-stone-500 mt-1">Giảng viên cần mua gói để có quyền tạo thêm khóa học mới.</p>
+        </div>
+        <div className="text-right">
+          <span className="block text-xs text-stone-500 font-bold uppercase">Hạn mức hiện tại</span>
+          <span className="text-2xl font-black text-brand-dark font-mono">{quota.remaining} <span className="text-sm text-stone-500 font-sans">khóa học</span></span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {packages.map(pkg => (
+          <div key={pkg.id} className="border border-stone-200 rounded-2xl p-6 bg-white flex flex-col hover:border-brand-normal transition-colors relative overflow-hidden">
+            {pkg.title.includes('Chuyên Nghiệp') && (
+              <div className="absolute top-3 right-[-30px] bg-amber-500 text-white text-[10px] font-bold px-8 py-1 rotate-45">
+                BÁN CHẠY
+              </div>
+            )}
+            <h3 className="font-black text-lg text-stone-800 mb-2">{pkg.title}</h3>
+            <p className="text-3xl font-black text-brand-normal font-mono mb-4">
+              {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(pkg.basePrice)}
+            </p>
+            <ul className="space-y-3 mb-6 flex-1 text-sm text-stone-600 font-semibold">
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-500" />
+                Cho phép tạo tối đa <b>{pkg.courseCreationQuota} khóa học</b>
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-500" />
+                Lưu trữ video bài giảng trọn đời
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-500" />
+                Hỗ trợ kỹ thuật 24/7
+              </li>
+            </ul>
+            <button
+              onClick={() => setSelectedPackage(pkg)}
+              className="w-full bg-stone-100 text-stone-700 hover:bg-brand-normal hover:text-white font-bold py-3 rounded-xl transition-colors"
+            >
+              Chọn gói này
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {selectedPackage && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md">
+            <h3 className="font-bold text-xl mb-4 text-center">Xác nhận thanh toán</h3>
+            <div className="bg-stone-50 border p-4 rounded-2xl mb-6">
+              <div className="flex justify-between mb-2">
+                <span className="font-semibold text-stone-600">Gói dịch vụ:</span>
+                <span className="font-black">{selectedPackage.title}</span>
+              </div>
+              <div className="flex justify-between mb-2">
+                <span className="font-semibold text-stone-600">Quyền lợi:</span>
+                <span className="font-black">+{selectedPackage.courseCreationQuota} khóa học</span>
+              </div>
+              <div className="flex justify-between border-t pt-2 mt-2">
+                <span className="font-bold">Tổng thanh toán:</span>
+                <span className="font-black text-brand-normal font-mono">
+                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(selectedPackage.basePrice)}
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setSelectedPackage(null)}
+                className="flex-1 py-3 bg-stone-100 text-stone-700 font-bold rounded-xl"
+              >
+                Hủy
+              </button>
+              <button 
+                onClick={handlePurchase}
+                disabled={isPurchasing}
+                className="flex-1 py-3 bg-brand-normal text-white font-bold rounded-xl flex items-center justify-center gap-2"
+              >
+                {isPurchasing ? 'Đang xử lý...' : 'Xác nhận mua'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LaptopIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
@@ -297,8 +413,16 @@ export default function InstructorDashboard({
   onClose
 }: InstructorDashboardProps) {
   
-  // Tabs: 'analytics' | 'courses' | 'grading' | 'payout' | 'builder' | 'students' | 'security'
-  const [activeTab, setActiveTab] = useState<'analytics' | 'courses' | 'grading' | 'payout' | 'builder' | 'students' | 'security'>('analytics');
+  // Tabs: 'analytics' | 'courses' | 'grading' | 'payout' | 'builder' | 'students' | 'security' | 'packages'
+  const [activeTab, setActiveTab] = useState<'analytics' | 'courses' | 'grading' | 'payout' | 'builder' | 'students' | 'security' | 'packages'>('analytics');
+
+  const [quota, setQuota] = useState<{ remaining: number, totalPurchased: number }>({ remaining: 0, totalPurchased: 0 });
+  const [packages, setPackages] = useState<any[]>([]);
+
+  useEffect(() => {
+    ApiService.getInstructorQuota().then(setQuota).catch(console.error);
+    ApiService.getCoursePackages().then(setPackages).catch(console.error);
+  }, []);
   
   // --- BUILDER WIZARD STATES ---
   const [builderStep, setBuilderStep] = useState<number>(1);
@@ -803,6 +927,11 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
 
   // Launch unified wizard screen
   const startBuilderForCreate = () => {
+    if (quota.remaining <= 0) {
+      alert('Bạn đã hết lượt tạo khóa học. Vui lòng mua Gói Khởi Tạo Khóa Học để tiếp tục.');
+      setActiveTab('packages');
+      return;
+    }
     setEditingCourseId(null);
     setTitle('');
     setSubtitle('');
@@ -852,7 +981,7 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
     setActiveTab('builder');
   };
 
-  const handleFinishCoursePublish = () => {
+  const handleFinishCoursePublish = async () => {
     if (!title.trim() || !description.trim()) {
       alert('Vui lòng hoàn thành điền Tên khóa học và Mô tả ở Bước 1 trước khi xuất bản.');
       setBuilderStep(1);
@@ -908,6 +1037,15 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
         alert('Đã cập nhật chỉnh sửa khóa học thành công! Giáo án đã được chuyển sang trạng thái chờ duyệt thẩm định.');
       }
     } else {
+      try {
+        await ApiService.deductQuotaForCourse({ courseId: payload.id });
+        const newQuota = await ApiService.getInstructorQuota();
+        setQuota(newQuota);
+      } catch (err: any) {
+        alert(err.message || 'Lỗi khi trừ quota khóa học');
+        return;
+      }
+
       if (ApiService.getConfig().mode === 'api') {
         ApiService.createCourseDraft(payload)
           .then((createdFromApi) => {
@@ -993,6 +1131,12 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
           >
             <DollarSign className="w-4 h-4 text-stone-700" /> Yêu cầu Rút tiền
           </button>
+          <button 
+            onClick={() => setActiveTab('packages')}
+            className={`whitespace-nowrap px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 shrink-0 transition-all ${activeTab === 'packages' ? 'bg-brand-normal text-brand-light' : 'bg-slate-50 md:bg-transparent hover:bg-brand-light-hover'}`}
+          >
+            <Sparkles className="w-4 h-4 text-stone-700" /> Gói Tạo Khóa Học
+          </button>
 
           <div className="md:pt-6 shrink-0 flex items-center">
             <button onClick={onClose} className="whitespace-nowrap border text-xs py-1.5 px-3 rounded-lg text-gray-500 hover:text-black hover:bg-white bg-slate-50 md:bg-transparent">
@@ -1014,7 +1158,7 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="border border-brand-light-active p-4 rounded-2xl bg-slate-50 relative overflow-hidden text-left shadow-xs">
-                <span className="text-gray-400 text-[10px] font-bold uppercase block">Tổng doanh thu nhận (Hoa hồng 70%)</span>
+                <span className="text-gray-400 text-[10px] font-bold uppercase block">Tổng doanh thu nhận (100% doanh thu)</span>
                 <span className="text-md font-bold text-brand-dark block mt-1">{formatVND(68200000)}</span>
                 <span className="text-[10px] text-emerald-600 font-medium block mt-1">↑ 12% so với tháng trước</span>
               </div>
@@ -2264,7 +2408,7 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
               <h3 className="text-base font-display font-bold text-main-normal flex items-center gap-1.5">
                 <DollarSign className="w-5 h-5 text-stone-850" /> Rút Tiền Doanh Thu Giảng Viên
               </h3>
-              <p className="text-stone-500 text-[11px] mt-0.5">Yêu cầu rút tiền hoa hồng tích lũy từ lượt bán khóa học, cập nhật thông tin ngân hàng thụ hưởng và đối soát các giao dịch chuyển khoản.</p>
+              <p className="text-stone-500 text-[11px] mt-0.5">Yêu cầu rút tiền doanh thu tích lũy từ lượt bán khóa học, cập nhật thông tin ngân hàng thụ hưởng và đối soát các giao dịch chuyển khoản.</p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -2470,7 +2614,7 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                             return;
                           }
                           setIsUpdatingBank(false);
-                          alert('💾 Cấu hình liên kết ngân hàng nhận hoa hồng MindHub mới đã được ghi nhận tự động!');
+                          alert('💾 Cấu hình liên kết ngân hàng nhận doanh thu MindHub mới đã được ghi nhận tự động!');
                         }}
                         className="w-full bg-stone-900 text-white font-bold p-2 rounded-xl text-[10.5px] hover:bg-stone-800"
                       >
@@ -2785,6 +2929,11 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
         {/* TAB 7: SECURITY */}
         {activeTab === 'security' && (
           <InstructorSecurityPanel currentUser={currentUser} />
+        )}
+
+        {/* TAB 8: PACKAGES */}
+        {activeTab === 'packages' && (
+          <InstructorPackagesTab quota={quota} packages={packages} onQuotaUpdate={setQuota} />
         )}
 
       </div>

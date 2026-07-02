@@ -6,9 +6,11 @@ export interface User {
   email: string;
   avatar: string;
   role: Role;
+  roles?: Role[];
   streak: number;
   lastActiveDate: string;
   bio?: string;
+  title?: string;
   phone?: string;
   expertise?: string;
   experienceYears?: string;
@@ -387,4 +389,45 @@ export interface InstructorRequest {
   reviewedAt?: string;
 }
 
+export interface CourseCreationPackage {
+  id: string;
+  title: string;
+  shortDescription?: string;
+  description?: string;
+  thumbnail?: string;
+  basePrice: number;
+  courseCreationQuota: number;
+  status: 'active' | 'draft' | 'hidden' | 'archived';
+  displayOrder: number;
+  createdAt: string;
+  updatedAt?: string;
+}
 
+export interface InstructorPackagePurchase {
+  id: string;
+  instructorId: string;
+  packageId: string;
+  orderId?: string;
+  transactionId?: string;
+  packageTitleSnapshot: string;
+  basePriceSnapshot: number;
+  discountSnapshot: number;
+  finalPriceSnapshot: number;
+  quotaGranted: number;
+  quotaUsed: number;
+  quotaRemaining: number;
+  status: 'pending' | 'paid' | 'failed' | 'refunded';
+  paidAt?: string;
+  refundedAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CourseCreationQuotaUsage {
+  id: string;
+  instructorId: string;
+  packagePurchaseId: string;
+  courseId: string;
+  status: 'consumed' | 'refunded';
+  createdAt: string;
+}
