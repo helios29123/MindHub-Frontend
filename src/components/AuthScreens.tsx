@@ -117,99 +117,23 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
     
     const emailTrimmed = email.trim().toLowerCase();
     
-    // 0. Use Live Backend Database Auth if in API Mode
-    if (ApiService.getConfig().mode === 'api') {
-      setSuccessMsg('Đang gửi truy xuất thực tới máy chủ API...');
-      ApiService.login({ email: emailTrimmed, password })
-        .then(res => {
-          const apiUser = normalizeUser({
-            ...res.user,
-            isEmailVerified: true
-          });
-          saveToHistory(apiUser);
-          onLoginSuccess(apiUser);
-          onClose();
-        })
-        .catch(err => {
-          setErrorMsg(`Thất bại kết nối database / API: ${err.message || err.toString()}`);
+    setSuccessMsg('Đang đăng nhập...');
+    ApiService.login({ email: emailTrimmed, password })
+      .then(res => {
+        const apiUser = normalizeUser({
+          ...res.user,
+          isEmailVerified: true
         });
-      return;
-    }
-    
-    // 1. Check local registered user database
-    const matchedUserIndex = localRegisteredUsers.findIndex(u => u.email.toLowerCase() === emailTrimmed);
-    if (matchedUserIndex !== -1) {
-      const matchedUser = localRegisteredUsers[matchedUserIndex];
-      const storedPassword = (matchedUser as any).password || 'password123';
-      
-      if (password !== storedPassword) {
-        setErrorMsg('Mật khẩu đăng nhập không chính xác. Vui lòng kiểm tra lại!');
-        return;
-      }
-      
-      // enforce verification state to prevent spam/junk registrations!
-      if (matchedUser.isEmailVerified === false) {
-        setErrorMsg(`ĐĂNG NHẬP PHẢI BỊ CHẶN: Email '${matchedUser.email}' chưa được xác thực! Để chống spam bừa bãi, vui lòng xác minh mã OTP.`);
-        setSuccessMsg(`Đã tạo lại và gửi mã OTP mới về hòm thư ${matchedUser.email}. Nhập mã phía dưới để mở khóa.`);
-        
-        // Generate new OTP on the fly to continue easily
-        const updatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-        const updated = [...localRegisteredUsers];
-        updated[matchedUserIndex] = { ...matchedUser, verificationOtp: updatedOtp };
-        saveRegisteredUsers(updated);
-        
-        setVerificationCode('');
-        setMode('verify');
-        return;
-      }
-      
-      saveToHistory(matchedUser);
-      onLoginSuccess(matchedUser);
-      onClose();
-      return;
-    }
-
-    // 2. Simulate standard system role accounts if typed with default pass (fallback backup)
-    let matchedRole: 'student' | 'instructor' | 'admin' = 'student';
-    let isSystemAccount = false;
-    
-    if (emailTrimmed === SYSTEM_ROLE_USERS.student.email.toLowerCase()) { matchedRole = 'student'; isSystemAccount = true; }
-    else if (emailTrimmed === SYSTEM_ROLE_USERS.instructor.email.toLowerCase()) { matchedRole = 'instructor'; isSystemAccount = true; }
-    else if (emailTrimmed === SYSTEM_ROLE_USERS.admin.email.toLowerCase()) { matchedRole = 'admin'; isSystemAccount = true; }
-    
-    if (isSystemAccount) {
-      if (password !== 'password123') {
-        setErrorMsg('Mật khẩu của tài khoản mẫu hệ thống phải là: password123');
-        return;
-      }
-      const baseUser = SYSTEM_ROLE_USERS[matchedRole];
-      const loggedUser: UserType = {
-        ...baseUser,
-        email: emailTrimmed,
-        name: baseUser.name || (emailTrimmed.split('@')[0]),
-        isEmailVerified: true
-      };
-      saveToHistory(loggedUser);
-      onLoginSuccess(loggedUser);
-      onClose();
-      return;
-    }
-
-    // 3. Reject unknown un-registered credentials - prevents spam login bypasses!
-    setErrorMsg('Tài khoản này chưa tồn tại trong hệ thống. Vui lòng bấm "Đăng ký thành viên" để tạo và nhận mã OTP xác minh email.');
+        saveToHistory(apiUser);
+        onLoginSuccess(apiUser);
+        onClose();
+      })
+      .catch(err => {
+        setErrorMsg(`Thất bại kết nối database / API: ${err.message || err.toString()}`);
+      });
   };
 
-  // Perform quick account login/autofill in 1-click from history
   const handleHistoryClick = (userObj: UserType) => {
-    // Check if unverified
-    const matched = localRegisteredUsers.find(u => u.email.toLowerCase() === userObj.email.toLowerCase());
-    if (matched && matched.isEmailVerified === false) {
-      setEmail(matched.email);
-      setPassword((matched as any).password || '');
-      setErrorMsg(`Tài khoản trong lịch sử chưa được xác minh email. Vui lòng thực hiện xác nhận OTP để mở khóa.`);
-      setMode('verify');
-      return;
-    }
     // Proceed if verified
     saveToHistory(userObj);
     onLoginSuccess(userObj);
@@ -268,127 +192,40 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
 
     const emailTrimmed = email.trim().toLowerCase();
 
-    // 0. Use Live Backend Database creation if in API Mode
-    if (ApiService.getConfig().mode === 'api') {
-      setSuccessMsg('Đang tạo tài khoản mới trong cơ sở dữ liệu (MySQL)...');
-      ApiService.register({ 
-        name: name.trim(), 
-        email: emailTrimmed, 
-        password,
-        role: registerRole,
-        specialty: registerRole === 'instructor' ? instructorSpecialty : undefined,
-        bio: registerRole === 'instructor' ? instructorBio : undefined,
-        experience: registerRole === 'instructor' ? instructorExperience : undefined
-      })
-        .then(res => {
-          const apiUser = normalizeUser({
-            ...res.user,
-            role: registerRole,
-            isEmailVerified: true
-          });
-          saveToHistory(apiUser);
-          onLoginSuccess(apiUser);
-          alert('Đăng ký tài khoản thành công! Bạn đã được tự động đăng nhập.');
-          onClose();
-        })
-        .catch(err => {
-          setErrorMsg(`Thất bại tạo tài khoản trên database: ${err.message || err.toString()}`);
+    setSuccessMsg('Đang tạo tài khoản mới...');
+    ApiService.register({ 
+      name: name.trim(), 
+      email: emailTrimmed, 
+      password,
+      role: registerRole,
+      specialty: registerRole === 'instructor' ? instructorSpecialty : undefined,
+      bio: registerRole === 'instructor' ? instructorBio : undefined,
+      experience: registerRole === 'instructor' ? instructorExperience : undefined
+    })
+      .then(res => {
+        const apiUser = normalizeUser({
+          ...res.user,
+          role: registerRole,
+          isEmailVerified: true
         });
-      return;
-    }
-    
-    // Check if account already exists
-    const existing = localRegisteredUsers.find(u => u.email.toLowerCase() === emailTrimmed);
-    if (existing && existing.isEmailVerified) {
-      setErrorMsg('Địa chỉ email này đã có người đăng ký & đã xác thực thành viên. Vui lòng chọn tính năng Đăng nhập!');
-      return;
-    }
-
-    // Generates genuine 6-digit OTP
-    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    let updatedList: UserType[];
-    if (existing) {
-      // Re-fill / refresh for unverified user re-attempting registration
-      updatedList = localRegisteredUsers.map(u => 
-        u.email.toLowerCase() === emailTrimmed 
-          ? { 
-              ...u, 
-              name: name.trim(), 
-              verificationOtp: generatedOtp, 
-              password: password, 
-              role: registerRole,
-              bio: registerRole === 'instructor' ? (instructorBio || 'Giảng viên MindHub.') : undefined,
-              interestedTopics: registerRole === 'instructor' ? [instructorSpecialty] : u.interestedTopics
-            } as any
-          : u
-      );
-    } else {
-      // Register new student or instructor under pending unverified (isEmailVerified = false)
-      const newUser: UserType = {
-        id: 'u-local-' + Date.now(),
-        name: name.trim(),
-        email: emailTrimmed,
-        avatar: registerRole === 'instructor' 
-          ? `https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=150`
-          : `https://images.unsplash.com/photo-${1535713875002 + Math.floor(Math.random() * 50000)}?auto=format&fit=crop&q=80&w=150`,
-        role: registerRole,
-        streak: 1,
-        lastActiveDate: new Date().toISOString().split('T')[0],
-        isEmailVerified: false,
-        verificationOtp: generatedOtp,
-        interestedTopics: registerRole === 'instructor' ? [instructorSpecialty] : ['Web Development', 'React'],
-        bio: registerRole === 'instructor' ? (instructorBio || 'Giảng viên chuyên nghiệp tại MindHub.') : undefined,
-        notificationSettings: {
-          email: true,
-          push: true,
-          app: true,
-          scheduleReminders: true
-        }
-      };
-      // Keep password safely on record
-      (newUser as any).password = password;
-      updatedList = [...localRegisteredUsers, newUser];
-    }
-
-    saveRegisteredUsers(updatedList);
-    setErrorMsg('');
-    setSuccessMsg(`Mã kích hoạt OTP đã được gửi đến: ${emailTrimmed}. Vui lòng nhập mã bảo mật để hoàn tất chống spam!`);
-    setVerificationCode('');
-    setMode('verify');
+        saveToHistory(apiUser);
+        onLoginSuccess(apiUser);
+        alert('Đăng ký tài khoản thành công! Bạn đã được tự động đăng nhập.');
+        onClose();
+      })
+      .catch(err => {
+        setErrorMsg(`Thất bại tạo tài khoản: ${err.message || err.toString()}`);
+      });
   };
 
   const handleVerify = (e: React.FormEvent) => {
     e.preventDefault();
-    const emailTrimmed = email.trim().toLowerCase();
-    const matchedUserIndex = localRegisteredUsers.findIndex(u => u.email.toLowerCase() === emailTrimmed);
-    
-    if (matchedUserIndex === -1) {
-      setErrorMsg('Hệ thống không tìm thấy phiên đăng ký cho email: ' + emailTrimmed);
+    if (verificationCode !== '123456') {
+      setErrorMsg(`Mã xác thực không chính xác! (Mã test là 123456).`);
       return;
     }
-
-    const targetUser = localRegisteredUsers[matchedUserIndex];
-    const expectedOtp = targetUser.verificationOtp || '123456';
-
-    if (verificationCode !== expectedOtp && verificationCode !== '123456') {
-      setErrorMsg(`Mã xác thực không chính xác! Hãy kiểm tra kỹ mã ${expectedOtp} hoặc dùng mã test 123456.`);
-      return;
-    }
-
-    // Kích hoạt tài khoản thành công
-    const verifiedUser = {
-      ...targetUser,
-      isEmailVerified: true,
-      verificationOtp: undefined
-    };
-    
-    const updated = [...localRegisteredUsers];
-    updated[matchedUserIndex] = verifiedUser;
-    saveRegisteredUsers(updated);
-
-    setErrorMsg('');
-    setSuccessMsg('KÍCH HOẠT THÀNH CÔNG! Tài khoản hiện đã được phê duyệt, an toàn trước hệ thống lọc spam. Hãy điền mật khẩu để truy cập ngay.');
+    // Just mock verification success
+    setSuccessMsg('Xác thực tài khoản thành công!');
     setMode('login');
   };
 

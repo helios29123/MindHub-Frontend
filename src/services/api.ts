@@ -1,5 +1,6 @@
 import { Course, Chapter, Lesson, User, QAMessage, StudentProgress, PayoutRequest, AuditLog, InstructorRequest } from '../types';
 import { safeLocalStorage as localStorage } from '../utils/safeStorage';
+import { MockDB } from './mockDb';
 
 /**
  * MindHub API Service Configuration and Integration Layer
@@ -207,7 +208,10 @@ export const ApiService = {
       this.setAuthToken(res.token);
       return res;
     }
-    return { user: { id: 'u-1', name: payload.name, email: payload.email, role: 'student', bio: '' } as any, token: 'mock-token' };
+    const users = MockDB.getState().users;
+    let newUser = { id: 'u-' + Date.now(), name: payload.name, email: payload.email, role: 'student', bio: '' };
+    MockDB.commit({ users: [...users, newUser as any] });
+    return { user: newUser as any, token: 'mock-token' };
   },
 
   /** POST /auth/login */
@@ -221,7 +225,9 @@ export const ApiService = {
       this.setAuthToken(res.token);
       return res;
     }
-    return { user: { id: 'u-1', name: 'User Mock', email: payload.email, role: 'student' } as any, token: 'mock-token' };
+    const users = MockDB.getState().users;
+    const user = users.find(u => u.email === payload.email) || users[0];
+    return { user, token: 'mock-token' };
   },
 
   /** POST /auth/logout */
@@ -431,21 +437,21 @@ export const ApiService = {
       }
       return apiFetch<Course[]>(endpoint);
     }
-    return [];
+    return MockDB.getCourses();
   },
 
   /** GET /courses/featured */
   async getFeaturedCourses(): Promise<Course[]> {
     devLog('Catalog', 'Fetch highly rated featured courses');
     if (config.mode === 'api') return apiFetch<Course[]>('/courses/featured');
-    return [];
+    return (await MockDB.getCourses()).filter(c => c.isFeatured);
   },
 
   /** GET /courses/bestsellers */
   async getBestsellerCourses(): Promise<Course[]> {
     devLog('Catalog', 'Fetch best-selling courses');
     if (config.mode === 'api') return apiFetch<Course[]>('/courses/bestsellers');
-    return [];
+    return (await MockDB.getCourses()).filter(c => c.isBestseller);
   },
 
   /** GET /courses/latest */
@@ -602,7 +608,11 @@ export const ApiService = {
   async getMyProfile(): Promise<User> {
     devLog('Profile', 'Fetch currently authenticated profile state node');
     if (config.mode === 'api') return apiFetch<User>('/users/me');
-    throw new Error('Profile retrieval requires active API session.');
+    
+    const users = MockDB.getState().users;
+    // We just mock grabbing the first authenticated user or student for now if token exists
+    const user = users.find(u => u.role !== 'guest') || users[0];
+    return user;
   },
 
   /** PATCH /users/me */
@@ -614,7 +624,27 @@ export const ApiService = {
         body: JSON.stringify(payload),
       });
     }
-    return payload as any;
+    const myProfile = await ApiService.getMyProfile();
+    return MockDB.updateUser(myProfile.id, payload) as Promise<User>;
+  },
+
+  /** POST /users/me/account-requests */
+  async createAccountRequest(payload: Omit<AccountRequest, 'id' | 'timestamp' | 'status'>): Promise<AccountRequest> {
+    devLog('Profile', 'Request account closure', payload);
+    if (config.mode === 'api') {
+      return apiFetch<AccountRequest>('/users/me/account-requests', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+    
+    const req: AccountRequest = {
+      ...payload,
+      id: 'req-' + Date.now(),
+      timestamp: new Date().toISOString(),
+      status: 'pending'
+    };
+    return MockDB.createAccountRequest(req);
   },
 
   /** PATCH /users/me/password */
@@ -1667,6 +1697,54 @@ export const ApiService = {
     };
   },
 
+  /** GET /admin/account-requests */
+  async getAccountRequests(): Promise<AccountRequest[]> {
+    devLog('Admin', 'Fetch account requests');
+    if (config.mode === 'api') {
+      return apiFetch<AccountRequest[]>('/admin/account-requests');
+    }
+    return MockDB.getAccountRequests();
+  },
+
+  /** PATCH /admin/account-requests/:requestId/resolve */
+  async resolveAccountRequest(requestId: string, action: 'approved' | 'rejected'): Promise<{ success: boolean; message: string }> {
+    devLog('Admin', 'Resolve account request', { requestId, action });
+    if (config.mode === 'api') {
+      return apiFetch<{ success: boolean; message: string }>(`/admin/account-requests/${requestId}/resolve`, {
+        method: 'PATCH',
+        body: JSON.stringify({ action })
+      });
+    }
+    await MockDB.updateAccountRequest(requestId, { status: action });
+    return { success: true, message: 'Đã duyệt yêu cầu thành công' };
+  },
+
+  /** PATCH /admin/orders/:orderId/status */
+  async updateOrderStatus(orderId: string, status: 'success' | 'pending' | 'failed'): Promise<{ success: boolean; message: string }> {
+    devLog('Admin', `Update order status to ${status}`, { orderId });
+    if (config.mode === 'api') {
+      return apiFetch<{ success: boolean; message: string }>(`/admin/orders/${orderId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status })
+      });
+    }
+    // Optional: we can add this to mock DB if needed
+    return { success: true, message: 'Cập nhật trạng thái đơn hàng thành công' };
+  },
+
+  /** PATCH /admin/payout-requests/:requestId/resolve */
+  async resolvePayoutRequest(requestId: string, action: 'completed' | 'rejected'): Promise<{ success: boolean; message: string }> {
+    devLog('Admin', `Resolve payout request to ${action}`, { requestId });
+    if (config.mode === 'api') {
+      return apiFetch<{ success: boolean; message: string }>(`/admin/payout-requests/${requestId}/resolve`, {
+        method: 'PATCH',
+        body: JSON.stringify({ action })
+      });
+    }
+    await MockDB.updatePayoutRequest(requestId, { status: action });
+    return { success: true, message: 'Duyệt yêu cầu rút tiền thành công' };
+  },
+
   /** PATCH /admin/courses/:courseId/status */
   async updateCourseStatusAdmin(courseId: string, status: string): Promise<{ success: boolean; message: string }> {
     devLog('Admin', `Update course status to ${status}`, { courseId });
@@ -1714,11 +1792,7 @@ export const ApiService = {
       return apiFetch<any>('/instructor/quota');
     }
     // Mock local quota
-    const quotaStr = localStorage.getItem('mindhub_instructor_quota');
-    if (!quotaStr) {
-      return { remaining: 0, totalPurchased: 0 };
-    }
-    return JSON.parse(quotaStr);
+    return MockDB.getInstructorQuota();
   },
 
   /** POST /packages/purchase */
@@ -1738,7 +1812,8 @@ export const ApiService = {
     let quota = await this.getInstructorQuota();
     quota.remaining += pkg.courseCreationQuota;
     quota.totalPurchased += pkg.courseCreationQuota;
-    localStorage.setItem('mindhub_instructor_quota', JSON.stringify(quota));
+    
+    await MockDB.updateInstructorQuota(quota);
 
     return { success: true, message: 'Đã mua gói thành công', quotaGranted: pkg.courseCreationQuota };
   },
@@ -1758,7 +1833,8 @@ export const ApiService = {
       throw new Error('Bạn đã hết lượt tạo khóa học. Vui lòng mua thêm gói.');
     }
     quota.remaining -= 1;
-    localStorage.setItem('mindhub_instructor_quota', JSON.stringify(quota));
+    await MockDB.updateInstructorQuota(quota);
+    
     return { success: true };
   }
 };

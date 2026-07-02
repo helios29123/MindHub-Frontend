@@ -71,12 +71,10 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
     e.preventDefault();
     setSaving(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setCurrentUser(editUser);
-      localStorage.setItem('mindhub_user', JSON.stringify(editUser));
+      const updatedUser = await ApiService.updateMyProfile(editUser);
+      setCurrentUser(updatedUser);
       showNotification('Lưu thông tin thành công!');
-    } catch (err) {
+    } catch (err: any) {
       showNotification('Lỗi khi lưu thông tin.', true);
     } finally {
       setSaving(false);
@@ -196,7 +194,6 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo }: Profile
     }
     
     setCurrentUser(updatedUser);
-    localStorage.setItem('mindhub_user', JSON.stringify(updatedUser));
   };
 
   const handleChangePasswordClick = () => {

@@ -133,147 +133,22 @@ const INSTRUCTORS_DATA = [
 
 export default function App() {
   // --- CORE STATE MANAGERS ---
-  const [currentUser, setCurrentUser] = useState<UserType>(() => {
-    try {
-      const stored = localStorage.getItem('mindhub_current_user');
-      if (stored && stored !== 'null' && stored !== 'undefined') {
-        const parsed = JSON.parse(stored);
-        if (parsed) return normalizeUser(parsed);
-      }
-    } catch (e) { console.error('Error parsing currentUser:', e); }
-    return INITIAL_USER;
-  });
+  const [currentUser, setCurrentUser] = useState<UserType>(INITIAL_USER);
   const [categoriesList, setCategoriesList] = useState<string[]>(['All', 'Development', 'Design', 'Marketing', 'Artificial Intelligence', 'Business & Startup', 'Data Science', 'Cybersecurity']);
   const [categoriesWithCount, setCategoriesWithCount] = useState<{name: string, count: number}[]>([]);
   const [learningHistory, setLearningHistory] = useState<any[]>([]);
   const [completedCoursesList, setCompletedCoursesList] = useState<any[]>([]);
-  const [courses, setCourses] = useState<Course[]>(() => {
-    try {
-      const stored = localStorage.getItem('mindhub_courses_db');
-      if (stored && stored !== 'null' && stored !== 'undefined') {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) { console.error('Error parsing courses:', e); }
-    const dates: Record<string, string> = {
-      'course-1': '2026-05-15',
-      'course-2': '2026-04-10',
-      'course-3': '2026-05-20',
-      'course-4': '2026-03-01',
-      'course-5': '2026-05-25',
-    };
-    return INITIAL_COURSES.map(c => ({
-      ...c,
-      createdAt: dates[c.id] || '2026-01-01',
-      allowFreeDoc: c.id === 'course-1' || c.id === 'course-2' || c.id === 'course-3' ? true : (c.allowFreeDoc || false),
-      allowFreeVideo: c.id === 'course-1' || c.id === 'course-2' || c.id === 'course-3' ? true : (c.allowFreeVideo || false),
-      freeVideoDuration: c.id === 'course-1' || c.id === 'course-2' || c.id === 'course-3' ? 15 : (c.freeVideoDuration || 30)
-    }));
-  });
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('mindhub_favorites');
-      if (stored && stored !== 'null' && stored !== 'undefined') {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) { console.error('Error parsing favorites:', e); }
-    return INITIAL_FAVORITES;
-  });
-  const [cart, setCart] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('mindhub_cart');
-      if (stored && stored !== 'null' && stored !== 'undefined') {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) { console.error('Error parsing cart:', e); }
-    return [];
-  });
-  const [notifications, setNotifications] = useState<Notification[]>(() => {
-    try {
-      const stored = localStorage.getItem('mindhub_notifications');
-      if (stored && stored !== 'null' && stored !== 'undefined') {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) { console.error('Error parsing notifications:', e); }
-    return INITIAL_NOTIFICATIONS;
-  });
-  const [flaggedReviews, setFlaggedReviews] = useState<FlaggedItem[]>(() => {
-    try {
-      const stored = localStorage.getItem('mindhub_flagged_reviews');
-      if (stored && stored !== 'null' && stored !== 'undefined') {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) { console.error('Error parsing flaggedReviews:', e); }
-    return FLAGGED_REVIEWS_MOCK;
-  });
-  const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>(() => {
-    try {
-      const stored = localStorage.getItem('mindhub_payout_requests');
-      if (stored && stored !== 'null' && stored !== 'undefined') {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) { console.error('Error parsing payoutRequests:', e); }
-    return PAYOUT_REQUESTS_MOCK;
-  });
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [cart, setCart] = useState<string[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [flaggedReviews, setFlaggedReviews] = useState<FlaggedItem[]>([]);
+  const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
   
-  // Account closure & lock request states
-  const [accountRequests, setAccountRequests] = useState<AccountRequest[]>(() => {
-    try {
-      const stored = localStorage.getItem('mindhub_account_requests');
-      if (stored && stored !== 'null' && stored !== 'undefined') {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) { console.error('Error parsing accountRequests:', e); }
-    return [
-      {
-        id: 'req-1',
-        userId: 'u-101',
-        userName: 'Nguyễn Đình Văn',
-        userEmail: 'vandinhmock@gmail.com',
-        type: 'lock',
-        reason: 'Tôi muốn tạm ngừng học tập một thời gian để tập trung vào dự án cá nhân thực tế.',
-        timestamp: '2026-06-05T08:30:00Z',
-        status: 'pending'
-      },
-      {
-        id: 'req-2',
-        userId: 'u-102',
-        userName: 'Trịnh Gia Bảo',
-        userEmail: 'giabaoxspammer@gmail.com',
-        type: 'delete',
-        reason: 'Xóa bớt tài khoản phụ để chọn kết nối chính bằng tài khoản Gmail của tôi.',
-        timestamp: '2026-06-07T14:15:00Z',
-        status: 'pending'
-      }
-    ];
-  });
-
-  const saveAccountRequests = (updated: AccountRequest[]) => {
-    setAccountRequests(updated);
-    localStorage.setItem('mindhub_account_requests', JSON.stringify(updated));
-  };
-
   const [showAccountClosureForm, setShowAccountClosureForm] = useState(false);
   const [closureType, setClosureType] = useState<'lock' | 'delete'>('lock');
   const [closureReason, setClosureReason] = useState('');
   const [agreeToClosureTerms, setAgreeToClosureTerms] = useState(false);
-
-  const handleResolveAccountRequest = (id: string, action: 'approved' | 'rejected') => {
-    const updated = accountRequests.map(r => r.id === id ? { ...r, status: action } as AccountRequest : r);
-    saveAccountRequests(updated);
-    
-    // Create an audit log or trigger alert
-    const target = accountRequests.find(r => r.id === id);
-    if (target) {
-      setToastMessage(`Đã ${action === 'approved' ? 'Phê duyệt chấp thuận' : 'Từ chối'} yêu cầu ${target.type === 'delete' ? 'xóa' : 'khóa'} tài khoản của học viên ${target.userName}`);
-    }
-  };
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState('');
@@ -375,68 +250,20 @@ export default function App() {
   const [showBgmSuggestions, setShowBgmSuggestions] = useState<boolean>(false);
 
   // Enrolled courses (purchased courses by student)
-  const [enrolledCourseIds, setEnrolledCourseIds] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('mindhub_enrolled_courses_db');
-      if (stored && stored !== 'null' && stored !== 'undefined') {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) { console.error('Error parsing enrolledCourseIds:', e); }
-    return ['course-1'];
-  });
+  const [enrolledCourseIds, setEnrolledCourseIds] = useState<string[]>([]);
 
   // Orders and transactions history (student payments & admin control)
-  const [orders, setOrders] = useState<Order[]>(() => {
-    try {
-      const stored = localStorage.getItem('mindhub_orders');
-      if (stored && stored !== 'null' && stored !== 'undefined') {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) { console.error('Error parsing orders:', e); }
-    return [
-      {
-        id: 'MIND-128491',
-        date: '2026-05-15',
-        courses: [{ id: 'course-1', title: 'Học máy Cơ bản & Đồ án thực chiến', price: 1200000 }],
-        discountAmount: 120000,
-        total: 1080000,
-        status: 'success',
-        paymentMethod: 'Chuyển khoản Ngân hàng'
-      },
-      {
-        id: 'MIND-894712',
-        date: '2026-06-08',
-        courses: [{ id: 'course-2', title: 'Xây dựng Microservices hiệu năng cao với Go & gRPC', price: 1600000 }],
-        discountAmount: 0,
-        total: 1600000,
-        status: 'pending',
-        paymentMethod: 'Chuyển khoản Ngân hàng'
-      }
-    ];
-  });
+  const [orders, setOrders] = useState<Order[]>([]);
 
   const saveOrders = (updated: Order[]) => {
     setOrders(updated);
-    localStorage.setItem('mindhub_orders', JSON.stringify(updated));
   };
 
   // Banners and homepage advertising
-  const [banners, setBanners] = useState<Banner[]>(() => {
-    try {
-      const stored = localStorage.getItem('mindhub_banners');
-      if (stored && stored !== 'null' && stored !== 'undefined') {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) { console.error('Error parsing banners:', e); }
-    return INITIAL_BANNERS;
-  });
+  const [banners, setBanners] = useState<Banner[]>(INITIAL_BANNERS);
 
   const saveBanners = (updated: Banner[]) => {
     setBanners(updated);
-    localStorage.setItem('mindhub_banners', JSON.stringify(updated));
   };
 
   // Active Screens & Modals triggers
@@ -450,45 +277,6 @@ export default function App() {
 
 
 
-  useEffect(() => {
-    localStorage.setItem('mindhub_notifications', JSON.stringify(notifications));
-  }, [notifications]);
-
-  useEffect(() => {
-    localStorage.setItem('mindhub_courses_db', JSON.stringify(courses));
-  }, [courses]);
-
-  useEffect(() => {
-    localStorage.setItem('mindhub_enrolled_courses_db', JSON.stringify(enrolledCourseIds));
-  }, [enrolledCourseIds]);
-
-  useEffect(() => {
-    localStorage.setItem('mindhub_current_user', JSON.stringify(currentUser));
-  }, [currentUser]);
-
-  useEffect(() => {
-    localStorage.setItem('mindhub_is_logged_in', isLoggedIn ? 'true' : 'false');
-  }, [isLoggedIn]);
-
-  useEffect(() => {
-    localStorage.setItem('mindhub_favorites', JSON.stringify(favorites));
-  }, [favorites]);
-
-  useEffect(() => {
-    localStorage.setItem('mindhub_cart', JSON.stringify(cart));
-  }, [cart]);
-
-  useEffect(() => {
-    localStorage.setItem('mindhub_flagged_reviews', JSON.stringify(flaggedReviews));
-  }, [flaggedReviews]);
-
-  useEffect(() => {
-    localStorage.setItem('mindhub_payout_requests', JSON.stringify(payoutRequests));
-  }, [payoutRequests]);
-
-  useEffect(() => {
-    localStorage.setItem('mindhub_orders', JSON.stringify(orders));
-  }, [orders]);
 
   useEffect(() => {
     setCoursesPage(1);
@@ -562,38 +350,17 @@ export default function App() {
         }).catch(e => console.warn('Lỗi nạp lịch sử học:', e));
       }
 
-      // Load courses from database with stable mock data fallback if real API fails/is empty
+      // Load courses from backend via ApiService (which uses MockDB if in mock mode)
       ApiService.getCourses().then(coursList => {
         if (!active) return;
         if (coursList && coursList.length > 0) {
           setCourses(coursList);
         } else {
-          // API connected but returned no courses - use local storage or static mock data
-          const storedCourses = localStorage.getItem('mindhub_courses_db');
-          if (storedCourses) {
-            try {
-              const parsed = JSON.parse(storedCourses);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                setCourses(parsed);
-                return;
-              }
-            } catch {}
-          }
-          setCourses(INITIAL_COURSES);
+          setCourses([]);
         }
       }).catch(e => {
-        console.warn('Lỗi kết nối API Backend thật, tự động nạp dữ liệu Mock dự phòng:', e);
-        const storedCourses = localStorage.getItem('mindhub_courses_db');
-        if (storedCourses) {
-          try {
-            const parsed = JSON.parse(storedCourses);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setCourses(parsed);
-              return;
-            }
-          } catch {}
-        }
-        setCourses(INITIAL_COURSES);
+        console.warn('Lỗi kết nối API Backend thật:', e);
+        setCourses([]);
       });
 
       ApiService.getFeaturedCourses().then(featured => {
@@ -1525,15 +1292,32 @@ export default function App() {
     setFlaggedReviews(prev => prev.filter(f => f.id !== flagId));
   };
 
-  const handleApprovePayout = (requestId: string) => {
-    setPayoutRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'completed' } : r));
+  const handleApprovePayout = async (requestId: string) => {
+    try {
+      await ApiService.resolvePayoutRequest(requestId, 'completed');
+      setPayoutRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'completed' } : r));
+    } catch (e: any) {
+      alert('Lỗi duyệt rút tiền: ' + e.message);
+    }
   };
 
-  const handleRejectPayout = (requestId: string) => {
-    setPayoutRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r));
+  const handleRejectPayout = async (requestId: string) => {
+    try {
+      await ApiService.resolvePayoutRequest(requestId, 'rejected');
+      setPayoutRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r));
+    } catch (e: any) {
+      alert('Lỗi từ chối rút tiền: ' + e.message);
+    }
   };
 
-  const handleUpdateOrderStatus = (orderId: string, nextStatus: 'success' | 'pending' | 'failed') => {
+  const handleUpdateOrderStatus = async (orderId: string, nextStatus: 'success' | 'pending' | 'failed') => {
+    try {
+      await ApiService.updateOrderStatus(orderId, nextStatus);
+    } catch (e: any) {
+      alert('Lỗi cập nhật đơn hàng: ' + e.message);
+      return;
+    }
+    
     let syncedEnrolled = false;
     const updated = orders.map(o => {
       if (o.id === orderId) {
@@ -1593,6 +1377,33 @@ export default function App() {
     });
   };
 
+  const handleAccountClosureSubmit = async () => {
+    if (!closureReason.trim()) {
+      alert('Vui lòng nhập lý do để ban quản trị xem xét.');
+      return;
+    }
+    if (!agreeToClosureTerms) {
+      alert('Vui lòng xác nhận bạn chịu trách nhiệm hoàn toàn đối với các rủi ro đã nêu.');
+      return;
+    }
+
+    try {
+      await ApiService.createAccountRequest({
+        userId: currentUser.id,
+        userName: currentUser.name,
+        userEmail: currentUser.email,
+        type: closureType,
+        reason: closureReason.trim()
+      });
+
+      setShowAccountClosureForm(false);
+      setIsEditingProfile(false); // also hide profile edit modal for clarity
+      setToastMessage(`Gửi yêu cầu ${closureType === 'delete' ? 'XÓA VĨNH VIỄN' : 'TẠM KHÓA'} tài khoản thành công! Đơn của bạn đã được chuyển đến Ban Quản Trị Hệ Thống.`);
+    } catch (e: any) {
+      alert('Lỗi khi tạo yêu cầu: ' + e.message);
+    }
+  };
+
   // Safe password change simulator
   const handleChangePassword = () => {
     alert('Mã đặt lại mật khẩu an toàn đã được mã hóa gửi về hòm thư ' + currentUser.email);
@@ -1604,34 +1415,6 @@ export default function App() {
     setClosureType('lock');
     setAgreeToClosureTerms(false);
     setShowAccountClosureForm(true);
-  };
-
-  const handleSubmitAccountClosureRequest = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!closureReason.trim()) {
-      alert('Vui lòng nhập lý do cụ thể để chúng tôi giải quyết đơn nhanh chóng nhất.');
-      return;
-    }
-    if (!agreeToClosureTerms) {
-      alert('Vui lòng xác nhận bạn chịu trách nhiệm hoàn toàn đối với các rủi ro đã nêu.');
-      return;
-    }
-
-    const newReq: AccountRequest = {
-      id: 'req-' + Date.now(),
-      userId: currentUser.id,
-      userName: currentUser.name,
-      userEmail: currentUser.email,
-      type: closureType,
-      reason: closureReason.trim(),
-      timestamp: new Date().toISOString(),
-      status: 'pending'
-    };
-
-    saveAccountRequests([newReq, ...accountRequests]);
-    setShowAccountClosureForm(false);
-    setIsEditingProfile(false); // also hide profile edit modal for clarity
-    setToastMessage(`Gửi yêu cầu ${closureType === 'delete' ? 'XÓA VĨNH VIỄN' : 'TẠM KHÓA'} tài khoản thành công! Đơn của bạn đã được chuyển đến Ban Quản Trị Hệ Thống.`);
   };
 
   // --- FILTER & SORT CALC ---
@@ -3297,7 +3080,7 @@ export default function App() {
                 </button>
               </div>
 
-              <form onSubmit={handleSubmitAccountClosureRequest} className="space-y-4 text-xs text-stone-850">
+              <div className="space-y-4 text-xs text-stone-850">
                 <div className="bg-stone-50 border border-stone-200/80 p-3.5 rounded-xl space-y-1">
                   <span className="text-[10px] text-stone-400 font-mono block">THÔNG TIN THÀNH VIÊN ĐỀ XUẤT:</span>
                   <div className="text-xs font-bold text-stone-800">{currentUser.name}</div>
@@ -3394,7 +3177,8 @@ export default function App() {
                     Bỏ Qua
                   </button>
                   <button
-                    type="submit"
+                    type="button"
+                    onClick={handleAccountClosureSubmit}
                     className={`px-5 py-2 text-white rounded-xl font-bold shadow-md hover:scale-[1.02] active:scale-95 transition-all cursor-pointer ${
                       closureType === 'delete' ? 'bg-red-600 hover:bg-red-750' : 'bg-[#432c28] hover:bg-black'
                     }`}
@@ -3402,7 +3186,7 @@ export default function App() {
                     Gửi Yêu Cầu Thẩm Định
                   </button>
                 </div>
-              </form>
+              </div>
             </div>
           </div>
         )}

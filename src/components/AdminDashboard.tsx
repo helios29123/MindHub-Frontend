@@ -19,8 +19,6 @@ interface ModeratorTabProps {
   onApproveCourse: (courseId: string) => void;
   onRejectCourse: (courseId: string, reason: string) => void;
   onResolveFlag: (flagId: string, resolveAction: 'dismiss' | 'resolved') => void;
-  accountRequests: AccountRequest[];
-  onResolveAccountRequest: (id: string, action: 'approved' | 'rejected') => void;
   onClose: () => void;
 }
 
@@ -31,8 +29,6 @@ function ModeratorTab({
   onApproveCourse,
   onRejectCourse,
   onResolveFlag,
-  accountRequests,
-  onResolveAccountRequest,
   onClose
 }: ModeratorTabProps) {
 
@@ -52,6 +48,31 @@ function ModeratorTab({
   // Search & Filter for Flagged Content (Comments/Reviews)
   const [contentSearchQuery, setContentSearchQuery] = useState('');
   const [contentTypeFilter, setContentTypeFilter] = useState<'all' | 'review' | 'comment'>('all');
+
+  // Account Requests State
+  const [accountRequests, setAccountRequests] = useState<AccountRequest[]>([]);
+  const [resolvingRequest, setResolvingRequest] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'account_requests') {
+      ApiService.getAccountRequests().then(setAccountRequests).catch(console.error);
+    }
+  }, [activeTab]);
+
+  const handleResolveAccountRequest = async (id: string, action: 'approved' | 'rejected') => {
+    try {
+      setResolvingRequest(true);
+      await ApiService.resolveAccountRequest(id, action);
+      alert(`Đã ${action === 'approved' ? 'Phê duyệt chấp thuận' : 'Từ chối'} yêu cầu thành công`);
+      // refresh list
+      const updated = await ApiService.getAccountRequests();
+      setAccountRequests(updated);
+    } catch (e: any) {
+      alert('Lỗi: ' + e.message);
+    } finally {
+      setResolvingRequest(false);
+    }
+  };
 
   // Course review actions
   const pendingCourses = courses.filter(c => {
@@ -673,8 +694,6 @@ export default function AdminDashboard({
   payoutRequests,
   onApprovePayout,
   onRejectPayout,
-  accountRequests,
-  onResolveAccountRequest,
   onClose,
   orders = [],
   onUpdateOrderStatus,
@@ -4504,7 +4523,7 @@ export default function AdminDashboard({
                 Yêu cầu liên quan đến Giảng viên
               </h3>
               <p className="text-stone-400 text-[11px]">
-                Xem xét và phê duyệt các yêu cầu đăng ký làm giảng viên hoặc ngừng giảng dạy.
+                Xem xét, phê duyệt các yêu cầu đăng ký làm giảng viên hoặc ngừng giảng dạy.
               </p>
             </div>
 
