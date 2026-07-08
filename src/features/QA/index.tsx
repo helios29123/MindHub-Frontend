@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { QAOverview } from './QAOverview';
 import { QAFilter } from './QAFilter';
 import { QAList } from './QAList';
-import { QADetailDrawer } from './QADetailDrawer';
+import { QADetailView } from './QADetailView';
 import { Question, QAFilterState } from './types';
 
 // Mock data
@@ -39,7 +39,6 @@ export const InstructorQAModule: React.FC = () => {
   });
   
   const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Derived state for Overview
   const totalCount = mockQuestions.length;
@@ -67,8 +66,11 @@ export const InstructorQAModule: React.FC = () => {
 
   const handleViewDetail = (question: Question) => {
     setSelectedQuestion(question);
-    setIsDrawerOpen(true);
   };
+
+  if (selectedQuestion) {
+    return <QADetailView question={selectedQuestion} onBack={() => setSelectedQuestion(null)} />;
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 bg-slate-50 min-h-screen">
@@ -87,12 +89,6 @@ export const InstructorQAModule: React.FC = () => {
       <QAFilter filter={filter} setFilter={setFilter} />
 
       <QAList questions={filteredQuestions} onViewDetail={handleViewDetail} />
-
-      <QADetailDrawer
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-        question={selectedQuestion}
-      />
     </div>
   );
 };
