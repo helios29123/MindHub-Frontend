@@ -4,7 +4,7 @@ import { Coupon } from './types';
 import { CouponOverview } from './components/CouponOverview';
 import { CouponFilter } from './components/CouponFilter';
 import { CouponTable } from './components/CouponTable';
-import { CouponFormModal } from './components/CouponFormModal';
+import { CouponForm } from './components/CouponForm';
 
 export const CouponManagement: React.FC = () => {
   // Mock data for initial state visualization
@@ -45,8 +45,8 @@ export const CouponManagement: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [courseFilter, setCourseFilter] = useState('all');
 
-  // Modal states
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Form states
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedCoupon, setSelectedCoupon] = useState<Coupon | null>(null);
 
   // Stats derivation
@@ -64,12 +64,12 @@ export const CouponManagement: React.FC = () => {
 
   const handleAddClick = () => {
     setSelectedCoupon(null);
-    setIsModalOpen(true);
+    setIsFormOpen(true);
   };
 
   const handleEditClick = (coupon: Coupon) => {
     setSelectedCoupon(coupon);
-    setIsModalOpen(true);
+    setIsFormOpen(true);
   };
 
   const handleViewClick = (coupon: Coupon) => {
@@ -116,47 +116,50 @@ export const CouponManagement: React.FC = () => {
   });
 
   return (
-    <div className="p-6 max-w-7xl mx-auto min-h-screen bg-gray-50/50">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Quản lý mã giảm giá</h1>
-          <p className="text-gray-500 text-sm mt-1">Tạo và quản lý các chương trình khuyến mãi cho khóa học của bạn.</p>
-        </div>
-        <button
-          onClick={handleAddClick}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all shadow-sm hover:shadow active:scale-95"
-        >
-          <Plus className="w-5 h-5" />
-          Tạo mã mới
-        </button>
-      </div>
+    <div className="w-full">
+      {isFormOpen ? (
+        <CouponForm 
+          onClose={() => setIsFormOpen(false)}
+          coupon={selectedCoupon}
+          onSubmit={handleSubmitForm}
+        />
+      ) : (
+        <>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Quản lý mã giảm giá</h1>
+              <p className="text-gray-500 text-sm mt-1">Tạo và quản lý các chương trình khuyến mãi cho khóa học của bạn.</p>
+            </div>
+            <button
+              onClick={handleAddClick}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all shadow-sm hover:shadow active:scale-95"
+            >
+              <Plus className="w-5 h-5" />
+              Tạo mã mới
+            </button>
+          </div>
 
-      <CouponOverview stats={stats} onFilter={handleFilterClick} />
-      
-      <CouponFilter 
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        statusFilter={statusFilter}
-        setStatusFilter={setStatusFilter}
-        courseFilter={courseFilter}
-        setCourseFilter={setCourseFilter}
-      />
+          <CouponOverview stats={stats} onFilter={handleFilterClick} />
+          
+          <CouponFilter 
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
+            courseFilter={courseFilter}
+            setCourseFilter={setCourseFilter}
+          />
 
-      <CouponTable 
-        coupons={filteredCoupons}
-        isLoading={isLoading}
-        onView={handleViewClick}
-        onEdit={handleEditClick}
-        onToggleStatus={handleToggleStatus}
-        onDelete={handleDelete}
-      />
-
-      <CouponFormModal 
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        coupon={selectedCoupon}
-        onSubmit={handleSubmitForm}
-      />
+          <CouponTable 
+            coupons={filteredCoupons}
+            isLoading={isLoading}
+            onView={handleViewClick}
+            onEdit={handleEditClick}
+            onToggleStatus={handleToggleStatus}
+            onDelete={handleDelete}
+          />
+        </>
+      )}
     </div>
   );
 };
