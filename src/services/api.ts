@@ -27,7 +27,20 @@ export interface ApiConfig {
 
 // Force API mode to use the real backend exclusively
 const initialMode = 'api';
-const initialBaseUrl = localStorage.getItem('mindhub_api_base_url') || (import.meta as any).env?.VITE_API_BASE_URL || '/api';
+// Remove stale direct-server base URL saved by older FE versions.
+// Local development must use Vite proxy through /api.
+const storedBaseUrl = localStorage.getItem('mindhub_api_base_url');
+if (
+  storedBaseUrl &&
+  (
+    storedBaseUrl.includes('62.171.157.22') ||
+    storedBaseUrl.includes('localhost:8000') ||
+    storedBaseUrl.includes('127.0.0.1:8000')
+  )
+) {
+  localStorage.removeItem('mindhub_api_base_url');
+}
+const initialBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL || localStorage.getItem('mindhub_api_base_url') || '/api';
 
 const config: ApiConfig = {
   mode: initialMode,
@@ -353,19 +366,38 @@ export const ApiService = {
   devLog('Catalog', 'Get list of course categories');
   return apiFetch<any[]>('/categories');
   },
-
-  // Get category counts
-  async getCategoriesWithCount(): Promise<{name: string, count: number}[]> {
-      // BACKEND_MISSING
+  // Get active categories and normalize course counts from backend fields
+  async getCategoriesWithCount(): Promise<{ name: string; count: number }[]> {
     if (config.mode === 'api') {
       try {
-        return await apiFetch<{name: string, count: number}[]>('/courses/categories');
-      } catch (e) {
-        console.warn('Failed to fetch categories', e);
+        const categories = await apiFetch<any[]>('/categories');
+        if (!Array.isArray(categories)) {
+          return [];
+        }
+        return categories
+          .filter((category: any) => {
+            const status = String(category?.status || 'active').toLowerCase();
+            return status === 'active' || status === 'published';
+          })
+          .map((category: any) => ({
+            name:
+              category?.name ||
+              category?.title ||
+              category?.slug ||
+              'Chưa phân loại',
+            count: Number(
+              category?.courses_count ??
+              category?.course_count ??
+              category?.total_courses ??
+              category?.coursesCount ??
+              0
+            ),
+          }));
+      } catch (error) {
+        console.warn('Failed to fetch categories', error);
         return [];
       }
     }
-    // Mock fallback
     return [
       { name: 'Development', count: 12 },
       { name: 'Design', count: 8 },
@@ -374,31 +406,15 @@ export const ApiService = {
       { name: 'Data Science', count: 3 }
     ];
   },
-
-  async getUserEnrollments(userId: string): Promise<any[]> {
-      // BACKEND_MISSING
-    if (config.mode === 'api') {
-      try {
-        return await apiFetch<any[]>(`/users/${userId}/enrollments`);
-      } catch(e) {
-        return [];
-      }
-    }
+  async getUserEnrollments(_userId: string): Promise<any[]> {
+    // Backend không cung cấp endpoint /users/{id}/enrollments.
+    // Dữ liệu học của người đăng nhập phải lấy từ /me/courses.
     return [];
   },
-
-  async getUserActivities(userId: string): Promise<any[]> {
-      // BACKEND_MISSING
-    if (config.mode === 'api') {
-      try {
-        return await apiFetch<any[]>(`/users/${userId}/activities`);
-      } catch(e) {
-        return [];
-      }
-    }
+  async getUserActivities(_userId: string): Promise<any[]> {
+    // Backend chưa cung cấp endpoint /users/{id}/activities.
     return [];
   },
-
   /** GET /courses (search and filters) */
   async getPublicCoursesByInstructor(instructorId: string): Promise<Course[]> {
       // BACKEND_MISSING
@@ -449,15 +465,55 @@ export const ApiService = {
   devLog('Catalog', 'Fetch highly rated featured courses');
   return apiFetch<Course[]>('/courses/featured');
   },
-
-  /** GET /courses/bestsellers */
+  /** GET /courses - derive bestseller ranking because backend has no /courses/bestsellers */
   async getBestsellerCourses(): Promise<Course[]> {
-      // BACKEND_MISSING
-    devLog('Catalog', 'Fetch best-selling courses');
-    if (config.mode === 'api') return apiFetch<Course[]>('/courses/bestsellers');
-    return (await MockDB.getCourses()).filter(c => c.isBestseller);
+    devLog('Catalog', 'Build best-selling course list from public courses');
+    if (config.mode === 'api') {
+      const courses = await apiFetch<Course[]>('/courses');
+      if (!Array.isArray(courses)) {
+        return [];
+      }
+      return [...courses]
+        .sort((first: any, second: any) => {
+          const firstSales = Number(
+            first?.enrollments_count ??
+            first?.enrolled_count ??
+            first?.total_enrollments ??
+            first?.students_count ??
+            first?.orders_count ??
+            first?.sales_count ??
+            0
+          );
+          const secondSales = Number(
+            second?.enrollments_count ??
+            second?.enrolled_count ??
+            second?.total_enrollments ??
+            second?.students_count ??
+            second?.orders_count ??
+            second?.sales_count ??
+            0
+          );
+          if (secondSales !== firstSales) {
+            return secondSales - firstSales;
+          }
+          const firstRating = Number(
+            first?.average_rating ??
+            first?.rating ??
+            0
+          );
+          const secondRating = Number(
+            second?.average_rating ??
+            second?.rating ??
+            0
+          );
+          return secondRating - firstRating;
+        })
+        .slice(0, 10);
+    }
+    return (await MockDB.getCourses()).filter(
+      (course) => course.isBestseller
+    );
   },
-
   /** GET /courses/latest */
   async getLatestCourses(): Promise<Course[]> {
   devLog('Catalog', 'Fetch newly published curriculum');
@@ -916,9 +972,23 @@ export const ApiService = {
         });
   },
 
-  async createVNPayGatewayUrl(orderId: string): Promise<{ paymentUrl: string }> {
+  async createVNPayGatewayUrl(orderId: string): Promise<{
+    paymentUrl?: string;
+    url?: string;
+    data?: {
+      paymentUrl?: string;
+      url?: string;
+    };
+  }> {
   devLog('Orders', `Redirect to VNPay gateway portal checkouts for Order ${orderId}`);
-  return apiFetch<{ paymentUrl: string }>('/payments/vnpay/create', {
+  return apiFetch<{
+    paymentUrl?: string;
+    url?: string;
+    data?: {
+      paymentUrl?: string;
+      url?: string;
+    };
+  }>('/payments/vnpay/create', {
           method: 'POST',
           body: JSON.stringify({ order_id: orderId }),
         });

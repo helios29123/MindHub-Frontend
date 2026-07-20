@@ -139,7 +139,11 @@ export default function CartAndCheckout({
       
       if (createdOrderId) {
         const vnpayRes = await ApiService.createVNPayGatewayUrl(createdOrderId);
-        const paymentUrl = vnpayRes?.paymentUrl || vnpayRes?.url || vnpayRes?.data?.paymentUrl || vnpayRes?.data?.url;
+        const paymentUrl =
+          vnpayRes?.paymentUrl ||
+          vnpayRes?.url ||
+          vnpayRes?.data?.paymentUrl ||
+          vnpayRes?.data?.url;
         
         if (paymentUrl) {
           window.location.href = paymentUrl;

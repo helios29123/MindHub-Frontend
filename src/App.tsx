@@ -522,7 +522,13 @@ export default function App() {
         })
         .catch((e) => console.warn("Lỗi nạp lịch sử học:", e));
 
-      if (currentUser.id !== "u-guest") {
+      if (
+        currentUser.id !== "u-guest" &&
+        Boolean(
+          localStorage.getItem("mindhub_api_token") ||
+          localStorage.getItem("mindhub_session_token")
+        )
+      ) {
         ApiService.getMyEnrolledCourses()
           .then((enrolledList) => {
             if (!active) return;
@@ -4366,7 +4372,7 @@ export default function App() {
 
 
           ) : activeTab === "vnpay-return" ? (
-            <VNPayReturnPage />
+            <VNPayReturnPage onNavigate={navigateTo} />
           ) : activeTab === "instructor" ? (
             currentUser.role === "instructor" &&
             currentUser.id === routeUserId ? (
@@ -4398,27 +4404,7 @@ export default function App() {
             )
           ) : activeTab === "admin" ? (
             currentUser.role === "admin" ? (
-              <AdminDashboard
-                currentUser={currentUser}
-                courses={courses}
-                onUpdateCourses={(updated) => setCourses(updated)}
-                payoutRequests={payoutRequests}
-                onApprovePayout={handleApprovePayout}
-                onRejectPayout={handleRejectPayout}
-                onClose={() => navigateTo("/")}
-                orders={orders}
-                onUpdateOrderStatus={handleUpdateOrderStatus}
-                categoriesList={categoriesList}
-                onUpdateCategories={setCategoriesList}
-                banners={banners}
-                onUpdateBanners={saveBanners}
-                notifications={notifications}
-                onUpdateNotifications={(updated) => setNotifications(updated)}
-                flaggedReviews={flaggedReviews}
-                onResolveFlag={handleResolveFlag}
-                onApproveCourse={handleApproveCourse}
-                onRejectCourse={handleRejectCourse}
-              />
+              <AdminDashboard />
             ) : (
               <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
                 <Lock className="w-16 h-16 text-stone-300 mb-4" />

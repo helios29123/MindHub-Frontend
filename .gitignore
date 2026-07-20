@@ -7,3 +7,11 @@ coverage/
 .env*
 !.env.example
 markdown_task/
+# Local reports and backups
+FE_TYPESCRIPT_FIX_CONTEXT.md
+storage/fe-typescript-fix-backup/
+FE_API_ENDPOINT_FIX_CONTEXT.txt
+storage/fe-typescript-fix-backup/
+storage/fe-endpoint-fix-backup/
+storage/fe-proxy-backup/
+vite.config.local.ts
