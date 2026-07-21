@@ -107,6 +107,10 @@ export interface FAQItem {
 export interface Course {
   id: string;
   title: string;
+  slug?: string;
+  level?: string;
+  language?: string;
+  introVideoUrl?: string;
   subtitle: string;
   description: string;
   category: string;

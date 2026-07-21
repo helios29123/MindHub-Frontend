@@ -1,4 +1,4 @@
-import { Course, Chapter, Lesson, User, QAMessage, StudentProgress, PayoutRequest, AuditLog, InstructorRequest, AccountRequest } from '../types';
+import { Course, Chapter, Lesson, Resource, User, QAMessage, StudentProgress, PayoutRequest, AuditLog, InstructorRequest, AccountRequest } from '../types';
 import { safeLocalStorage as localStorage } from '../utils/safeStorage';
 import { MockDB } from './mockDb';
 import { SYSTEM_ROLE_USERS } from '../data';
@@ -212,35 +212,82 @@ export const ApiService = {
   
   /** POST /auth/register */
   async register(payload: any): Promise<{ user: User; token: string }> {
-  devLog('Auth', 'Register new user', { email: payload.email, role: payload.role });
-  const endpoint = payload.role === 'instructor' ? '/auth/register/instructor' : '/auth/register/learner';
-  const res = await apiFetch<{ user: User; token: string }>(endpoint, {
+    devLog('Auth', 'Register new user', { email: payload.email, role: payload.role });
+    if (config.mode === 'mock') {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const dbUsers = MockDB.getState().users;
+      if (dbUsers.some(u => u.email.toLowerCase() === payload.email.toLowerCase())) {
+        throw new Error('Email đã tồn tại trong hệ thống.');
+      }
+      const newUser: User = {
+        id: 'u-' + Date.now(),
+        name: payload.name || payload.full_name || 'Người dùng mới',
+        email: payload.email,
+        role: payload.role || 'learner',
+        status: 'active',
+        avatar: 'https://ui-avatars.com/api/?name=' + encodeURIComponent(payload.name || 'User') + '&background=random',
+        bio: '',
+        expertise: '',
+        experienceYears: '0',
+        title: '',
+        isEmailVerified: true,
+        streak: 0,
+        lastActiveDate: '',
+        interestedTopics: [],
+        notificationSettings: { email: true, push: false, app: false, scheduleReminders: false }
+      };
+      MockDB.commit({ users: [...dbUsers, newUser] });
+      this.setAuthToken('mock-auth-token-' + newUser.id);
+      return {
+        user: newUser,
+        token: 'mock-auth-token-' + newUser.id
+      };
+    }
+    const endpoint = payload.role === 'instructor' ? '/auth/register/instructor' : '/auth/register/learner';
+    const res = await apiFetch<{ user: User; token: string }>(endpoint, {
           method: 'POST',
           body: JSON.stringify(payload),
         });
-  this.setAuthToken(res.token);
-  return res;
+    this.setAuthToken(res.token);
+    return res;
   },
 
   /** POST /auth/login */
   async login(payload: any): Promise<{ user: User; token: string }> {
-  devLog('Auth', 'Login credentials authentication', { email: payload.email });
-  const res = await apiFetch<{ user: User; token: string }>('/auth/login', {
+    devLog('Auth', 'Login credentials authentication', { email: payload.email });
+    if (config.mode === 'mock') {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const dbUsers = MockDB.getState().users;
+      const matched = dbUsers.find(u => u.email.toLowerCase() === payload.email.toLowerCase());
+      if (!matched) {
+        throw new Error('Tài khoản không tồn tại trong cơ sở dữ liệu giả lập.');
+      }
+      this.setAuthToken('mock-auth-token-' + matched.id);
+      return {
+        user: matched,
+        token: 'mock-auth-token-' + matched.id
+      };
+    }
+    const res = await apiFetch<{ user: User; token: string }>('/auth/login', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
-  this.setAuthToken(res.token);
-  return res;
+    this.setAuthToken(res.token);
+    return res;
   },
 
   /** POST /auth/logout */
   async logout(): Promise<{ success: boolean }> {
-  devLog('Auth', 'Logout active session requests');
-  const res = await apiFetch<{ success: boolean }>('/auth/logout', {
+    devLog('Auth', 'Logout active session requests');
+    if (config.mode === 'mock') {
+      this.setAuthToken(null);
+      return { success: true };
+    }
+    const res = await apiFetch<{ success: boolean }>('/auth/logout', {
           method: 'POST',
         });
-  this.setAuthToken(null);
-  return res;
+    this.setAuthToken(null);
+    return res;
   },
 
   /** POST /auth/logout-all */
@@ -289,8 +336,11 @@ export const ApiService = {
 
   /** POST /auth/forgot-password */
   async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
-  devLog('Auth', 'Send password reset link to', { email });
-  return apiFetch<{ success: boolean; message: string }>('/auth/forgot-password', {
+    devLog('Auth', 'Send password reset link to', { email });
+    if (config.mode === 'mock') {
+      return { success: true, message: 'Đã gửi liên kết đặt lại mật khẩu giả lập.' };
+    }
+    return apiFetch<{ success: boolean; message: string }>('/auth/forgot-password', {
           method: 'POST',
           body: JSON.stringify({ email }),
         });
@@ -298,8 +348,11 @@ export const ApiService = {
 
   /** POST /auth/reset-password */
   async resetPassword(payload: any): Promise<{ success: boolean; message: string }> {
-  devLog('Auth', 'Submit password reset request');
-  return apiFetch<{ success: boolean; message: string }>('/auth/reset-password', {
+    devLog('Auth', 'Submit password reset request');
+    if (config.mode === 'mock') {
+      return { success: true, message: 'Đặt lại mật khẩu thành công.' };
+    }
+    return apiFetch<{ success: boolean; message: string }>('/auth/reset-password', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
@@ -308,6 +361,9 @@ export const ApiService = {
   /** POST /auth/verify-email/resend */
   async resendVerificationEmail(email: string, purpose: string = 'verify_email'): Promise<{ success: boolean; message: string }> {
     devLog('Auth', 'Resend email verification notification mail', { email, purpose });
+    if (config.mode === 'mock') {
+      return { success: true, message: 'Đã gửi mã xác minh email giả lập.' };
+    }
     try {
       const res = await fetch('http://localhost:3000/api/auth/email/send-verification', {
         method: 'POST',
@@ -325,6 +381,9 @@ export const ApiService = {
   /** POST /auth/email/verify */
   async verifyEmailOtp(email: string, purpose: string, token: string): Promise<{ success: boolean, ticket?: string }> {
     devLog('Auth', `Verify email with Token: ${token}`);
+    if (config.mode === 'mock') {
+      return { success: true, ticket: 'mock-ticket-code' };
+    }
     try {
       const res = await fetch('http://localhost:3000/api/auth/email/verify', {
         method: 'POST',
@@ -341,13 +400,19 @@ export const ApiService = {
 
   /** POST /auth/google */
   async authWithGoogle(token: string): Promise<{ user: User; token: string }> {
-  devLog('Auth', 'Google OAuth single-sign-on integration');
-  const res = await apiFetch<{ user: User; token: string }>('/auth/google', {
+    devLog('Auth', 'Google OAuth single-sign-on integration');
+    if (config.mode === 'mock') {
+      const dbUsers = MockDB.getState().users;
+      const matched = dbUsers[0];
+      this.setAuthToken('mock-google-token');
+      return { user: matched, token: 'mock-google-token' };
+    }
+    const res = await apiFetch<{ user: User; token: string }>('/auth/google', {
           method: 'POST',
           body: JSON.stringify({ token }),
         });
-  this.setAuthToken(res.token);
-  return res;
+    this.setAuthToken(res.token);
+    return res;
   },
 
   // ==========================================
@@ -1776,6 +1841,406 @@ export const ApiService = {
       });
     }
     return { success: true };
+  },
+
+  // --- NEW INSTRUCTOR COURSE/SECTION/LESSON/ASSET ENDPOINTS ---
+  async getInstructorCoursesList(): Promise<any[]> {
+    if (config.mode === 'api') {
+      return apiFetch<any[]>('/instructor/courses');
+    }
+    return (await MockDB.getCourses()).map(c => ({ id: c.id, title: c.title, ...c }));
+  },
+
+  async getInstructorCourse(id: string): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/courses/${id}`);
+    }
+    return await MockDB.getCourseById(id);
+  },
+
+  async createInstructorCourse(payload: any): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>('/instructor/courses', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+    const newCourse: Course = {
+      id: 'course-' + Date.now(),
+      title: payload.title,
+      subtitle: payload.short_description || '',
+      description: payload.description || '',
+      category: 'Development',
+      subcategory: '',
+      instructorId: 'u-1',
+      instructorName: 'Instructor Test',
+      instructorTitle: 'Giảng viên MindHub',
+      instructorAvatar: 'https://ui-avatars.com/api/?name=Instructor',
+      instructorBio: '',
+      price: payload.price || 0,
+      salePrice: payload.sale_price || null,
+      rating: 5.0,
+      reviewCount: 0,
+      enrolledCount: 0,
+      completionRate: 100,
+      image: payload.thumbnail_url || '',
+      chapters: [],
+      reviews: [],
+      faqs: [],
+      requirements: payload.requirements || [],
+      willLearn: payload.outcomes || [],
+      status: payload.status || 'draft'
+    };
+    const current = MockDB.getState().courses;
+    MockDB.commit({ courses: [...current, newCourse] });
+    return newCourse;
+  },
+
+  async updateInstructorCourse(id: string, payload: any): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/courses/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      });
+    }
+    const current = MockDB.getState().courses;
+    const existing = current.find(c => c.id === id);
+    if (!existing) throw new Error('Course not found');
+    const updated = {
+      ...existing,
+      title: payload.title !== undefined ? payload.title : existing.title,
+      price: payload.price !== undefined ? payload.price : existing.price,
+      salePrice: payload.sale_price !== undefined ? payload.sale_price : existing.salePrice,
+      image: payload.thumbnail_url !== undefined ? payload.thumbnail_url : existing.image,
+      requirements: payload.requirements !== undefined ? payload.requirements : existing.requirements,
+      willLearn: payload.outcomes !== undefined ? payload.outcomes : existing.willLearn,
+      status: payload.status !== undefined ? payload.status : existing.status,
+      subtitle: payload.short_description !== undefined ? payload.short_description : existing.subtitle,
+      description: payload.description !== undefined ? payload.description : existing.description
+    };
+    MockDB.commit({ courses: current.map(c => c.id === id ? updated : c) });
+    return updated;
+  },
+
+  async submitInstructorCourseReview(id: string): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/courses/${id}/submit`, { method: 'POST' });
+    }
+    const current = MockDB.getState().courses;
+    MockDB.commit({ courses: current.map(c => c.id === id ? { ...c, status: 'pending' as const } : c) });
+    return { success: true };
+  },
+
+  async getInstructorCourseSections(courseId: string): Promise<any[]> {
+    if (config.mode === 'api') {
+      return apiFetch<any[]>(`/instructor/courses/${courseId}/sections`);
+    }
+    const course = await MockDB.getCourseById(courseId);
+    if (!course) return [];
+    return (course.chapters || []).map((ch, idx) => ({
+      id: ch.id,
+      course_id: courseId,
+      title: ch.title,
+      description: '',
+      sort_order: idx + 1,
+      status: 'active'
+    }));
+  },
+
+  async createInstructorCourseSection(courseId: string, payload: any): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/courses/${courseId}/sections`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+    const current = MockDB.getState().courses;
+    const course = current.find(c => c.id === courseId);
+    if (!course) throw new Error('Course not found');
+    const newSection = {
+      id: 'sec-' + Date.now(),
+      title: payload.title,
+      lessons: []
+    };
+    const updated = {
+      ...course,
+      chapters: [...(course.chapters || []), newSection]
+    };
+    MockDB.commit({ courses: current.map(c => c.id === courseId ? updated : c) });
+    return {
+      id: newSection.id,
+      course_id: courseId,
+      title: newSection.title,
+      description: payload.description || '',
+      sort_order: (course.chapters || []).length + 1,
+      status: 'active'
+    };
+  },
+
+  async updateCourseSection(sectionId: string, payload: any): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/sections/${sectionId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      });
+    }
+    const current = MockDB.getState().courses;
+    let found = false;
+    const updatedCourses = current.map(course => {
+      const chs = course.chapters || [];
+      if (chs.some(ch => ch.id === sectionId)) {
+        found = true;
+        return {
+          ...course,
+          chapters: chs.map(ch => ch.id === sectionId ? { ...ch, title: payload.title } : ch)
+        };
+      }
+      return course;
+    });
+    if (found) {
+      MockDB.commit({ courses: updatedCourses });
+    }
+    return { id: sectionId, title: payload.title };
+  },
+
+  async deleteCourseSection(sectionId: string): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/sections/${sectionId}`, {
+        method: 'DELETE'
+      });
+    }
+    const current = MockDB.getState().courses;
+    const updatedCourses = current.map(course => {
+      const chs = course.chapters || [];
+      if (chs.some(ch => ch.id === sectionId)) {
+        return {
+          ...course,
+          chapters: chs.filter(ch => ch.id !== sectionId)
+        };
+      }
+      return course;
+    });
+    MockDB.commit({ courses: updatedCourses });
+    return { success: true };
+  },
+
+  async getCourseLessons(courseId: string): Promise<any[]> {
+    if (config.mode === 'api') {
+      return apiFetch<any[]>(`/instructor/courses/${courseId}/lessons`);
+    }
+    const course = await MockDB.getCourseById(courseId);
+    if (!course) return [];
+    const list: any[] = [];
+    (course.chapters || []).forEach(ch => {
+      (ch.lessons || []).forEach((les, idx) => {
+        list.push({
+          id: les.id,
+          course_id: courseId,
+          course_section_id: ch.id,
+          title: les.title,
+          lesson_type: les.type === 'doc' ? 'doc' : 'video',
+          content: les.content || les.docContent || '',
+          video_url: les.videoUrl || '',
+          video_duration_seconds: 600,
+          is_preview: les.isPreview || false,
+          status: 'active',
+          sort_order: idx + 1
+        });
+      });
+    });
+    return list;
+  },
+
+  async createLesson(payload: any): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>('/instructor/lessons', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+    const current = MockDB.getState().courses;
+    const courseId = payload.course_id;
+    const sectionId = payload.course_section_id;
+    const newLes = {
+      id: 'les-' + Date.now(),
+      title: payload.title,
+      type: payload.lesson_type === 'doc' ? 'doc' as const : 'video' as const,
+      duration: '10:00',
+      videoUrl: payload.video_url || '',
+      isPreview: payload.is_preview || false,
+      content: payload.content || '',
+      resources: []
+    };
+    const updatedCourses = current.map(c => {
+      if (c.id === courseId) {
+        return {
+          ...c,
+          chapters: (c.chapters || []).map(ch => ch.id === sectionId ? { ...ch, lessons: [...(ch.lessons || []), newLes] } : ch)
+        };
+      }
+      return c;
+    });
+    MockDB.commit({ courses: updatedCourses });
+    return {
+      id: newLes.id,
+      ...payload,
+      sort_order: 1
+    };
+  },
+
+  async updateLesson(lessonId: string, payload: any): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/lessons/${lessonId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      });
+    }
+    const current = MockDB.getState().courses;
+    const updatedCourses = current.map(c => {
+      return {
+        ...c,
+        chapters: (c.chapters || []).map(ch => ({
+          ...ch,
+          lessons: (ch.lessons || []).map(l => {
+            if (l.id === lessonId) {
+              return {
+                ...l,
+                title: payload.title !== undefined ? payload.title : l.title,
+                type: payload.lesson_type !== undefined ? (payload.lesson_type === 'doc' ? 'doc' : 'video') : l.type,
+                videoUrl: payload.video_url !== undefined ? payload.video_url : l.videoUrl,
+                isPreview: payload.is_preview !== undefined ? payload.is_preview : l.isPreview,
+                content: payload.content !== undefined ? payload.content : l.content
+              };
+            }
+            return l;
+          })
+        }))
+      };
+    });
+    MockDB.commit({ courses: updatedCourses });
+    return { id: lessonId, ...payload };
+  },
+
+  async deleteLesson(lessonId: string): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/lessons/${lessonId}`, {
+        method: 'DELETE'
+      });
+    }
+    const current = MockDB.getState().courses;
+    const updatedCourses = current.map(c => ({
+      ...c,
+      chapters: (c.chapters || []).map(ch => ({
+        ...ch,
+        lessons: (ch.lessons || []).filter(l => l.id !== lessonId)
+      }))
+    }));
+    MockDB.commit({ courses: updatedCourses });
+    return { success: true };
+  },
+
+  async getLessonAssets(lessonId: string): Promise<any[]> {
+    if (config.mode === 'api') {
+      return apiFetch<any[]>(`/instructor/lessons/${lessonId}/assets`);
+    }
+    const current = MockDB.getState().courses;
+    let res: any[] = [];
+    current.forEach(c => {
+      (c.chapters || []).forEach(ch => {
+        (ch.lessons || []).forEach(l => {
+          if (l.id === lessonId && l.resources) {
+            res = l.resources.map((r, idx) => ({
+              id: r.id || `res-${idx}`,
+              lesson_id: lessonId,
+              title: r.title || 'Tài nguyên',
+              file_url: r.url || '',
+              file_name: r.title || 'file.pdf',
+              file_type: 'pdf',
+              file_size: 1024 * 1024,
+              note: ''
+            }));
+          }
+        });
+      });
+    });
+    return res;
+  },
+
+  async createLessonAsset(lessonId: string, payload: any): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/lessons/${lessonId}/assets`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+    const current = MockDB.getState().courses;
+    const newRes: Resource = {
+      id: 'res-' + Date.now(),
+      title: payload.title || payload.file_name || 'Tài nguyên',
+      url: payload.file_url || '',
+      size: '1.2 MB'
+    };
+    const updatedCourses = current.map(c => ({
+      ...c,
+      chapters: (c.chapters || []).map(ch => ({
+        ...ch,
+        lessons: (ch.lessons || []).map(l => {
+          if (l.id === lessonId) {
+            return {
+              ...l,
+              resources: [...(l.resources || []), newRes]
+            };
+          }
+          return l;
+        })
+      }))
+    }));
+    MockDB.commit({ courses: updatedCourses });
+    return {
+      id: newRes.id,
+      lesson_id: lessonId,
+      ...payload
+    };
+  },
+
+  async deleteLessonAsset(assetId: string): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/assets/${assetId}`, {
+        method: 'DELETE'
+      });
+    }
+    const current = MockDB.getState().courses;
+    const updatedCourses = current.map(c => ({
+      ...c,
+      chapters: (c.chapters || []).map(ch => ({
+        ...ch,
+        lessons: (ch.lessons || []).map(l => ({
+          ...l,
+          resources: (l.resources || []).filter(r => r.id !== assetId)
+        }))
+      }))
+    }));
+    MockDB.commit({ courses: updatedCourses });
+    return { success: true };
+  },
+
+  async uploadInstructorFile(file: File, type: string): Promise<any> {
+    if (config.mode === 'api') {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', type);
+      return apiFetch<any>('/instructor/upload', {
+        method: 'POST',
+        body: formData
+      });
+    }
+    const objectUrl = URL.createObjectURL(file);
+    return {
+      url: objectUrl,
+      file_name: file.name,
+      file_type: file.type,
+      file_size: file.size
+    };
   }
 };
 

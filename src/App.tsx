@@ -2074,7 +2074,7 @@ export default function App() {
       <div className="absolute inset-0 opacity-[0.02] pointer-events-none select-none z-0 bg-[radial-gradient(#432c28_1.5px,transparent_1.5px)] [background-size:24px_24px]"></div>
 
       {/* --- SITE NAVIGATION HEADER --- */}
-      {!isAuthRoute && (
+      {!isAuthRoute && activeTab !== "instructor" && (
         <header className="bg-white border-b border-brand-light-active py-2 md:py-3 px-4 md:px-8 flex justify-between items-center sticky top-0 z-40 shadow-xs">
           {/* Logo / Brand Name */}
           <button
@@ -2938,7 +2938,11 @@ export default function App() {
           onClose={() => navigateTo("home")}
         />
       ) : (
-        <main className="flex-1 p-4 md:p-12 max-w-7xl mx-auto w-full space-y-10 relative z-10">
+        <main className={
+          activeTab === "instructor" 
+            ? "flex-1 min-h-screen w-full relative z-10" 
+            : "flex-1 p-4 md:p-12 max-w-7xl mx-auto w-full space-y-10 relative z-10"
+        }>
           {/* 🎬 INTRODUCTORY CINEMATIC SHOWCASE VIDEO POPUP */}
           {showIntroVideo && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-lg z-[9999] flex items-center justify-center p-3 sm:p-5 animate-fade-in">
@@ -7336,7 +7340,7 @@ export default function App() {
       )}
 
       {/* --- RESTRUCTURED SITE FOOTER --- */}
-      {!isAuthRoute && (
+      {!isAuthRoute && activeTab !== "instructor" && (
         <footer className="bg-[#1c1410] text-[#fbf9f6] py-14 px-4 md:px-8 border-t border-stone-800 mt-16 shrink-0 select-none">
           <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-10 text-left text-xs">
             {/* Column 1: Thương hiệu / giới thiệu ngắn */}

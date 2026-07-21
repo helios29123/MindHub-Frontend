@@ -11,4 +11,5 @@ export interface Coupon {
   start_at: string;
   end_at: string;
   status: 'active' | 'inactive' | 'expired' | 'used_up';
+  description?: string;
 }

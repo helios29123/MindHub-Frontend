@@ -371,4 +371,108 @@ body {
   background-color: var(--color-paper-white) !important;
 }
 
+/* Scoped design tokens for all instructor modules (White + Blue scale) */
+.instructor-theme {
+  /* White scale overrides */
+  --mh-white-light: #ffffff;
+  --mh-white-normal: #ffffff;
+  --mh-white-hover: #e6e6e6;
+  --mh-white-active: #cccccc;
+  --mh-white-dark: #bfbfbf;
+  --mh-white-dark-hover: #999999;
+  --mh-white-dark-active: #737373;
+  --mh-white-darker: #595959;
+
+  /* Blue scale overrides */
+  --mh-blue-light: #e7e8ed;
+  --mh-blue-light-hover: #dbdde4;
+  --mh-blue-light-active: #b6b8c7;
+  --mh-blue-normal: #121b4b;
+  --mh-blue-hover: #101844;
+  --mh-blue-active: #0e163c;
+  --mh-blue-dark: #0e1438;
+  --mh-blue-dark-hover: #0b102d;
+  --mh-blue-dark-active: #080c22;
+  --mh-blue-darker: #06091a;
+
+  /* Base color variable remaps */
+  --color-paper-white: #ffffff;
+  --color-card-white: #ffffff;
+  --color-deep-ink: #06091a;
+  --color-carbon: #121b4b;
+  --color-slate: #595959;
+  --color-mist: #e7e8ed;
+  --color-fog: #737373;
+  --color-graphite: #737373;
+  --color-deep-indigo: #121b4b;
+  --color-pale-cyan: #e7e8ed;
+
+  /* Tailwind brand colors mapped to blue scale */
+  --color-brand-light: #e7e8ed;
+  --color-brand-light-hover: #dbdde4;
+  --color-brand-light-active: #b6b8c7;
+  --color-brand-normal: #121b4b;
+  --color-brand-hover: #101844;
+  --color-brand-active: #0e163c;
+  --color-brand-dark: #0e1438;
+  --color-brand-darker: #06091a;
+  
+  --color-main-light: #ffffff;
+  --color-main-light-hover: #e6e6e6;
+  --color-main-normal: #121b4b;
+  --color-main-hover: #101844;
+  --color-main-dark: #0e1438;
+  --color-main-darker: #06091a;
+
+  /* Standard Tailwind color scales remapped for unified instructor aesthetics */
+  --color-slate-50: #f8f9fb;
+  --color-slate-100: #e7e8ed;
+  --color-slate-200: #dbdde4;
+  --color-slate-350: #bfbfbf;
+  --color-slate-400: #737373;
+  --color-slate-450: #595959;
+  --color-slate-500: #121b4b;
+  --color-slate-600: #121b4b;
+  --color-slate-650: #121b4b;
+  --color-slate-700: #121b4b;
+  --color-slate-800: #06091a;
+  
+  --color-stone-100: #e7e8ed;
+  --color-stone-200: #dbdde4;
+  --color-stone-400: #999999;
+  --color-stone-500: #737373;
+  --color-stone-600: #121b4b;
+  --color-stone-700: #121b4b;
+  --color-stone-900: #06091a;
+  
+  --color-emerald-50: #e7e8ed;
+  --color-emerald-100: #dbdde4;
+  --color-emerald-600: #121b4b;
+  --color-emerald-700: #121b4b;
+  --color-emerald-800: #080c22;
+  
+  --color-blue-50: #e7e8ed;
+  --color-blue-100: #dbdde4;
+  --color-blue-600: #121b4b;
+  --color-blue-700: #101844;
+  --color-blue-750: #121b4b;
+  --color-blue-800: #080c22;
+  
+  --color-purple-50: #e7e8ed;
+  --color-purple-100: #dbdde4;
+  --color-purple-600: #121b4b;
+  --color-purple-750: #121b4b;
+
+  --color-indigo-50: #e7e8ed;
+  --color-indigo-600: #121b4b;
+  --color-indigo-700: #101844;
+
+  --color-gray-50: #f8f9fb;
+  --color-gray-100: #e7e8ed;
+  --color-gray-200: #dbdde4;
+  --color-gray-500: #737373;
+  --color-gray-600: #121b4b;
+  --color-gray-750: #121b4b;
+}
+
 
