@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ApiService } from '../services/api';
 import { 
   BarChart2, Filter, Calendar, BookOpen, Clock, 
   TrendingUp, Activity, DollarSign

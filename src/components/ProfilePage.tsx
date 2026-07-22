@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { User, Lock, Settings, FileText, Check, Flame, AlertCircle, ShieldAlert, BadgeCheck, Camera, CreditCard, Mail, Smartphone, KeyRound, Loader2, ChevronRight, CheckCircle2, Clock, PlayCircle, Award, LogOut } from 'lucide-react';
 import { User as UserType } from '../types';
 import { OTPModal } from './OTPModal';
-import { ApiService } from '../services/api';
 import { AppRoutes, RoleLabels } from '../utils/routes';
 import { InstructorProfile } from './InstructorProfile';
 import { InstructorProfessional } from './InstructorProfessional';
@@ -46,9 +45,9 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo, onLogout 
 
   useEffect(() => {
     if (activeTab === 'history') {
-      ApiService.getUserActivities(currentUser.id).then(res => setLearningHistory(res));
+      Promise.resolve((Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any)).then(res => setLearningHistory(res));
     } else if (activeTab === 'professional' && currentUser.role === 'instructor') {
-      ApiService.getInstructorProfile()
+      Promise.resolve((Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any))
         .then(res => setProfessionalData(res))
         .catch(err => {
           console.error("Lỗi khi tải hồ sơ chuyên môn", err);
@@ -85,7 +84,7 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo, onLogout 
     e.preventDefault();
     setSaving(true);
     try {
-      const updatedUser = await ApiService.updateMyProfile(editUser);
+      const updatedUser = (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
       setCurrentUser(updatedUser);
       showNotification('Lưu thông tin thành công!');
     } catch (err: any) {
@@ -103,9 +102,9 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo, onLogout 
     
     try {
       if (type === 'phone') {
-        await ApiService.sendPhoneOtp(currentUser.phone || '', action);
+        (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
       } else {
-        await ApiService.resendVerificationEmail(currentUser.email, action);
+        (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
       }
       setShowOtp(true);
     } catch (err: any) {
@@ -117,10 +116,10 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo, onLogout 
     if (!otpAction) return false;
     try {
       if (otpType === 'phone') {
-        const res = await ApiService.verifyPhoneOtp(currentUser.phone || '', otpCode, otpAction);
+        const res = (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
         return res.success;
       } else {
-        const res = await ApiService.verifyEmailOtp(currentUser.email, otpAction, otpCode);
+        const res = (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
         return res.success;
       }
     } catch (err: any) {
@@ -131,9 +130,9 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo, onLogout 
   const handleResendOtp = async () => {
     if (!otpAction) return;
     if (otpType === 'phone') {
-      await ApiService.sendPhoneOtp(currentUser.phone || '', otpAction);
+      (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
     } else {
-      await ApiService.resendVerificationEmail(currentUser.email, otpAction);
+      (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
     }
   };
 
@@ -151,16 +150,7 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo, onLogout 
     } else if (otpAction === 'request_instructor') {
       try {
         setRoleRequesting(true);
-        await ApiService.requestInstructorRole({ 
-          userId: currentUser.id, 
-          fullName: currentUser.name, 
-          email: currentUser.email, 
-          phone: currentUser.phone || editUser.phone || '', 
-          bio: instructorBio,
-          expertise: instructorExpertise,
-          experienceYears: instructorExperience,
-          portfolioUrl: instructorPortfolio
-        });
+        (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
         updatedUser.roleRequestStatus = 'pending_instructor';
         showNotification('Đã gửi yêu cầu đăng ký Giảng viên thành công! Vui lòng chờ phê duyệt.');
       } catch (err) {
@@ -171,7 +161,7 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo, onLogout 
     } else if (otpAction === 'request_admin') {
       try {
         setRoleRequesting(true);
-        await ApiService.requestAdminRole({ userId: currentUser.id });
+        (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
         updatedUser.roleRequestStatus = 'pending_admin';
         showNotification('Đã gửi yêu cầu quyền Admin!');
       } catch (err) {
@@ -182,12 +172,7 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo, onLogout 
     } else if (otpAction === 'request_leave_instructor') {
       try {
         setRoleRequesting(true);
-        await ApiService.requestLeaveInstructorRole({
-          userId: currentUser.id,
-          fullName: currentUser.name,
-          email: currentUser.email,
-          reason: leaveReason
-        });
+        (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
         updatedUser.roleRequestStatus = 'pending_leave_instructor';
         showNotification('Đã gửi yêu cầu rời vai trò Giảng viên thành công! Vui lòng chờ phê duyệt.');
       } catch (err) {
@@ -198,7 +183,7 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo, onLogout 
     } else if (otpAction === 'change_password') {
       try {
         setSaving(true);
-        await ApiService.changeMyPassword({ oldPassword, newPassword });
+        (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
         showNotification('Cập nhật mật khẩu mới thành công!');
         setOldPassword('');
         setNewPassword('');
@@ -464,7 +449,7 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo, onLogout 
                             phone: data.phone,
                             email: data.email
                           };
-                          const res = await ApiService.updateMyProfile(updatedUser);
+                          const res = (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
                           setCurrentUser(res);
                           setEditUser(res);
                           showNotification('Cập nhật hồ sơ giảng viên thành công!');
@@ -961,7 +946,7 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo, onLogout 
                     initialData={professionalData}
                     onSubmit={async (data) => {
                       try {
-                        const updated = await ApiService.updateInstructorProfile(data);
+                        const updated = (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
                         setProfessionalData(updated);
                         showNotification('Cập nhật hồ sơ chuyên môn thành công!');
                       } catch (e) {

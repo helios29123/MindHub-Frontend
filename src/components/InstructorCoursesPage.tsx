@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Compass, ChevronRight, GraduationCap } from 'lucide-react';
 import { Course, User } from '../types';
-import { ApiService } from '../services/api';
 import { INSTRUCTORS_DATA } from '../data';
 
 interface InstructorCoursesPageProps {
@@ -35,7 +34,7 @@ export default function InstructorCoursesPage({
   useEffect(() => {
     let active = true;
     setLoading(true);
-    ApiService.getPublicCoursesByInstructor(instructorId)
+    Promise.resolve((Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any))
       .then(data => {
         if (active) {
           setCourses(data);

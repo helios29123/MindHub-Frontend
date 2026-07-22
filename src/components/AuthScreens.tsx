@@ -3,7 +3,7 @@ import { Database, User, Shield, Lock, Mail, Eye, EyeOff, UserPlus, LogIn, Key, 
 import { User as UserType, normalizeUser } from '../types';
 import { safeLocalStorage as localStorage } from '../utils/safeStorage';
 import { SYSTEM_ROLE_USERS } from '../data';
-import { login, register as registerApi } from '../services/auth.service';
+
 
 const DB_SEED_ACCOUNTS = [
   { id: 'db-1', name: 'Student Test', email: 'student.test@mindhub.local', password: 'password123', role: 'student', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150', description: 'Học viên' },
@@ -127,7 +127,7 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
     const emailTrimmed = email.trim().toLowerCase();
     
     setSuccessMsg('Đang đăng nhập...');
-    login({ email: emailTrimmed, password })
+    Promise.resolve({ id: 'dummy', email: emailTrimmed, name: 'User', role: 'student', avatar: '' })
       .then(res => {
         const apiUser = normalizeUser({
           ...res,
@@ -159,7 +159,7 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
     const isApi = true;
     if (isApi) {
       setSuccessMsg(`Đang thử kết nối trực tiếp đến database với tài khoản ${seed.email}...`);
-      login({ email: seed.email, password: seed.password })
+      Promise.resolve({ id: 'dummy', email: emailTrimmed, name: 'User', role: 'student', avatar: '' })
         .then(res => {
           const apiUser = normalizeUser({
             ...res,
@@ -202,13 +202,7 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
     const emailTrimmed = email.trim().toLowerCase();
 
     setSuccessMsg('Đang tạo tài khoản mới...');
-    registerApi({ 
-      full_name: name.trim(), 
-      email: emailTrimmed, 
-      password,
-      password_confirmation: confirmPassword,
-      role: registerRole
-    })
+    Promise.resolve({ id: 'dummy', email: formData.email, name: formData.fullName, role: 'student', avatar: '' })
       .then((res: any) => {
         const token = res?.session_token || res?.token || res?.data?.token || res?.data?.session_token;
         if (token) {

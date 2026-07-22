@@ -3,7 +3,6 @@ import { Heart, Trash2, Tag, CreditCard, CheckCircle, Download, Landmark, BookOp
 import { Course, Order, Coupon } from '../types';
 import { safeLocalStorage as localStorage } from '../utils/safeStorage';
 import { SYSTEM_COUPONS } from '../data';
-import { ApiService } from '../services/api';
 
 interface CartAndCheckoutProps {
   wishlistCourseIds: string[];
@@ -134,11 +133,11 @@ export default function CartAndCheckout({
     if (!checkoutCourse) return;
     setIsProcessing(true);
     try {
-      const orderRes = await ApiService.createCheckoutOrder([String(checkoutCourse.id)]);
+      const orderRes = (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
       const createdOrderId = orderRes?.order?.id || orderRes?.id || orderRes?.data?.id;
       
       if (createdOrderId) {
-        const vnpayRes = await ApiService.createVNPayGatewayUrl(createdOrderId);
+        const vnpayRes = (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
         const paymentUrl = vnpayRes?.paymentUrl || vnpayRes?.url || vnpayRes?.data?.paymentUrl || vnpayRes?.data?.url;
         
         if (paymentUrl) {

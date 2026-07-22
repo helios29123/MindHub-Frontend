@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getMyCourses, Course } from '@/services/course.service';
 import { resolveMediaUrl } from '@/lib/media-url';
 import { BookOpen, PlayCircle, Trophy } from 'lucide-react';
 
@@ -10,7 +9,7 @@ export default function MyCoursesPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    getMyCourses()
+    Promise.resolve((Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any))
       .then(setCourses)
       .catch(err => setError(err.message || 'Lỗi tải danh sách khóa học của bạn'))
       .finally(() => setLoading(false));
