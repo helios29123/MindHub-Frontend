@@ -1,4 +1,4 @@
-import VNPayReturnPage from "../components/VNPayReturnPage";
+import VNPayReturnPage from "@/features/cart/VNPayReturnPage";
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Compass,
