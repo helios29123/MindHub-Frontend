@@ -1,5 +1,6 @@
 import React from 'react';
 import { Search, RotateCcw, Plus } from 'lucide-react';
+import { CourseOption } from '../types';
 
 interface Props {
   searchQuery: string;
@@ -10,6 +11,7 @@ interface Props {
   setCourseFilter: (val: string) => void;
   discountTypeFilter: string;
   setDiscountTypeFilter: (val: string) => void;
+  courseOptions: CourseOption[];
   onClearFilters: () => void;
   onCreateClick: () => void;
 }
@@ -23,6 +25,7 @@ export const CouponFilter: React.FC<Props> = ({
   setCourseFilter,
   discountTypeFilter,
   setDiscountTypeFilter,
+  courseOptions,
   onClearFilters,
   onCreateClick,
 }) => {
@@ -69,13 +72,11 @@ export const CouponFilter: React.FC<Props> = ({
               className="w-full text-xs font-semibold px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-normal bg-white cursor-pointer"
             >
               <option value="all">Tất cả khóa học</option>
-              <option value="course_python">Lập trình Python cơ bản cho người mới bắt đầu</option>
-              <option value="course_uiux">Thiết kế UI/UX từ cơ bản đến nâng cao</option>
-              <option value="course_data">Data Analysis with Excel & SQL</option>
-              <option value="course_django">Lập trình Web với Django Framework</option>
-              <option value="course_devops">DevOps cơ bản với Docker & Kubernetes</option>
-              <option value="course_ml">Machine Learning cơ bản với Python</option>
-              <option value="course_marketing">Khóa học Marketing Online A-Z</option>
+              {courseOptions.map((course) => (
+                <option key={course.id} value={String(course.id)}>
+                  {course.title}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -98,7 +99,12 @@ export const CouponFilter: React.FC<Props> = ({
         {/* Buttons */}
         <div className="flex gap-2 shrink-0">
           <button
-            onClick={onClearFilters}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClearFilters();
+            }}
             className="flex items-center justify-center gap-1.5 px-4 py-2.5 border border-slate-200 text-slate-650 hover:bg-slate-100 text-xs font-bold rounded-xl transition-all cursor-pointer h-10"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -106,7 +112,12 @@ export const CouponFilter: React.FC<Props> = ({
           </button>
           
           <button
-            onClick={onCreateClick}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onCreateClick();
+            }}
             className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-brand-normal hover:bg-brand-hover text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer h-10"
           >
             <Plus className="w-4 h-4" />

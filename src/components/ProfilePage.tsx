@@ -383,7 +383,7 @@ export function ProfilePage({ currentUser, setCurrentUser, navigateTo, onLogout 
                     <div className="p-4 flex flex-col sm:flex-row gap-3">
                       {currentUser.role === 'instructor' && (
                         <button 
-                          onClick={() => navigateTo(AppRoutes.instructorDashboard(currentUser.id))}
+                          onClick={() => navigateTo(AppRoutes.instructorDashboard())}
                           className="flex-1 flex items-center justify-between p-3 rounded-xl border border-stone-200 hover:border-brand-normal hover:bg-brand-light transition-all text-left cursor-pointer"
                         >
                           <div className="flex items-center gap-3">

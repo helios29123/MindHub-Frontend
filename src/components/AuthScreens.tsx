@@ -3,12 +3,12 @@ import { Database, User, Shield, Lock, Mail, Eye, EyeOff, UserPlus, LogIn, Key, 
 import { User as UserType, normalizeUser } from '../types';
 import { safeLocalStorage as localStorage } from '../utils/safeStorage';
 import { SYSTEM_ROLE_USERS } from '../data';
-import { ApiService } from '../services/api';
+import { ApiService, ApiError } from '../services/api';
 
 const DB_SEED_ACCOUNTS = [
-  { id: 'db-1', name: 'Student Test', email: 'student.test@mindhub.local', password: 'password123', role: 'student', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150', description: 'Học viên' },
-  { id: 'db-2', name: 'Instructor Test', email: 'instructor.test@mindhub.local', password: 'password123', role: 'instructor', avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=150', description: 'Giảng viên' },
-  { id: 'db-3', name: 'Admin Test', email: 'admin.test@mindhub.local', password: 'password123', role: 'admin', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150', description: 'Quản trị viên' },
+  { id: 'db-1', name: 'Student Test', email: 'learner1@mindhub.test', password: '12345678', role: 'student', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150', description: 'Học viên' },
+  { id: 'db-2', name: 'Instructor Test', email: 'instructor1@mindhub.test', password: '12345678', role: 'instructor', avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=150', description: 'Giảng viên' },
+  { id: 'db-3', name: 'Admin Test', email: 'admin@mindhub.test', password: '12345678', role: 'admin', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150', description: 'Quản trị viên' },
 ];
 
 interface AuthScreensProps {
@@ -127,6 +127,7 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
     const emailTrimmed = email.trim().toLowerCase();
     
     setSuccessMsg('Đang đăng nhập...');
+    setErrorMsg('');
     ApiService.login({ email: emailTrimmed, password })
       .then(res => {
         const apiUser = normalizeUser({
@@ -138,7 +139,25 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
         onClose();
       })
       .catch(err => {
-        setErrorMsg(`Thất bại kết nối database / API: ${err.message || err.toString()}`);
+        setSuccessMsg('');
+        if (err instanceof ApiError) {
+          if (err.status === 401) {
+            setErrorMsg('Email hoặc mật khẩu không chính xác.');
+          } else if (err.status === 403) {
+            setErrorMsg('Tài khoản không có quyền truy cập hoặc đã bị khóa.');
+          } else if (err.status === 419) {
+            setErrorMsg('Phiên làm việc đã hết hạn. Vui lòng thử lại.');
+          } else if (err.status === 422) {
+            const firstErr = err.errors ? Object.values(err.errors)[0] : null;
+            setErrorMsg(Array.isArray(firstErr) ? firstErr[0] : (err.message || 'Dữ liệu không hợp lệ.'));
+          } else if (err.status === 500) {
+            setErrorMsg('Máy chủ đang gặp lỗi. Vui lòng thử lại sau.');
+          } else {
+            setErrorMsg(err.message || 'Có lỗi xảy ra, vui lòng thử lại.');
+          }
+        } else {
+          setErrorMsg(err.message || 'Không thể kết nối đến máy chủ Backend.');
+        }
       });
   };
 
@@ -170,18 +189,35 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
           onClose();
         })
         .catch(err => {
-          setErrorMsg(`Không kết nối được: ${err.message || err.toString()}. Hãy chắc chắn DB đã seed và Backend đang hoạt động.`);
+          setSuccessMsg('');
+          if (err instanceof ApiError) {
+            if (err.status === 401) {
+              setErrorMsg('Email hoặc mật khẩu không chính xác.');
+            } else if (err.status === 403) {
+              setErrorMsg('Tài khoản không có quyền truy cập hoặc đã bị khóa.');
+            } else if (err.status === 419) {
+              setErrorMsg('Phiên làm việc đã hết hạn. Vui lòng thử lại.');
+            } else if (err.status === 422) {
+              const firstErr = err.errors ? Object.values(err.errors)[0] : null;
+              setErrorMsg(Array.isArray(firstErr) ? firstErr[0] : (err.message || 'Dữ liệu không hợp lệ.'));
+            } else if (err.status === 500) {
+              setErrorMsg('Máy chủ đang gặp lỗi. Vui lòng thử lại sau.');
+            } else {
+              setErrorMsg(err.message || 'Có lỗi xảy ra, vui lòng thử lại.');
+            }
+          } else {
+            setErrorMsg(err.message || 'Không thể kết nối đến máy chủ Backend.');
+          }
         });
     }
   };
 
-  // Perform quick account login in 1-click
+  // Perform quick account login by populating form and executing API login
   const handleQuickLogin = (role: 'student' | 'instructor' | 'admin') => {
-    const userObj = SYSTEM_ROLE_USERS[role];
-    const withCheck: UserType = { ...userObj, isEmailVerified: true };
-    saveToHistory(withCheck);
-    onLoginSuccess(withCheck);
-    onClose();
+    const matchedSeed = DB_SEED_ACCOUNTS.find(s => s.role === role);
+    if (matchedSeed) {
+      handleSeedClick(matchedSeed);
+    }
   };
 
   const handleRegister = (e: React.FormEvent) => {

@@ -1,257 +1,436 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ApiService } from '../services/api';
-import { INSTRUCTOR_WITHDRAW_MOCK } from '../data/instructorWithdrawMock';
 import { 
-  CreditCard, DollarSign, Wallet, Landmark, 
-  History, AlertCircle, CheckCircle2, Clock, XCircle, ChevronLeft, ChevronRight, 
-  Plus, Sparkles, X, Loader2, HelpCircle, ShieldAlert, ArrowUpRight
+  Wallet, Clock, CheckCircle2, XCircle, ChevronLeft, ChevronRight, 
+  Plus, Sparkles, X, Loader2, AlertCircle, ShieldCheck, Eye, EyeOff,
+  Building2, Info, ArrowUpRight, HelpCircle, Bell
 } from 'lucide-react';
 
 interface InstructorWithdrawalProps {
-  instructorId: string;
+  instructorId?: string;
 }
 
-export const InstructorWithdrawal: React.FC<InstructorWithdrawalProps> = ({ instructorId }) => {
-  const [balance, setBalance] = useState<any>(INSTRUCTOR_WITHDRAW_MOCK.balance);
-  const [payoutAccount, setPayoutAccount] = useState<any>(INSTRUCTOR_WITHDRAW_MOCK.payoutAccount);
-  const [withdrawals, setWithdrawals] = useState<any[]>(INSTRUCTOR_WITHDRAW_MOCK.withdrawals);
-  const [meta, setMeta] = useState({ total: INSTRUCTOR_WITHDRAW_MOCK.withdrawals.length, page: 1, limit: 10, totalPages: 1 });
-  
-  const [loading, setLoading] = useState(false);
+const MINIMUM_WITHDRAWAL_AMOUNT = 200000;
+
+export const InstructorWithdrawal: React.FC<InstructorWithdrawalProps> = () => {
+  // Summary & Balance state
+  const [balance, setBalance] = useState<{
+    withdrawableBalance: number;
+    pendingWithdrawAmount: number;
+    paidWithdrawAmount: number;
+    rejectedWithdrawAmount: number;
+    pendingCount: number;
+    paidCount: number;
+    rejectedCount: number;
+    canCreateWithdrawal: boolean;
+  }>({
+    withdrawableBalance: 0,
+    pendingWithdrawAmount: 0,
+    paidWithdrawAmount: 0,
+    rejectedWithdrawAmount: 0,
+    pendingCount: 0,
+    paidCount: 0,
+    rejectedCount: 0,
+    canCreateWithdrawal: false,
+  });
+
+  // Payout accounts state
+  const [payoutAccounts, setPayoutAccounts] = useState<any[]>([]);
+  const [activePayoutAccount, setActivePayoutAccount] = useState<any | null>(null);
+  const [showMaskedAccount, setShowMaskedAccount] = useState(false);
+
+  // Withdrawals list & pagination state
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [meta, setMeta] = useState({ currentPage: 1, lastPage: 1, perPage: 5, total: 0 });
+
+  // General loading & Toast state
+  const [loading, setLoading] = useState(true);
+  const [loadingList, setLoadingList] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cancellingId, setCancellingId] = useState<number | string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  // Drawer Form State (Starts open as a side panel by default on desktop)
+  // Drawer Create Form State
   const [isDrawerOpen, setIsDrawerOpen] = useState(true);
   const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [selectedAccountId, setSelectedAccountId] = useState<string | number>('');
   const [withdrawNote, setWithdrawNote] = useState('');
-  const [withdrawError, setWithdrawError] = useState('');
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
 
-  // Bank Account Modal / Edit State
-  const [isEditingAccount, setIsEditingAccount] = useState(false);
+  // Payout Account Modal State
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<number | string | null>(null);
+  const [savingAccount, setSavingAccount] = useState(false);
   const [accountForm, setAccountForm] = useState({
-    bankName: INSTRUCTOR_WITHDRAW_MOCK.payoutAccount.bankName,
-    accountName: INSTRUCTOR_WITHDRAW_MOCK.payoutAccount.accountName,
-    accountNumber: INSTRUCTOR_WITHDRAW_MOCK.payoutAccount.accountNumber,
-    branch: 'Chi nhánh Hà Nội'
+    provider: 'bank',
+    bankName: 'Techcombank – Ngân hàng TMCP Kỹ thương Việt Nam',
+    accountName: '',
+    accountNumber: '',
+    branch: '',
+    isDefault: true,
   });
+
+  // OTP Verification Modal State
+  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpTimer, setOtpTimer] = useState(300);
+  const [resendTimer, setResendTimer] = useState(60);
+  const [maskedEmail, setMaskedEmail] = useState('');
+  const [pendingAccountPayload, setPendingAccountPayload] = useState<any>(null);
+
+  // Detail Modal State
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [selectedWithdrawal, setSelectedWithdrawal] = useState<any | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3500);
   };
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '';
+  const formatVND = (amount: number | string | null | undefined) => {
+    const num = Number(amount || 0);
+    const safeNum = Number.isFinite(num) ? num : 0;
+    return new Intl.NumberFormat('vi-VN').format(safeNum) + 'đ';
+  };
+
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return '—';
     const d = new Date(dateString);
+    if (isNaN(d.getTime())) return dateString;
     return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
   };
 
-  const formatVND = (amount: number) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
-  };
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [balanceRes, accountRes, withdrawalsRes] = await Promise.all([
-        ApiService.getInstructorBalance(instructorId),
-        ApiService.getInstructorPayoutAccount(instructorId),
-        ApiService.getInstructorWithdrawals(instructorId, { page: meta.page, limit: meta.limit })
-      ]);
-      
-      // Determine if real data exists
-      const hasRealBalance = balanceRes && (balanceRes.withdrawableBalance > 0 || balanceRes.totalWithdrawn > 0);
-      if (hasRealBalance) {
-        // Map balance
-        const listData = withdrawalsRes?.data || [];
-        const totalRejected = listData
-          .filter((w: any) => w.status === 'rejected')
-          .reduce((sum: number, w: any) => sum + w.amount, 0);
-
-        setBalance({
-          withdrawableBalance: balanceRes.withdrawableBalance || 0,
-          totalPendingWithdrawal: balanceRes.totalPendingWithdrawal || 0,
-          totalWithdrawn: balanceRes.totalWithdrawn || 0,
-          totalRejected: totalRejected || 0
-        });
-      } else {
-        setBalance(INSTRUCTOR_WITHDRAW_MOCK.balance);
-      }
-
-      const hasRealAccount = accountRes && (accountRes.bankName || accountRes.accountNumber || accountRes.data?.bankName);
-      if (hasRealAccount) {
-        const rawAccount = accountRes.data || accountRes;
-        setPayoutAccount(rawAccount);
-        setAccountForm({
-          bankName: rawAccount.bankName || rawAccount.provider || '',
-          accountName: rawAccount.accountName || '',
-          accountNumber: rawAccount.accountNumber || '',
-          branch: rawAccount.branch || 'Chi nhánh Hà Nội'
-        });
-      } else {
-        setPayoutAccount(INSTRUCTOR_WITHDRAW_MOCK.payoutAccount);
-      }
-
-      const listData = withdrawalsRes?.data || [];
-      if (listData.length > 0) {
-        setWithdrawals(listData);
-        setMeta(withdrawalsRes?.meta || { current_page: 1, last_page: 1, total: listData.length, totalPages: 1 });
-      } else {
-        setWithdrawals(INSTRUCTOR_WITHDRAW_MOCK.withdrawals);
-        setMeta({ current_page: 1, last_page: 1, total: INSTRUCTOR_WITHDRAW_MOCK.withdrawals.length, totalPages: 1 });
-      }
-    } catch (error) {
-      console.error('Error fetching withdrawal data, falling back to mock:', error);
-      // Fallback
-      setBalance(INSTRUCTOR_WITHDRAW_MOCK.balance);
-      setPayoutAccount(INSTRUCTOR_WITHDRAW_MOCK.payoutAccount);
-      setWithdrawals(INSTRUCTOR_WITHDRAW_MOCK.withdrawals);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // OTP Countdown timer effect
   useEffect(() => {
-    if (instructorId) {
-      fetchData();
-    }
-  }, [instructorId, meta.page]);
+    if (!isOtpModalOpen) return;
+    const interval = setInterval(() => {
+      setOtpTimer(prev => (prev > 0 ? prev - 1 : 0));
+      setResendTimer(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isOtpModalOpen]);
 
-  const handleUpdateAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Fetch summary & default account
+  const fetchSummaryAndAccounts = useCallback(async () => {
     try {
-      const res = await ApiService.updateInstructorPayoutAccount(instructorId, accountForm);
-      const updated = res?.data || res || accountForm;
-      setPayoutAccount({
-        bankName: updated.bankName || updated.provider || accountForm.bankName,
-        accountName: updated.accountName || accountForm.accountName,
-        accountNumber: updated.accountNumber || accountForm.accountNumber,
-        status: 'verified',
-        verifiedLast: 'Vừa xong'
+      const [summaryRes, accountsRes] = await Promise.allSettled([
+        ApiService.getInstructorWithdrawalSummary(),
+        ApiService.getInstructorPayoutAccounts()
+      ]);
+
+      if (summaryRes.status === 'fulfilled') {
+        const resData = summaryRes.value?.data || summaryRes.value;
+        if (resData && typeof resData === 'object') {
+          setBalance({
+            withdrawableBalance: Number(resData.available_balance ?? resData.available_revenue ?? 0),
+            pendingWithdrawAmount: Number(resData.pending_withdraw_amount ?? 0),
+            paidWithdrawAmount: Number(resData.paid_withdraw_amount ?? 0),
+            rejectedWithdrawAmount: Number(resData.rejected_withdraw_amount ?? 0),
+            pendingCount: Number(resData.pending_count ?? 0),
+            paidCount: Number(resData.paid_count ?? 0),
+            rejectedCount: Number(resData.rejected_count ?? 0),
+            canCreateWithdrawal: Boolean(resData.can_create_withdrawal ?? true),
+          });
+        }
+      }
+
+      if (accountsRes.status === 'fulfilled') {
+        const list = accountsRes.value?.data || accountsRes.value;
+        if (Array.isArray(list)) {
+          setPayoutAccounts(list);
+          const defaultAcc = list.find((a: any) => a.is_default) || list[0] || null;
+          setActivePayoutAccount(defaultAcc);
+          if (defaultAcc) {
+            setSelectedAccountId(defaultAcc.id);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch withdrawal summary/accounts:', err);
+    }
+  }, []);
+
+  // Fetch withdrawals list with pagination
+  const fetchWithdrawalsList = useCallback(async (page = 1) => {
+    setLoadingList(true);
+    try {
+      const res = await ApiService.getInstructorWithdrawals({ page, per_page: meta.perPage });
+      const items = res?.data || (Array.isArray(res) ? res : []);
+      const paginationMeta = res?.meta || {};
+
+      setWithdrawals(Array.isArray(items) ? items : []);
+      setMeta({
+        currentPage: paginationMeta.current_page || page,
+        lastPage: paginationMeta.last_page || 1,
+        perPage: paginationMeta.per_page || meta.perPage,
+        total: paginationMeta.total || (Array.isArray(items) ? items.length : 0),
       });
-      setIsEditingAccount(false);
-      showToast('Cập nhật tài khoản nhận tiền thành công!');
-    } catch (error) {
-      console.error('Error updating account, simulating success for demo:', error);
-      setPayoutAccount({
-        bankName: accountForm.bankName,
-        accountName: accountForm.accountName,
-        accountNumber: accountForm.accountNumber,
-        status: 'verified',
-        verifiedLast: 'Vừa xong'
-      });
-      setIsEditingAccount(false);
-      showToast('Cập nhật tài khoản nhận tiền thành công!');
+    } catch (err) {
+      console.warn('Failed to fetch withdrawals list:', err);
+      setWithdrawals([]);
+    } finally {
+      setLoadingList(false);
+    }
+  }, [meta.perPage]);
+
+  // Initial Load
+  useEffect(() => {
+    const initLoad = async () => {
+      setLoading(true);
+      await Promise.all([
+        fetchSummaryAndAccounts(),
+        fetchWithdrawalsList(1)
+      ]);
+      setLoading(false);
+    };
+    initLoad();
+  }, [fetchSummaryAndAccounts, fetchWithdrawalsList]);
+
+  // Handle amount change in drawer
+  const handleAmountInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value.replace(/\D/g, '');
+    setWithdrawAmount(rawVal);
+    setWithdrawError(null);
+  };
+
+  const setMaxAmount = () => {
+    if (balance.withdrawableBalance > 0) {
+      setWithdrawAmount(String(balance.withdrawableBalance));
+      setWithdrawError(null);
     }
   };
 
-  const handleWithdraw = async (e: React.FormEvent) => {
+  // Submit Withdrawal Request
+  const handleWithdrawSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setWithdrawError('');
+    if (isSubmitting) return;
 
-    if (!payoutAccount) {
-      setWithdrawError('Vui lòng cập nhật thông tin tài khoản nhận tiền trước khi rút.');
+    const amountNum = Number(withdrawAmount);
+    if (!amountNum || isNaN(amountNum)) {
+      setWithdrawError('Vui lòng nhập số tiền hợp lệ.');
       return;
     }
-
-    const amount = Number(withdrawAmount);
-    if (isNaN(amount) || amount < 200000) {
-      setWithdrawError('Số tiền rút tối thiểu là 200.000đ.');
+    if (amountNum < MINIMUM_WITHDRAWAL_AMOUNT) {
+      setWithdrawError(`Số tiền rút tối thiểu là ${formatVND(MINIMUM_WITHDRAWAL_AMOUNT)}.`);
       return;
     }
-
-    if (amount > balance.withdrawableBalance) {
-      setWithdrawError('Số tiền rút vượt quá số dư khả dụng.');
+    if (amountNum > balance.withdrawableBalance) {
+      setWithdrawError('Số tiền rút không được vượt quá số dư có thể rút.');
+      return;
+    }
+    if (!selectedAccountId) {
+      setWithdrawError('Vui lòng chọn tài khoản nhận tiền.');
       return;
     }
 
     setIsSubmitting(true);
+    setWithdrawError(null);
+
     try {
-      await ApiService.createInstructorWithdrawal(instructorId, { amount, note: withdrawNote });
-      showToast('Gửi yêu cầu rút tiền thành công!');
-      
-      // Simulate adding to withdrawals history locally for visual confirmation
-      const newRequest = {
-        id: `w-${Date.now().toString().slice(-4)}`,
-        createdAt: new Date().toISOString(),
-        amount: amount,
-        accountNumberSnapshot: `${payoutAccount.bankName?.split(' ')[0]} ${payoutAccount.accountNumber}`,
-        status: 'pending' as const,
-        rejectedReason: '-'
-      };
-      
-      setWithdrawals(prev => [newRequest, ...prev]);
-      setBalance((prev: any) => ({
-        ...prev,
-        withdrawableBalance: prev.withdrawableBalance - amount,
-        totalPendingWithdrawal: prev.totalPendingWithdrawal + amount
-      }));
+      await ApiService.createInstructorWithdrawal({
+        amount: amountNum,
+        payout_account_id: selectedAccountId,
+        note: withdrawNote.trim() || undefined,
+      });
 
+      showToast('Gửi yêu cầu rút tiền thành công!');
       setWithdrawAmount('');
       setWithdrawNote('');
-      setIsDrawerOpen(false);
-    } catch (error: any) {
-      // Simulate local success in mock environment
-      console.warn('API error creating withdrawal, running local fallback simulation:', error);
-      showToast('Gửi yêu cầu rút tiền thành công!');
-      const newRequest = {
-        id: `w-${Date.now().toString().slice(-4)}`,
-        createdAt: new Date().toISOString(),
-        amount: amount,
-        accountNumberSnapshot: `${payoutAccount.bankName?.split(' ')[0]} ${payoutAccount.accountNumber}`,
-        status: 'pending' as const,
-        rejectedReason: '-'
-      };
       
-      setWithdrawals(prev => [newRequest, ...prev]);
-      setBalance((prev: any) => ({
-        ...prev,
-        withdrawableBalance: prev.withdrawableBalance - amount,
-        totalPendingWithdrawal: prev.totalPendingWithdrawal + amount
-      }));
-
-      setWithdrawAmount('');
-      setWithdrawNote('');
+      // Refetch data without page reload
+      await Promise.all([
+        fetchSummaryAndAccounts(),
+        fetchWithdrawalsList(1)
+      ]);
+    } catch (err: any) {
+      setWithdrawError(err.message || 'Lỗi gửi yêu cầu rút tiền. Vui lòng thử lại sau.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending': 
-        return (
-          <span className="inline-flex items-center whitespace-nowrap bg-amber-50 text-amber-600 border border-amber-200 px-2 py-0.5 rounded text-[10px] font-bold uppercase gap-1">
-            <Clock className="w-3 h-3" /> Đang chờ duyệt
-          </span>
-        );
-      case 'approved': 
-      case 'processing':
-      case 'completed': 
-      case 'paid':
-        return (
-          <span className="inline-flex items-center whitespace-nowrap bg-emerald-50 text-emerald-600 border border-emerald-200 px-2 py-0.5 rounded text-[10px] font-bold uppercase gap-1">
-            <CheckCircle2 className="w-3 h-3" /> Đã chuyển
-          </span>
-        );
-      case 'rejected': 
-        return (
-          <span className="inline-flex items-center whitespace-nowrap bg-rose-50 text-rose-600 border border-rose-200 px-2 py-0.5 rounded text-[10px] font-bold uppercase gap-1">
-            <XCircle className="w-3 h-3" /> Bị từ chối
-          </span>
-        );
-      default: 
-        return (
-          <span className="inline-flex items-center whitespace-nowrap bg-stone-50 text-stone-600 border border-stone-200 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
-            {status}
-          </span>
-        );
+  // Cancel Pending Withdrawal Request
+  const handleCancelWithdrawal = async (id: number | string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn hủy yêu cầu rút tiền này?')) return;
+
+    setCancellingId(id);
+    try {
+      await ApiService.cancelInstructorWithdrawal(id);
+      showToast('Đã hủy yêu cầu rút tiền thành công.');
+      await Promise.all([
+        fetchSummaryAndAccounts(),
+        fetchWithdrawalsList(meta.currentPage)
+      ]);
+    } catch (err: any) {
+      showToast(err.message || 'Không thể hủy yêu cầu rút tiền.', 'error');
+    } finally {
+      setCancellingId(null);
     }
   };
 
+  // View Withdrawal Detail
+  const handleViewDetail = async (id: number | string) => {
+    setIsDetailModalOpen(true);
+    setLoadingDetail(true);
+    try {
+      const res = await ApiService.getInstructorWithdrawal(id);
+      setSelectedWithdrawal(res?.data || res);
+    } catch (err: any) {
+      showToast('Không thể tải chi tiết yêu cầu rút tiền.', 'error');
+      setIsDetailModalOpen(false);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  // Open Edit/Add Payout Account Modal
+  const handleOpenAccountModal = (accountToEdit?: any) => {
+    if (accountToEdit) {
+      setEditingAccountId(accountToEdit.id);
+      setAccountForm({
+        provider: accountToEdit.provider || 'bank',
+        bankName: accountToEdit.provider_label || 'Techcombank – Ngân hàng TMCP Kỹ thương Việt Nam',
+        accountName: accountToEdit.account_name || '',
+        accountNumber: accountToEdit.account_number || '',
+        branch: accountToEdit.branch_name || 'Chi nhánh Hà Nội',
+        isDefault: Boolean(accountToEdit.is_default),
+      });
+    } else {
+      setEditingAccountId(null);
+      setAccountForm({
+        provider: 'bank',
+        bankName: 'Techcombank – Ngân hàng TMCP Kỹ thương Việt Nam',
+        accountName: '',
+        accountNumber: '',
+        branch: 'Chi nhánh Hà Nội',
+        isDefault: payoutAccounts.length === 0,
+      });
+    }
+    setIsAccountModalOpen(true);
+  };
+
+  // Step 1: Send OTP for Account Change
+  const handleSaveAccountSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!accountForm.accountNumber.trim()) {
+      showToast('Vui lòng nhập số tài khoản.', 'error');
+      return;
+    }
+    if (!accountForm.accountName.trim()) {
+      showToast('Vui lòng nhập tên chủ tài khoản.', 'error');
+      return;
+    }
+
+    setSavingAccount(true);
+    try {
+      const payload = {
+        provider: accountForm.provider,
+        account_number: accountForm.accountNumber.trim(),
+        account_name: accountForm.accountName.trim().toUpperCase(),
+        branch_name: accountForm.branch.trim(),
+        bank_name: accountForm.bankName,
+      };
+
+      setPendingAccountPayload(payload);
+
+      const otpRes = await ApiService.sendInstructorPayoutAccountOtp(editingAccountId || 0, payload);
+      const resData = otpRes?.data || otpRes;
+
+      setMaskedEmail(resData?.masked_email || 'in****@mindhub.test');
+      setOtpTimer(resData?.expires_in || 300);
+      setResendTimer(resData?.resend_after || 60);
+      setOtpCode('');
+      setOtpError(null);
+
+      setIsAccountModalOpen(false);
+      setIsOtpModalOpen(true);
+      showToast(otpRes?.message || 'Mã OTP đã được gửi đến email của bạn.');
+    } catch (err: any) {
+      showToast(err.message || 'Lỗi gửi mã OTP xác nhận.', 'error');
+    } finally {
+      setSavingAccount(false);
+    }
+  };
+
+  // Step 2: Verify OTP & Apply Account Change
+  const handleVerifyOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isVerifyingOtp) return;
+
+    if (!otpCode || otpCode.trim().length !== 6) {
+      setOtpError('Vui lòng nhập mã OTP 6 chữ số.');
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    setOtpError(null);
+
+    try {
+      const res = await ApiService.verifyInstructorPayoutAccountChange(editingAccountId || 0, otpCode.trim());
+      const updatedAcc = res?.data || res;
+
+      showToast('Cập nhật tài khoản nhận tiền thành công!');
+      setIsOtpModalOpen(false);
+
+      // Synchronously update local states
+      if (updatedAcc && updatedAcc.id) {
+        setPayoutAccounts(prev => {
+          const list = prev.map(a => ({ ...a, is_default: false }));
+          const idx = list.findIndex(a => Number(a.id) === Number(updatedAcc.id));
+          if (idx >= 0) {
+            list[idx] = updatedAcc;
+          } else {
+            list.unshift(updatedAcc);
+          }
+          return list;
+        });
+        setActivePayoutAccount(updatedAcc);
+        setSelectedAccountId(updatedAcc.id);
+      }
+
+      // Background refetch
+      await fetchSummaryAndAccounts();
+    } catch (err: any) {
+      setOtpError(err.message || 'Mã OTP không chính xác hoặc đã hết hạn.');
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
+  // Resend OTP
+  const handleResendOtp = async () => {
+    if (resendTimer > 0 || isSendingOtp || !pendingAccountPayload) return;
+    setIsSendingOtp(true);
+    try {
+      const otpRes = await ApiService.sendInstructorPayoutAccountOtp(editingAccountId || 0, pendingAccountPayload);
+      const resData = otpRes?.data || otpRes;
+      setOtpTimer(resData?.expires_in || 300);
+      setResendTimer(resData?.resend_after || 60);
+      setOtpError(null);
+      showToast('Đã gửi lại mã OTP đến email của bạn.');
+    } catch (err: any) {
+      setOtpError(err.message || 'Không thể gửi lại mã OTP.');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  // Computed drawer button validation
+  const amountNum = Number(withdrawAmount);
+  const canSubmitWithdrawal = 
+    balance.withdrawableBalance > 0 &&
+    amountNum >= MINIMUM_WITHDRAWAL_AMOUNT &&
+    amountNum <= balance.withdrawableBalance &&
+    Boolean(selectedAccountId) &&
+    !isSubmitting;
+
   return (
-    <div className="w-full text-left relative pb-12 instructor-withdraw-page">
+    <div className="w-full text-left space-y-6 pb-12 font-sans bg-[#f8fafc] min-h-screen">
+      
       {/* Toast Alert */}
       {toast && (
         <div className="fixed top-6 right-6 z-50 bg-[#121b4b] text-white px-5 py-3.5 rounded-2xl shadow-xl flex items-center gap-2.5 animate-in fade-in slide-in-from-top-4 duration-300 border border-slate-100/10">
@@ -260,367 +439,693 @@ export const InstructorWithdrawal: React.FC<InstructorWithdrawalProps> = ({ inst
         </div>
       )}
 
-      {/* Header section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+      {/* HEADER TRANG */}
+      <div className="flex justify-between items-start pt-2">
         <div>
           <h1 className="text-2xl font-black text-[#06091a] tracking-tight">Rút tiền</h1>
-          <p className="text-[#595959] text-[11px] font-bold mt-1">Quản lý tài khoản nhận tiền và các yêu cầu rút tiền của bạn.</p>
+          <p className="text-xs font-medium text-[#737373] mt-1">Quản lý tài khoản nhận tiền và các yêu cầu rút tiền của bạn.</p>
         </div>
-        {!isDrawerOpen && (
-          <button 
-            onClick={() => setIsDrawerOpen(true)}
-            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            Tạo yêu cầu rút tiền
+        <div className="flex items-center gap-3">
+          <button type="button" className="p-2.5 rounded-xl bg-white border border-[#e7e8ed] text-[#595959] hover:bg-slate-50 transition-colors relative cursor-pointer shadow-sm">
+            <Bell className="w-4 h-4" />
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full"></span>
           </button>
-        )}
+          <button type="button" className="p-2.5 rounded-xl bg-white border border-[#e7e8ed] text-[#595959] hover:bg-slate-50 transition-colors cursor-pointer shadow-sm">
+            <HelpCircle className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
-      {/* Main split grid layout */}
+      {/* BỐ CỤC CHÍNH 2 CỘT DESKTOP */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
-        {/* LEFT COLUMN: Payout Info, Stats, History Table */}
-        <div className={isDrawerOpen ? "lg:col-span-8 space-y-6 w-full min-w-0" : "lg:col-span-12 space-y-6 w-full min-w-0"}>
+        {/* CỘT TRÁI (~70% WIDTH): SUMMARY CARDS + PAYOUT ACCOUNT + BANNER + TABLE */}
+        <div className="lg:col-span-8 space-y-6">
           
-          {/* Stats Row */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white border border-[#e7e8ed] p-5 rounded-2xl shadow-sm">
-              <span className="text-[10px] font-black uppercase text-[#595959] tracking-wider block">Số dư có thể rút</span>
-              <span className="text-xl font-black text-blue-600 block mt-2">{formatVND(balance.withdrawableBalance)}</span>
-              <span className="text-[9px] text-[#8c8c8c] font-medium block mt-1">Đã bao gồm phí nền tảng</span>
+          {/* 4 CARD TỔNG QUAN */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            
+            {/* Card 1: Số dư có thể rút */}
+            <div className="bg-white rounded-2xl border border-[#e7e8ed] p-4 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  <Wallet className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-[11px] font-bold text-[#737373] flex items-center gap-1">
+                    Số dư có thể rút <Info className="w-3 h-3 text-[#a3a3a3]" />
+                  </span>
+                  <div className="text-xl font-black text-blue-600 tracking-tight mt-0.5 truncate">
+                    {formatVND(balance.withdrawableBalance)}
+                  </div>
+                  <span className="text-[10px] font-medium text-[#a3a3a3] block mt-0.5 truncate">Đã bao gồm phí nền tảng</span>
+                </div>
+              </div>
             </div>
-            <div className="bg-white border border-[#e7e8ed] p-5 rounded-2xl shadow-sm">
-              <span className="text-[10px] font-black uppercase text-amber-600 tracking-wider block">Đang chờ duyệt</span>
-              <span className="text-xl font-black text-amber-600 block mt-2">{formatVND(balance.totalPendingWithdrawal)}</span>
-              <span className="text-[9px] text-[#8c8c8c] font-medium block mt-1">1 yêu cầu</span>
+
+            {/* Card 2: Đang chờ duyệt */}
+            <div className="bg-white rounded-2xl border border-[#e7e8ed] p-4 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-[11px] font-bold text-[#737373] flex items-center gap-1">
+                    Đang chờ duyệt <Info className="w-3 h-3 text-[#a3a3a3]" />
+                  </span>
+                  <div className="text-xl font-black text-amber-600 tracking-tight mt-0.5 truncate">
+                    {formatVND(balance.pendingWithdrawAmount)}
+                  </div>
+                  <span className="text-[10px] font-medium text-[#a3a3a3] block mt-0.5 truncate">Tổng {balance.pendingCount} yêu cầu</span>
+                </div>
+              </div>
             </div>
-            <div className="bg-white border border-[#e7e8ed] p-5 rounded-2xl shadow-sm">
-              <span className="text-[10px] font-black uppercase text-emerald-600 tracking-wider block">Đã chuyển</span>
-              <span className="text-xl font-black text-emerald-600 block mt-2">{formatVND(balance.totalWithdrawn)}</span>
-              <span className="text-[9px] text-[#8c8c8c] font-medium block mt-1">Tổng 12 giao dịch</span>
+
+            {/* Card 3: Đã thanh toán */}
+            <div className="bg-white rounded-2xl border border-[#e7e8ed] p-4 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-[11px] font-bold text-[#737373] flex items-center gap-1">
+                    Đã thanh toán <Info className="w-3 h-3 text-[#a3a3a3]" />
+                  </span>
+                  <div className="text-xl font-black text-emerald-600 tracking-tight mt-0.5 truncate">
+                    {formatVND(balance.paidWithdrawAmount)}
+                  </div>
+                  <span className="text-[10px] font-medium text-[#a3a3a3] block mt-0.5 truncate">Tổng {balance.paidCount} giao dịch</span>
+                </div>
+              </div>
             </div>
-            <div className="bg-white border border-[#e7e8ed] p-5 rounded-2xl shadow-sm">
-              <span className="text-[10px] font-black uppercase text-rose-600 tracking-wider block">Bị từ chối</span>
-              <span className="text-xl font-black text-rose-600 block mt-2">{formatVND(balance.totalRejected)}</span>
-              <span className="text-[9px] text-[#8c8c8c] font-medium block mt-1">Tổng 1 giao dịch</span>
+
+            {/* Card 4: Bị từ chối */}
+            <div className="bg-white rounded-2xl border border-[#e7e8ed] p-4 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                  <XCircle className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-[11px] font-bold text-[#737373] flex items-center gap-1">
+                    Bị từ chối <Info className="w-3 h-3 text-[#a3a3a3]" />
+                  </span>
+                  <div className="text-xl font-black text-rose-600 tracking-tight mt-0.5 truncate">
+                    {formatVND(balance.rejectedWithdrawAmount)}
+                  </div>
+                  <span className="text-[10px] font-medium text-[#a3a3a3] block mt-0.5 truncate">Tổng {balance.rejectedCount} giao dịch</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* CARD TÀI KHOẢN NHẬN TIỀN */}
+          <div className="bg-white rounded-2xl border border-[#e7e8ed] p-5 shadow-sm space-y-4">
+            <div className="flex justify-between items-center pb-3 border-b border-[#e7e8ed]">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-blue-600" />
+                <h2 className="text-sm font-black text-[#06091a]">Tài khoản nhận tiền</h2>
+              </div>
+              <button 
+                type="button"
+                onClick={() => handleOpenAccountModal(activePayoutAccount)}
+                className="px-3.5 py-1.5 border border-blue-200 text-blue-600 hover:bg-blue-50 font-bold rounded-xl transition-all text-xs cursor-pointer bg-white"
+              >
+                Cập nhật tài khoản nhận tiền
+              </button>
+            </div>
+
+            {activePayoutAccount ? (
+              <div className="flex items-start gap-4">
+                {/* Bank Logo */}
+                <div className="w-20 h-16 rounded-xl border border-[#e7e8ed] bg-slate-50 flex items-center justify-center shrink-0 p-2 text-center">
+                  <span className="text-[10px] font-black tracking-wider text-rose-600 uppercase">TECHCOMBANK</span>
+                </div>
+                
+                {/* Details Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-xs font-semibold text-[#121b4b] flex-1">
+                  <div>
+                    <span className="text-[10px] font-bold text-[#737373] block uppercase tracking-wider">Ngân hàng</span>
+                    <span className="font-bold text-[#06091a] text-xs block mt-0.5">{activePayoutAccount.provider_label || 'Techcombank – Ngân hàng TMCP Kỹ thương Việt Nam'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-[#737373] block uppercase tracking-wider">Số tài khoản</span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="font-mono font-bold text-[#06091a] text-xs">
+                        {showMaskedAccount 
+                          ? (activePayoutAccount.account_number_masked ? activePayoutAccount.account_number_masked.replace(/\s+/g, '') : '******6789')
+                          : (activePayoutAccount.account_number_masked || '1903 **** **** 6789')}
+                      </span>
+                      <button 
+                        type="button" 
+                        onClick={() => setShowMaskedAccount(prev => !prev)} 
+                        className="text-[#999999] hover:text-[#06091a] p-0.5 rounded cursor-pointer"
+                        title="Đổi kiểu che số tài khoản"
+                      >
+                        {showMaskedAccount ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-[#737373] block uppercase tracking-wider">Chủ tài khoản</span>
+                    <span className="font-bold text-[#06091a] text-xs block mt-0.5 uppercase">{activePayoutAccount.account_name || 'NGUYỄN VĂN A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-[#737373] block uppercase tracking-wider">Trạng thái xác minh</span>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="inline-flex items-center bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 px-2 py-0.5 rounded text-[10px]">
+                        Đã xác minh OTP
+                      </span>
+                      <span className="text-[#a3a3a3] text-[9.5px] font-medium">(Bảo mật email)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="py-6 text-center text-xs text-[#737373] bg-slate-50 rounded-xl border border-dashed border-[#dbdde4] space-y-2">
+                <p>Bạn chưa thiết lập tài khoản nhận tiền.</p>
+                <button 
+                  type="button"
+                  onClick={() => handleOpenAccountModal()}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all text-xs cursor-pointer"
+                >
+                  + Thêm tài khoản nhận tiền
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* BANNER CHU KỲ CHUYỂN TIỀN */}
+          <div className="bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-blue-50/30 rounded-2xl border border-blue-100 p-4 text-xs font-semibold text-[#121b4b] flex items-start gap-3">
+            <div className="p-2 bg-blue-600 text-white rounded-xl shrink-0 mt-0.5">
+              <Clock className="w-4 h-4" />
+            </div>
+            <div className="space-y-1">
+              <span className="font-bold text-[#06091a] text-xs block">Lưu ý về chu kỳ thanh toán & rút tiền</span>
+              <p className="text-[11px] text-[#737373] font-medium leading-relaxed">
+                Yêu cầu rút tiền được chấp nhận từ ngày <strong className="text-[#06091a]">01 đến 25</strong> hằng tháng. Số tiền khả dụng sẽ được đối soát và giải ngân tự động sau khi ban quản trị phê duyệt.
+              </p>
             </div>
           </div>
 
-          {/* Payout Account Info Card */}
-          <div className="bg-white border border-[#e7e8ed] rounded-2xl p-5 shadow-sm">
-            <div className="flex justify-between items-center mb-4 pb-2 border-b border-[#e7e8ed]">
-              <h3 className="text-xs font-black uppercase text-[#06091a] tracking-wider flex items-center gap-2">
-                <Landmark className="w-4 h-4 text-blue-600" />
-                Tài khoản nhận tiền
-              </h3>
-              {!isEditingAccount && (
-                <button 
-                  onClick={() => setIsEditingAccount(true)}
-                  className="text-[10px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/70 px-3 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  Cập nhật tài khoản nhận tiền
-                </button>
-              )}
+          {/* BẢNG LỊCH SỬ RÚT TIỀN */}
+          <div className="bg-white rounded-2xl border border-[#e7e8ed] shadow-sm overflow-hidden space-y-3">
+            <div className="p-4 border-b border-[#e7e8ed] flex justify-between items-center">
+              <h3 className="text-sm font-black text-[#06091a]">Lịch sử yêu cầu rút tiền</h3>
+              <span className="text-xs font-bold text-[#737373]">Tổng {meta.total} yêu cầu</span>
             </div>
 
-            {isEditingAccount ? (
-              <form onSubmit={handleUpdateAccount} className="space-y-4 max-w-lg text-xs font-semibold">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[#595959] uppercase text-[9.5px] font-bold mb-1">Ngân hàng thụ hưởng *</label>
-                    <input 
-                      type="text" 
-                      required 
-                      value={accountForm.bankName} 
-                      onChange={e => setAccountForm({...accountForm, bankName: e.target.value})} 
-                      placeholder="VD: Vietcombank, Techcombank..." 
-                      className="w-full border border-[#dbdde4] p-2.5 rounded-xl focus:ring-1 focus:ring-blue-600 focus:outline-none text-[#06091a]" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[#595959] uppercase text-[9.5px] font-bold mb-1">Tên chủ tài khoản *</label>
-                    <input 
-                      type="text" 
-                      required 
-                      value={accountForm.accountName} 
-                      onChange={e => setAccountForm({...accountForm, accountName: e.target.value.toUpperCase()})} 
-                      placeholder="VD: NGUYEN VAN A" 
-                      className="w-full border border-[#dbdde4] p-2.5 rounded-xl focus:ring-1 focus:ring-blue-600 focus:outline-none uppercase text-[#06091a]" 
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[#595959] uppercase text-[9.5px] font-bold mb-1">Số tài khoản *</label>
-                    <input 
-                      type="text" 
-                      required 
-                      value={accountForm.accountNumber} 
-                      onChange={e => setAccountForm({...accountForm, accountNumber: e.target.value})} 
-                      placeholder="Nhập số tài khoản" 
-                      className="w-full border border-[#dbdde4] p-2.5 rounded-xl focus:ring-1 focus:ring-blue-600 focus:outline-none text-[#06091a]" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[#595959] uppercase text-[9.5px] font-bold mb-1">Chi nhánh</label>
-                    <input 
-                      type="text" 
-                      value={accountForm.branch} 
-                      onChange={e => setAccountForm({...accountForm, branch: e.target.value})} 
-                      placeholder="Chi nhánh ngân hàng" 
-                      className="w-full border border-[#dbdde4] p-2.5 rounded-xl focus:ring-1 focus:ring-blue-600 focus:outline-none text-[#06091a]" 
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
-                  <button type="button" onClick={() => setIsEditingAccount(false)} className="px-4 py-2 border border-[#dbdde4] rounded-xl font-bold text-[#121b4b] hover:bg-slate-50">Hủy</button>
-                  <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold">Lưu thay đổi</button>
-                </div>
-              </form>
+            {loadingList ? (
+              <div className="py-12 text-center text-xs text-[#737373] flex flex-col items-center justify-center gap-2">
+                <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                <span>Đang tải lịch sử rút tiền...</span>
+              </div>
+            ) : withdrawals.length === 0 ? (
+              <div className="py-12 text-center text-xs text-[#737373] space-y-1">
+                <Wallet className="w-8 h-8 text-[#dbdde4] mx-auto" />
+                <p className="font-bold text-[#06091a]">Chưa có yêu cầu rút tiền nào</p>
+                <p className="text-[11px] text-[#a3a3a3]">Các giao dịch rút tiền của bạn sẽ được hiển thị tại đây.</p>
+              </div>
             ) : (
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs font-semibold">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center shrink-0 border border-blue-100">
-                    <Landmark className="w-6 h-6 text-blue-800" />
-                  </div>
-                  <div>
-                    <h4 className="font-black text-[#06091a] text-sm">{payoutAccount.bankName}</h4>
-                    <p className="text-[#737373] text-[10px] font-medium mt-1">Số tài khoản: {payoutAccount.accountNumber}</p>
-                    <p className="text-[#737373] text-[10px] font-medium mt-0.5">Chủ tài khoản: <span className="font-bold text-[#06091a]">{payoutAccount.accountName}</span></p>
-                  </div>
-                </div>
-                <div className="flex flex-col items-end gap-1.5">
-                  <span className="inline-flex items-center whitespace-nowrap bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 px-2 py-0.5 rounded text-[9px] uppercase tracking-wide">
-                    Đã xác minh
-                  </span>
-                  <span className="text-[9px] text-[#8c8c8c] font-medium">Xác minh lần cuối: {payoutAccount.verifiedLast}</span>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50/80 border-b border-[#e7e8ed] text-[10px] uppercase font-extrabold text-[#737373] tracking-wider">
+                      <th className="py-3 px-4">Mã YC</th>
+                      <th className="py-3 px-4">Số tiền</th>
+                      <th className="py-3 px-4">Tài khoản nhận (Snapshot)</th>
+                      <th className="py-3 px-4">Ngày yêu cầu</th>
+                      <th className="py-3 px-4">Trạng thái</th>
+                      <th className="py-3 px-4 text-right">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#e7e8ed] font-medium text-[#121b4b]">
+                    {withdrawals.map(w => (
+                      <tr key={w.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-3.5 px-4 font-mono font-bold text-blue-600">{w.display_code || `#WR-${w.id}`}</td>
+                        <td className="py-3.5 px-4 font-black text-[#06091a]">{formatVND(w.amount)}</td>
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-[#06091a]">{w.account?.account_name_snapshot || 'NGUYỄN VĂN A'}</div>
+                          <div className="text-[10px] font-mono text-[#737373] mt-0.5">{w.account?.account_number_snapshot_masked || '1903 **** **** 6789'}</div>
+                        </td>
+                        <td className="py-3.5 px-4 text-[#737373] font-medium">{formatDate(w.requested_at || w.created_at)}</td>
+                        <td className="py-3.5 px-4">
+                          <span className={`inline-flex items-center gap-1 font-bold text-[10px] px-2.5 py-0.5 rounded-full border ${
+                            w.status === 'approved' || w.status === 'paid'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : w.status === 'pending'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                              : 'bg-rose-50 text-rose-700 border-rose-200'
+                          }`}>
+                            {w.status_label || w.status}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right space-x-2">
+                          <button 
+                            type="button"
+                            onClick={() => handleViewDetail(w.id)}
+                            className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                          >
+                            Chi tiết
+                          </button>
+                          {w.status === 'pending' && (
+                            <button 
+                              type="button"
+                              disabled={cancellingId === w.id}
+                              onClick={() => handleCancelWithdrawal(w.id)}
+                              className="text-xs font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer disabled:opacity-50"
+                            >
+                              {cancellingId === w.id ? 'Đang hủy...' : 'Hủy'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Pagination */}
+            {meta.lastPage > 1 && (
+              <div className="p-4 border-t border-[#e7e8ed] flex justify-between items-center bg-slate-50/50 text-xs font-bold text-[#737373]">
+                <span>Trang {meta.currentPage} / {meta.lastPage}</span>
+                <div className="flex gap-2">
+                  <button 
+                    type="button"
+                    disabled={meta.currentPage === 1}
+                    onClick={() => fetchWithdrawalsList(meta.currentPage - 1)}
+                    className="p-1.5 border border-[#dbdde4] bg-white rounded-lg hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button 
+                    type="button"
+                    disabled={meta.currentPage === meta.lastPage}
+                    onClick={() => fetchWithdrawalsList(meta.currentPage + 1)}
+                    className="p-1.5 border border-[#dbdde4] bg-white rounded-lg hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Info Ribbon Alert */}
-          <div className="p-4 bg-blue-50/70 border border-blue-150 rounded-2xl flex items-start gap-3 text-xs font-semibold text-blue-900">
-            <AlertCircle className="w-4.5 h-4.5 shrink-0 mt-0.5 text-blue-600" />
-            <div className="flex-1 leading-relaxed">
-              <p>
-                <span className="font-bold text-blue-900">Lưu ý:</span> MindHub sẽ chuyển tiền thủ công theo chu kỳ hàng tháng, dự kiến từ ngày <span className="font-black text-[#06091a] underline">05 - 10</span> của tháng kế tiếp (không bao gồm thứ 7, chủ nhật và ngày lễ). <span className="text-blue-600 hover:underline cursor-pointer ml-1">Tìm hiểu thêm</span>
-              </p>
-            </div>
-          </div>
-
-          {/* History Request Table */}
-          <div className="bg-white border border-[#e7e8ed] rounded-2xl overflow-hidden shadow-sm text-[11px] font-semibold text-[#121b4b]">
-            <div className="p-4 border-b bg-slate-50/65 flex justify-between items-center">
-              <h4 className="font-black text-[#06091a] uppercase text-[10px] tracking-wider">Danh sách yêu cầu rút tiền</h4>
-              {isDrawerOpen && (
-                <button 
-                  onClick={() => setIsDrawerOpen(true)}
-                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-sm flex items-center gap-1 cursor-pointer text-[10.5px]"
-                >
-                  Tạo yêu cầu rút tiền +
-                </button>
-              )}
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[700px]">
-                <thead className="bg-slate-50/50 border-b border-[#e7e8ed]">
-                  <tr>
-                    <th className="py-3 px-4 font-bold text-[#595959] uppercase text-[9.5px]">Ngày tạo</th>
-                    <th className="py-3 px-4 font-bold text-[#595959] uppercase text-[9.5px]">Số tiền</th>
-                    <th className="py-3 px-4 font-bold text-[#595959] uppercase text-[9.5px]">Tài khoản nhận</th>
-                    <th className="py-3 px-4 font-bold text-[#595959] uppercase text-[9.5px]">Trạng thái</th>
-                    <th className="py-3 px-4 font-bold text-[#595959] uppercase text-[9.5px]">Ghi chú admin</th>
-                    <th className="py-3 px-4 font-bold text-[#595959] uppercase text-[9.5px] text-right">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#e7e8ed] font-semibold text-[#06091a]">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={6} className="py-12 text-center text-[#737373]">
-                        <Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" />
-                      </td>
-                    </tr>
-                  ) : (
-                    withdrawals.map((w) => (
-                      <tr key={w.id} className="hover:bg-slate-50/40 transition-colors">
-                        <td className="py-3.5 px-4 whitespace-nowrap">{formatDate(w.createdAt || w.requestedAt)}</td>
-                        <td className="py-3.5 px-4 font-black text-[#06091a] whitespace-nowrap">{formatVND(w.amount)}</td>
-                        <td className="py-3.5 px-4">
-                          <span className="font-bold block text-[#06091a]">{payoutAccount.bankName?.split(' - ')[0]}</span>
-                          <span className="text-[9.5px] text-[#737373] font-medium block mt-0.5">
-                            {w.accountNumberSnapshot || payoutAccount.accountNumber}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4">{getStatusBadge(w.status)}</td>
-                        <td className="py-3.5 px-4 text-[#737373] font-medium max-w-[160px] truncate" title={w.rejectedReason}>
-                          {w.rejectedReason || '—'}
-                        </td>
-                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                          <button 
-                            onClick={() => showToast(`Yêu cầu #${w.id} đang được hệ thống xử lý.`)}
-                            className="text-blue-600 hover:underline font-bold text-[10.5px] cursor-pointer inline-flex items-center gap-0.5"
-                          >
-                            <ArrowUpRight className="w-3.5 h-3.5" /> Xem chi tiết
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination footer */}
-            <div className="p-4 border-t border-[#e7e8ed] flex justify-between items-center bg-slate-50/20">
-              <span className="text-[10px] text-[#737373] font-bold">Hiển thị 1 đến {withdrawals.length} của {meta.total} yêu cầu</span>
-              <div className="flex gap-1">
-                <button className="p-1 border border-[#dbdde4] rounded-lg bg-white opacity-50 hover:bg-[#e7e8ed] cursor-pointer text-[#121b4b]">
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button className="px-3 py-1 text-xs font-bold bg-blue-600 text-white rounded-lg">1</button>
-                <button className="px-3 py-1 text-xs font-bold border border-[#dbdde4] bg-white rounded-lg">2</button>
-                <button className="px-3 py-1 text-xs font-bold border border-[#dbdde4] bg-white rounded-lg">3</button>
-                <button className="p-1 border border-[#dbdde4] rounded-lg bg-white hover:bg-[#e7e8ed] cursor-pointer text-[#121b4b]">
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-
         </div>
 
-        {/* RIGHT COLUMN: Withdraw Request Form (Drawer-like side panel) */}
-        {isDrawerOpen && (
-          <div className="lg:col-span-4 bg-white border border-[#e7e8ed] rounded-2xl shadow-sm p-5 space-y-5 text-xs font-semibold text-[#121b4b] w-full">
+        {/* CỘT PHẢI (~30% WIDTH): SIDE DRAWER TẠO YÊU CẦU RÚT TIỀN */}
+        <div className="lg:col-span-4">
+          <div className="bg-white rounded-2xl border border-[#e7e8ed] p-5 shadow-sm space-y-4 sticky top-6">
             
-            {/* Drawer Header */}
-            <div className="flex justify-between items-start pb-3 border-b border-[#e7e8ed]">
-              <div>
-                <h3 className="text-sm font-black text-[#06091a] uppercase tracking-wider">Tạo yêu cầu rút tiền</h3>
+            <div className="flex justify-between items-center pb-3 border-b border-[#e7e8ed]">
+              <div className="flex items-center gap-2">
+                <Plus className="w-5 h-5 text-blue-600" />
+                <h2 className="text-sm font-black text-[#06091a]">Tạo yêu cầu rút tiền</h2>
               </div>
-              <button 
-                onClick={() => setIsDrawerOpen(false)}
-                className="p-1 border border-[#dbdde4] rounded-full hover:bg-slate-50 text-[#737373] cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
             </div>
 
-            {/* Blue notification banner inside form */}
-            <div className="p-3 bg-blue-50/70 border border-blue-150 rounded-xl text-[10.5px] leading-relaxed text-blue-900 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-blue-600" />
-              <p>
-                MindHub sẽ chuyển tiền thủ công theo chu kỳ hàng tháng, dự kiến từ ngày 05 – 10 của tháng kế tiếp (không bao gồm thứ 7, chủ nhật và ngày lễ).
-              </p>
-            </div>
-
-            {/* Form body */}
-            <form onSubmit={handleWithdraw} className="space-y-4">
+            <form onSubmit={handleWithdrawSubmit} className="space-y-4">
               
-              {/* Số dư khả dụng */}
-              <div className="flex justify-between items-baseline">
-                <span className="text-[#737373] font-medium text-[10.5px]">Số dư có thể rút</span>
-                <span className="text-base font-black text-blue-600">{formatVND(balance.withdrawableBalance)}</span>
+              {/* Select Payout Account */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold text-[#595959]">Tài khoản nhận tiền *</label>
+                {payoutAccounts.length > 0 ? (
+                  <select 
+                    value={selectedAccountId}
+                    onChange={e => setSelectedAccountId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-[#dbdde4] rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-600 bg-white font-semibold text-xs text-[#06091a]"
+                  >
+                    {payoutAccounts.map(acc => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.provider_label || 'Ngân hàng'} – {acc.account_number_masked || '1903 **** **** 6789'} ({acc.account_name})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-bold flex justify-between items-center">
+                    <span>Chưa có tài khoản nhận tiền</span>
+                    <button type="button" onClick={() => handleOpenAccountModal()} className="text-blue-600 hover:underline">Thêm ngay</button>
+                  </div>
+                )}
               </div>
 
-              {/* Số tiền cần rút */}
+              {/* Input Số tiền rút */}
               <div className="space-y-1.5">
-                <label className="block text-[10px] uppercase font-bold text-[#595959] tracking-wider">Số tiền rút *</label>
-                <div className="relative">
-                  <input 
-                    type="number" 
-                    required 
-                    min="200000"
-                    step="50000"
-                    value={withdrawAmount} 
-                    onChange={e => setWithdrawAmount(e.target.value)} 
-                    placeholder="Nhập số tiền" 
-                    className="w-full border border-[#dbdde4] p-3 pr-8 text-sm font-bold rounded-xl focus:ring-1 focus:ring-blue-600 focus:outline-none text-[#06091a]" 
-                  />
-                  <span className="absolute right-3.5 top-3.5 text-[#a3a3a3] font-bold">đ</span>
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] uppercase font-bold text-[#595959]">Số tiền rút (VND) *</label>
+                  <button 
+                    type="button" 
+                    onClick={setMaxAmount}
+                    className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
+                  >
+                    Rút tối đa
+                  </button>
                 </div>
-                <p className="text-[10px] text-[#737373] font-medium">Số tiền tối thiểu: 200.000đ</p>
+                <input 
+                  type="text" 
+                  value={withdrawAmount ? Number(withdrawAmount).toLocaleString('vi-VN') : ''}
+                  onChange={handleAmountInputChange}
+                  placeholder="0"
+                  className="w-full px-3.5 py-2.5 border border-[#dbdde4] rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-600 font-mono font-bold text-sm text-[#06091a] bg-white"
+                />
+                <span className="text-[10px] text-[#a3a3a3] font-medium block">
+                  Tối thiểu: {formatVND(MINIMUM_WITHDRAWAL_AMOUNT)}
+                </span>
               </div>
 
-              {/* Tài khoản nhận */}
+              {/* Note */}
               <div className="space-y-1.5">
-                <label className="block text-[10px] uppercase font-bold text-[#595959] tracking-wider">Tài khoản nhận *</label>
-                <select 
-                  className="w-full border border-[#dbdde4] p-3 text-xs font-bold rounded-xl focus:ring-1 focus:ring-blue-600 focus:outline-none text-[#06091a] bg-white cursor-pointer"
-                  defaultValue="default"
-                >
-                  <option value="default">{payoutAccount.bankName?.split(' - ')[0]} {payoutAccount.accountNumber} - {payoutAccount.accountName}</option>
-                </select>
-              </div>
-
-              {/* Thêm tài khoản button */}
-              <button 
-                type="button"
-                onClick={() => { setIsDrawerOpen(false); setIsEditingAccount(true); }}
-                className="w-full py-2 border border-[#dbdde4] hover:bg-slate-50 text-blue-600 font-bold text-center rounded-xl transition-all text-[10.5px]"
-              >
-                + Thêm tài khoản nhận tiền mới
-              </button>
-
-              {/* Ghi chú */}
-              <div className="space-y-1.5">
-                <label className="block text-[10px] uppercase font-bold text-[#595959] tracking-wider">Ghi chú (không bắt buộc)</label>
-                <div className="relative">
-                  <textarea 
-                    value={withdrawNote} 
-                    onChange={e => setWithdrawNote(e.target.value.slice(0, 200))} 
-                    maxLength={200}
-                    placeholder="Nhập ghi chú cho yêu cầu này..." 
-                    className="w-full border border-[#dbdde4] p-3 rounded-xl focus:ring-1 focus:ring-blue-600 focus:outline-none min-h-[80px] text-[#06091a] font-medium" 
-                  />
-                  <span className="absolute bottom-2 right-3.5 text-[9px] text-[#737373]">
+                <label className="text-[10px] uppercase font-bold text-[#595959]">Ghi chú (Không bắt buộc)</label>
+                <textarea 
+                  value={withdrawNote}
+                  onChange={e => setWithdrawNote(e.target.value)}
+                  maxLength={200}
+                  rows={2}
+                  placeholder="Nhập ghi chú cho yêu cầu rút tiền..."
+                  className="w-full px-3.5 py-2 border border-[#dbdde4] rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-600 font-medium text-xs text-[#06091a] bg-white resize-none"
+                />
+                <div className="text-right">
+                  <span className="text-[9px] text-[#a3a3a3] font-medium">
                     {withdrawNote.length}/200
                   </span>
                 </div>
               </div>
 
-              {/* Form Error messages */}
+              {/* Form Validation Error */}
               {withdrawError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl flex items-start gap-2">
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl flex items-start gap-2 text-xs font-bold">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <p className="font-bold leading-normal text-[10px]">{withdrawError}</p>
+                  <span>{withdrawError}</span>
                 </div>
               )}
 
-              {/* Box lưu ý */}
-              <div className="p-3.5 bg-slate-50 rounded-xl border border-[#dbdde4] text-[9.5px] leading-relaxed text-[#737373] space-y-1.5 font-medium">
+              {/* Lưu ý Box */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-[#dbdde4] text-[10px] leading-relaxed text-[#737373] space-y-1 font-medium">
                 <p>• Yêu cầu rút tiền sẽ được admin duyệt trong vòng 1-3 ngày làm việc.</p>
-                <p>• Sau khi duyệt, tiền sẽ được chuyển theo chu kỳ hàng tháng.</p>
+                <p>• Sau khi duyệt, tiền sẽ được chuyển theo chu kỳ hằng tháng.</p>
                 <p>• Vui lòng đảm bảo thông tin tài khoản nhận tiền chính xác.</p>
               </div>
 
-              {/* Drawer Actions */}
-              <div className="pt-2 border-t border-[#e7e8ed] flex justify-end gap-2.5">
+              {/* Sticky Footer Actions */}
+              <div className="pt-2 border-t border-[#e7e8ed] flex gap-3">
                 <button 
                   type="button" 
                   onClick={() => setIsDrawerOpen(false)}
-                  className="flex-1 py-2.5 border border-[#dbdde4] text-[#121b4b] hover:bg-slate-50 rounded-xl transition-all cursor-pointer font-bold bg-white text-center"
+                  className="flex-1 py-2.5 border border-[#dbdde4] text-[#121b4b] hover:bg-slate-50 rounded-xl transition-all cursor-pointer font-bold bg-white text-xs text-center"
                 >
                   Hủy
                 </button>
                 <button 
                   type="submit" 
-                  disabled={isSubmitting || balance.withdrawableBalance < 200000}
-                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-sm font-bold disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
+                  disabled={!canSubmitWithdrawal}
+                  className="flex-1 py-2.5 bg-[#0066FF] hover:bg-blue-700 text-white rounded-xl transition-all shadow-sm font-bold text-xs disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Gửi yêu cầu
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {isSubmitting ? 'Đang gửi...' : 'Gửi yêu cầu'}
                 </button>
               </div>
 
             </form>
+
           </div>
-        )}
+        </div>
 
       </div>
+
+      {/* MODAL 1: THÊM / CẬP NHẬT TÀI KHOẢN NHẬN TIỀN */}
+      {isAccountModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 text-left relative">
+            <button 
+              type="button"
+              onClick={() => setIsAccountModalOpen(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-5 pb-3 border-b border-[#e7e8ed]">
+              <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100">
+                <Building2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-[#06091a]">
+                  {editingAccountId ? 'Cập nhật tài khoản nhận tiền' : 'Thêm tài khoản nhận tiền mới'}
+                </h3>
+                <p className="text-[11px] text-[#737373] font-medium">Nhập thông tin tài khoản ngân hàng (Yêu cầu xác thực OTP email)</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveAccountSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold text-[#595959]">Loại tài khoản / Ngân hàng *</label>
+                <select 
+                  value={accountForm.provider}
+                  onChange={e => setAccountForm(prev => ({ ...prev, provider: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 border border-[#dbdde4] rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-600 bg-white font-medium text-xs text-[#06091a]"
+                >
+                  <option value="bank">Ngân hàng (Bank Transfer)</option>
+                  <option value="momo">Ví MoMo</option>
+                  <option value="zalopay">Ví ZaloPay</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold text-[#595959]">Tên ngân hàng *</label>
+                <input 
+                  type="text" 
+                  value={accountForm.bankName}
+                  onChange={e => setAccountForm(prev => ({ ...prev, bankName: e.target.value }))}
+                  placeholder="Ví dụ: Techcombank"
+                  className="w-full px-3.5 py-2.5 border border-[#dbdde4] rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-600 font-semibold text-xs text-[#06091a]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold text-[#595959]">Số tài khoản *</label>
+                <input 
+                  type="text" 
+                  value={accountForm.accountNumber}
+                  onChange={e => setAccountForm(prev => ({ ...prev, accountNumber: e.target.value }))}
+                  placeholder="Nhập số tài khoản ngân hàng..."
+                  className="w-full px-3.5 py-2.5 border border-[#dbdde4] rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-600 font-mono font-bold text-xs text-[#06091a]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold text-[#595959]">Tên chủ tài khoản *</label>
+                <input 
+                  type="text" 
+                  value={accountForm.accountName}
+                  onChange={e => setAccountForm(prev => ({ ...prev, accountName: e.target.value }))}
+                  placeholder="NGUYEN VAN A (Viết hoa không dấu)"
+                  className="w-full px-3.5 py-2.5 border border-[#dbdde4] rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-600 font-bold text-xs text-[#06091a] uppercase"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold text-[#595959]">Chi nhánh ngân hàng</label>
+                <input 
+                  type="text" 
+                  value={accountForm.branch}
+                  onChange={e => setAccountForm(prev => ({ ...prev, branch: e.target.value }))}
+                  placeholder="Chi nhánh Hà Nội..."
+                  className="w-full px-3.5 py-2.5 border border-[#dbdde4] rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-600 font-medium text-xs text-[#06091a]"
+                />
+              </div>
+
+              <div className="pt-4 border-t border-[#e7e8ed] flex gap-3 justify-end">
+                <button 
+                  type="button"
+                  onClick={() => setIsAccountModalOpen(false)}
+                  className="px-4 py-2.5 border border-[#dbdde4] text-[#121b4b] hover:bg-slate-50 text-xs font-bold rounded-xl transition-all cursor-pointer bg-white"
+                >
+                  Hủy
+                </button>
+                <button 
+                  type="submit"
+                  disabled={savingAccount}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {savingAccount && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Gửi mã OTP qua Email
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: XÁC THỰC OTP EMAIL KHI THAY ĐỔI TÀI KHOẢN NHẬN TIỀN */}
+      {isOtpModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 text-left relative">
+            <button 
+              type="button"
+              onClick={() => setIsOtpModalOpen(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-5 pb-3 border-b border-[#e7e8ed]">
+              <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-[#06091a]">
+                  Xác thực OTP thay đổi tài khoản
+                </h3>
+                <p className="text-[11px] text-[#737373] font-medium">
+                  Mã OTP đã được gửi đến email <span className="font-bold text-stone-900">{maskedEmail}</span>
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleVerifyOtpSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold text-[#595959]">Mã OTP 6 chữ số *</label>
+                <input 
+                  type="text"
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={e => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    setOtpCode(val);
+                    setOtpError(null);
+                  }}
+                  placeholder="123456"
+                  className="w-full px-4 py-3 border border-[#dbdde4] rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-mono font-bold text-center tracking-[0.5em] text-lg text-[#06091a] bg-slate-50/50"
+                  autoFocus
+                />
+              </div>
+
+              {otpError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl flex items-start gap-2 text-xs font-bold">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{otpError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-xs text-[#737373] font-medium pt-1">
+                <span>Hiệu lực còn lại: <strong className="text-emerald-700 font-mono">{Math.floor(otpTimer / 60)}:{(otpTimer % 60).toString().padStart(2, '0')}</strong></span>
+                <button
+                  type="button"
+                  disabled={resendTimer > 0 || isSendingOtp}
+                  onClick={handleResendOtp}
+                  className="text-emerald-700 font-bold hover:underline disabled:opacity-50 disabled:no-underline cursor-pointer"
+                >
+                  {resendTimer > 0 ? `Gửi lại mã (${resendTimer}s)` : 'Gửi lại mã OTP'}
+                </button>
+              </div>
+
+              <div className="pt-4 border-t border-[#e7e8ed] flex gap-3 justify-end">
+                <button 
+                  type="button"
+                  onClick={() => setIsOtpModalOpen(false)}
+                  className="px-4 py-2.5 border border-[#dbdde4] text-[#121b4b] hover:bg-slate-50 text-xs font-bold rounded-xl transition-all cursor-pointer bg-white"
+                >
+                  Hủy
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isVerifyingOtp || otpCode.length !== 6}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isVerifyingOtp && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Xác minh & Áp dụng
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: XEM CHI TIẾT YÊU CẦU RÚT TIỀN */}
+      {isDetailModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 text-left relative">
+            <button 
+              type="button"
+              onClick={() => setIsDetailModalOpen(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-5 pb-3 border-b border-[#e7e8ed]">
+              <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100">
+                <Wallet className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-[#06091a]">
+                  Chi tiết yêu cầu {selectedWithdrawal?.display_code || `#WR-${selectedWithdrawal?.id}`}
+                </h3>
+                <p className="text-[11px] text-[#737373] font-medium">Thông tin xử lý giao dịch rút tiền</p>
+              </div>
+            </div>
+
+            {loadingDetail ? (
+              <div className="py-8 text-center text-xs text-[#737373] flex flex-col items-center justify-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                <span>Đang tải chi tiết...</span>
+              </div>
+            ) : selectedWithdrawal ? (
+              <div className="space-y-4 text-xs font-semibold text-[#121b4b]">
+                <div className="flex justify-between items-center py-2 border-b border-[#e7e8ed]">
+                  <span className="text-[#737373]">Số tiền rút</span>
+                  <span className="text-base font-black text-blue-600">{formatVND(selectedWithdrawal.amount)}</span>
+                </div>
+
+                <div className="flex justify-between items-center py-2 border-b border-[#e7e8ed]">
+                  <span className="text-[#737373]">Trạng thái</span>
+                  <span className="font-bold text-[#06091a]">{selectedWithdrawal.status_label || selectedWithdrawal.status}</span>
+                </div>
+
+                <div className="flex justify-between items-center py-2 border-b border-[#e7e8ed]">
+                  <span className="text-[#737373]">Ngày tạo yêu cầu</span>
+                  <span className="font-bold text-[#06091a]">{formatDate(selectedWithdrawal.requested_at || selectedWithdrawal.created_at)}</span>
+                </div>
+
+                {selectedWithdrawal.paid_at && (
+                  <div className="flex justify-between items-center py-2 border-b border-[#e7e8ed]">
+                    <span className="text-[#737373]">Ngày hoàn tất chuyển tiền</span>
+                    <span className="font-bold text-emerald-600">{formatDate(selectedWithdrawal.paid_at)}</span>
+                  </div>
+                )}
+
+                <div className="py-2 border-b border-[#e7e8ed] space-y-1">
+                  <span className="text-[#737373] block">Tài khoản nhận tiền (Snapshot)</span>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-[#e7e8ed] font-bold text-[#06091a]">
+                    <div>{selectedWithdrawal.account?.account_name_snapshot || 'NGUYỄN VĂN A'}</div>
+                    <div className="text-[11px] font-mono text-[#737373] mt-0.5">{selectedWithdrawal.account?.account_number_snapshot_masked || '1903 **** **** 6789'}</div>
+                  </div>
+                </div>
+
+                {selectedWithdrawal.rejected_reason && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl space-y-1">
+                    <span className="font-bold block">Lý do từ chối:</span>
+                    <p className="font-medium text-[11px] leading-relaxed">{selectedWithdrawal.rejected_reason}</p>
+                  </div>
+                )}
+
+                <div className="pt-4 flex justify-end">
+                  <button 
+                    type="button"
+                    onClick={() => setIsDetailModalOpen(false)}
+                    className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-xl text-xs cursor-pointer hover:bg-blue-700 transition-colors"
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

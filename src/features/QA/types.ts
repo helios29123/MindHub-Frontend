@@ -26,7 +26,7 @@ export interface Reply {
 
 export interface QAFilterState {
   keyword: string;
-  status: 'all' | 'answered' | 'unanswered' | 'hidden';
+  status: 'all' | 'answered' | 'unanswered' | 'hidden' | 'bookmarked';
   course: string;
   lesson: string;
   sort: 'newest' | 'oldest';

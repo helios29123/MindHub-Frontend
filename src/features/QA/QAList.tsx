@@ -8,6 +8,9 @@ interface QAListProps {
   onSelectQuestion: (id: string) => void;
   sort: 'newest' | 'oldest';
   onSortChange: (sort: 'newest' | 'oldest') => void;
+  page?: number;
+  lastPage?: number;
+  onPageChange?: (page: number) => void;
 }
 
 export const QAList: React.FC<QAListProps> = ({
@@ -16,6 +19,9 @@ export const QAList: React.FC<QAListProps> = ({
   onSelectQuestion,
   sort,
   onSortChange,
+  page = 1,
+  lastPage = 1,
+  onPageChange,
 }) => {
   const getBadgeStyle = (status: Question['status']) => {
     switch (status) {
@@ -98,23 +104,18 @@ export const QAList: React.FC<QAListProps> = ({
               >
                 {/* User Row */}
                 <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={question.student_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80'}
+                  <div className="flex items-center gap-2">
+                    <img 
+                      src={question.student_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80'} 
                       alt={question.student_name}
-                      className="w-8 h-8 rounded-full border border-slate-100 object-cover"
+                      className="w-7 h-7 rounded-full border border-slate-100 object-cover"
                     />
                     <div>
-                      <p className="text-xs font-black text-slate-800 leading-tight">{question.student_name}</p>
-                      <p className="text-[10px] text-slate-400 font-bold">{formatTime(question.created_at)}</p>
+                      <h5 className="text-xs font-extrabold text-slate-800 leading-tight">{question.student_name}</h5>
+                      <p className="text-[10px] text-slate-400 font-semibold">{question.course_name}</p>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                    <button className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700">
-                      <MoreVertical className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  <span className="text-[10px] font-bold text-slate-400">{formatTime(question.created_at)}</span>
                 </div>
 
                 {/* Lesson Link */}
@@ -154,6 +155,29 @@ export const QAList: React.FC<QAListProps> = ({
           })
         )}
       </div>
+
+      {/* Pagination Footer */}
+      {lastPage > 1 && onPageChange && (
+        <div className="p-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
+          <button
+            onClick={() => onPageChange(page - 1)}
+            disabled={page <= 1}
+            className="px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-lg bg-white disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+          >
+            Trang trước
+          </button>
+          <span className="text-xs font-bold text-slate-600">
+            Trang {page} / {lastPage}
+          </span>
+          <button
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= lastPage}
+            className="px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-lg bg-white disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+          >
+            Trang sau
+          </button>
+        </div>
+      )}
     </div>
   );
 };

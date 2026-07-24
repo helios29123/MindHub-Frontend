@@ -257,14 +257,60 @@ export default function App() {
     if (path.match(/^\/instructors\/[^/]+\/courses/))
       return "instructor-courses-page";
 
-
-    if (path.match(/^\/instructor\/[^/]+\/course-credit-transactions/))
-      return "instructor-transactions";
-    if (
-      path.match(/^\/instructor\/([^/]+)\/dashboard/) ||
-      path.startsWith("/instructor")
-    )
+    // Clean instructor routes & legacy URL redirects (/instructor/2/courses -> /instructor/courses)
+    if (path.match(/^\/instructor\/\d+\/courses\/create/)) {
+      if (typeof window !== "undefined") {
+        window.history.replaceState({}, "", "/instructor/courses/create");
+      }
       return "instructor";
+    }
+    if (path.match(/^\/instructor\/\d+\/courses\/(\d+)\/edit/)) {
+      const match = path.match(/^\/instructor\/\d+\/courses\/(\d+)\/edit/);
+      if (typeof window !== "undefined" && match) {
+        window.history.replaceState({}, "", `/instructor/courses/${match[1]}/edit`);
+      }
+      return "instructor";
+    }
+    if (path.match(/^\/instructor\/\d+\/courses/)) {
+      if (typeof window !== "undefined") {
+        window.history.replaceState({}, "", "/instructor/courses");
+      }
+      return "instructor";
+    }
+    if (path.match(/^\/instructor\/\d+\/dashboard/) || path === "/instructor/dashboard") {
+      if (typeof window !== "undefined" && path !== "/instructor/dashboard") {
+        window.history.replaceState({}, "", "/instructor/dashboard");
+      }
+      return "instructor";
+    }
+    if (path.match(/^\/instructor\/\d+\/transactions/) || path === "/instructor/transactions") {
+      if (typeof window !== "undefined" && path !== "/instructor/transactions") {
+        window.history.replaceState({}, "", "/instructor/transactions");
+      }
+      return "instructor";
+    }
+    if (path.match(/^\/instructor\/\d+\/questions\/(\d+)/)) {
+      const match = path.match(/^\/instructor\/\d+\/questions\/(\d+)/);
+      if (typeof window !== "undefined" && match) {
+        window.history.replaceState({}, "", `/instructor/questions/${match[1]}`);
+      }
+      return "instructor";
+    }
+    if (path.match(/^\/instructor\/\d+\/questions/) || path.startsWith("/instructor/questions")) {
+      if (typeof window !== "undefined" && path.match(/^\/instructor\/\d+\/questions/)) {
+        window.history.replaceState({}, "", "/instructor/questions");
+      }
+      return "instructor";
+    }
+    if (path.match(/^\/instructor\/\d+\/discount-codes/) || path.startsWith("/instructor/discount-codes") || path.startsWith("/instructor/coupons")) {
+      if (typeof window !== "undefined" && path.match(/^\/instructor\/\d+\/discount-codes/)) {
+        window.history.replaceState({}, "", "/instructor/discount-codes");
+      }
+      return "instructor";
+    }
+    if (path.startsWith("/instructor")) {
+      return "instructor";
+    }
 
     if (path.startsWith("/courses/")) return "course-detail";
     if (path.startsWith("/explore")) return "explore";
@@ -403,6 +449,26 @@ export default function App() {
   });
 
   useEffect(() => {
+    if (ApiService.getConfig().mode === "api") {
+      ApiService.getCurrentUser()
+        .then((user) => {
+          const apiUser = normalizeUser(user);
+          setCurrentUser(apiUser);
+          localStorage.setItem("mindhub_current_user", JSON.stringify(apiUser));
+          setIsLoggedIn(true);
+          localStorage.setItem("mindhub_is_logged_in", "true");
+        })
+        .catch((err) => {
+          console.warn("No active session on reload:", err);
+          setIsLoggedIn(false);
+          localStorage.removeItem("mindhub_is_logged_in");
+          localStorage.removeItem("mindhub_current_user");
+          setCurrentUser(normalizeUser(null));
+        });
+    }
+  }, []);
+
+  useEffect(() => {
     setCoursesPage(1);
   }, [
     selectedCategory,
@@ -485,11 +551,11 @@ export default function App() {
       })
       .catch((e) => console.warn("Lỗi nạp danh mục DB:", e));
 
-    if (currentUser && currentUser.id) {
+    if (isLoggedIn && currentUser && currentUser.id && currentUser.id !== "u-guest") {
       ApiService.getUserEnrollments(currentUser.id)
         .then((enrollments) => {
           if (!active) return;
-          const completed = enrollments.filter((e) => e.progress === 100);
+          const completed = Array.isArray(enrollments) ? enrollments.filter((e) => e.progress === 100) : [];
           setCompletedCoursesList(completed);
         })
         .catch((e) => console.warn("Lỗi nạp khóa học đã hoàn thành:", e));
@@ -497,20 +563,18 @@ export default function App() {
       ApiService.getUserActivities(currentUser.id)
         .then((activities) => {
           if (!active) return;
-          setLearningHistory(activities);
+          setLearningHistory(Array.isArray(activities) ? activities : []);
         })
         .catch((e) => console.warn("Lỗi nạp lịch sử học:", e));
 
-      if (currentUser.id !== "u-guest") {
-        ApiService.getMyEnrolledCourses()
-          .then((enrolledList) => {
-            if (!active) return;
-            if (enrolledList && enrolledList.length > 0) {
-              setEnrolledCourseIds(enrolledList.map((c) => c.id));
-            }
-          })
-          .catch((e) => console.warn("Lỗi nạp lịch sử học khóa học DB:", e));
-      }
+      ApiService.getMyEnrolledCourses()
+        .then((enrolledList) => {
+          if (!active) return;
+          if (Array.isArray(enrolledList) && enrolledList.length > 0) {
+            setEnrolledCourseIds(enrolledList.map((c) => c.id));
+          }
+        })
+        .catch((e) => console.warn("Lỗi nạp lịch sử học khóa học DB:", e));
     }
 
     ApiService.getFeaturedCourses()
@@ -1919,7 +1983,7 @@ export default function App() {
     }, 120);
   };
   const handleSelectInstructorCourses = (id: string, name: string) => {
-    navigateTo(AppRoutes.instructorCourses(id));
+    navigateTo(AppRoutes.publicInstructorCourses(id));
   };
 
   const renderCourseCard = (c: Course) => {
@@ -2933,7 +2997,13 @@ export default function App() {
             alert(
               `Đăng nhập thành công! Chào mừng, ${user.name} (${user.role.toUpperCase()})`,
             );
-            navigateTo("home");
+            if (user.role === "instructor") {
+              navigateTo("/instructor/dashboard");
+            } else if (user.role === "admin") {
+              navigateTo(AppRoutes.adminDashboard(user.id));
+            } else {
+              navigateTo("home");
+            }
           }}
           onClose={() => navigateTo("home")}
         />
@@ -3882,39 +3952,28 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      setIsLoggedIn(false);
-                      localStorage.removeItem("mindhub_is_logged_in");
-                      localStorage.removeItem("mindhub_current_user");
-                      sessionStorage.removeItem("mindhub_welcome_shown");
-                      // Reset to visitor Guest user representation
-                      setCurrentUser({
-                        id: "u-guest",
-                        name: "Khách Ghé Thăm",
-                        email: "guest@mindhub.edu.vn",
-                        avatar:
-                          "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=150",
-                        role: "student",
-                        streak: 0,
-                        lastActiveDate: "2026-06-08",
-                        interestedTopics: [],
-                        notificationSettings: {
-                          email: false,
-                          push: false,
-                          app: false,
-                          scheduleReminders: false,
-                        },
-                      });
-                      setEnrolledCourseIds([]);
-                      setCart([]);
-                      setIsEditingProfile(false);
-                      setShowLogoutConfirm(false);
-                      setToastMessage(
-                        "Đăng xuất thành công! Hệ thống đã đưa bạn về giao diện Khách Tham Quan.",
-                      );
+                      ApiService.logout()
+                        .catch((err) => console.error("Error logging out from backend:", err))
+                        .finally(() => {
+                          setIsLoggedIn(false);
+                          localStorage.removeItem("mindhub_is_logged_in");
+                          localStorage.removeItem("mindhub_current_user");
+                          sessionStorage.removeItem("mindhub_welcome_shown");
+                          // Reset to visitor Guest user representation
+                          setCurrentUser(normalizeUser(null));
+                          setEnrolledCourseIds([]);
+                          setCart([]);
+                          setIsEditingProfile(false);
+                          setShowLogoutConfirm(false);
+                          setToastMessage(
+                            "Đăng xuất thành công! Hệ thống đã đưa bạn về giao diện Khách Tham Quan.",
+                          );
+                          navigateTo("home");
+                        });
                     }}
                     className="px-4 py-2 bg-red-600 hover:bg-red-750 text-white rounded-xl font-bold text-[11px] cursor-pointer transition-all hover:scale-105 active:scale-95 shadow-md"
                   >
-                    Xác nhận đăng xuất
+                    Xác nhận
                   </button>
                 </div>
               </div>
@@ -4315,10 +4374,10 @@ export default function App() {
 
 
           ) : activeTab === "instructor" ? (
-            currentUser.role === "instructor" &&
-            currentUser.id === routeUserId ? (
+            currentUser.role === "instructor" ? (
               <InstructorDashboard
                 currentUser={currentUser}
+                onUpdateUser={setCurrentUser}
                 courses={courses}
                 onCreateCourseDraft={handleCreateCourseDraft}
                 onUpdateCourse={handleUpdateCourse}

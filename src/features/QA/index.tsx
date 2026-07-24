@@ -1,307 +1,317 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { QAOverview } from './QAOverview';
 import { QAFilter } from './QAFilter';
 import { QAList } from './QAList';
 import { QADetailView } from './QADetailView';
 import { Question, QAFilterState, Reply } from './types';
-import { HelpCircle, Sparkles } from 'lucide-react';
+import { HelpCircle, Sparkles, Loader2, AlertCircle } from 'lucide-react';
+import { ApiService } from '../../services/api';
 
-// Detailed Mock data representing the sample layout items
-const initialQuestions: Question[] = [
-  {
-    id: '1',
-    student_name: 'Trần Quốc Bảo',
-    student_avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
-    content: 'Thầy ơi, dependency array trong useEffect hoạt động như thế nào ạ?',
-    course_name: 'React.js Cơ bản',
-    lesson_name: 'Bài 12: React useEffect Hook',
-    created_at: '2026-07-19T09:30:00Z', // 1 hour ago
-    is_answered: false,
-    reply_count: 2,
-    status: 'unanswered',
-    device: 'Windows',
-    browser: 'Chrome 124.0.0.0',
-    is_bookmarked: false,
-    replies: [
-      {
-        id: 'r1_1',
-        user_name: 'Trần Quốc Bảo',
-        user_avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
-        role: 'student',
-        content: 'Dạ em hiểu rồi ạ, cảm ơn thầy!',
-        created_at: '2026-07-19T09:45:00Z'
-      },
-      {
-        id: 'r1_2',
-        user_name: 'Nguyễn Văn Minh (Bạn)',
-        role: 'instructor',
-        content: 'Dependency array là danh sách các giá trị mà useEffect sẽ theo dõi. Khi các giá trị trong array thay đổi, useEffect sẽ chạy lại.',
-        created_at: '2026-07-19T10:00:00Z'
-      }
-    ]
-  },
-  {
-    id: '2',
-    student_name: 'Lê Hoàng Mai',
-    student_avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80',
-    content: 'Khi nào thì nên dùng useState và khi nào dùng useReducer ạ?',
-    course_name: 'React.js Cơ bản',
-    lesson_name: 'Bài 8: State và Props trong React',
-    created_at: '2026-07-19T07:30:00Z', // 3 hours ago
-    is_answered: true,
-    reply_count: 1,
-    status: 'answered',
-    device: 'macOS',
-    browser: 'Safari 17.2',
-    is_bookmarked: false,
-    replies: [
-      {
-        id: 'r2_1',
-        user_name: 'Nguyễn Văn Minh (Bạn)',
-        role: 'instructor',
-        content: 'Chào Mai, useState thường dùng cho state đơn giản, còn useReducer tốt hơn khi state có cấu trúc phức tạp hoặc state tiếp theo phụ thuộc vào state trước đó.',
-        created_at: '2026-07-19T08:30:00Z'
-      }
-    ]
-  },
-  {
-    id: '3',
-    student_name: 'Phạm Duy Anh',
-    student_avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80',
-    content: 'Nếu điều kiện render phức tạp thì có cách nào tối ưu hơn không ạ?',
-    course_name: 'React.js Cơ bản',
-    lesson_name: 'Bài 10: Conditional Rendering',
-    created_at: '2026-07-19T05:30:00Z', // 5 hours ago
-    is_answered: false,
-    reply_count: 0,
-    status: 'unanswered',
-    device: 'Android',
-    browser: 'Chrome Mobile 123.0',
-    is_bookmarked: false,
-    replies: []
-  },
-  {
-    id: '4',
-    student_name: 'Nguyễn Thảo Vy',
-    student_avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&auto=format&fit=crop&q=80',
-    content: 'Event trong React có khác gì so với DOM thường không ạ?',
-    course_name: 'React.js Cơ bản',
-    lesson_name: 'Bài 6: Event Handling',
-    created_at: '2026-07-18T10:30:00Z', // 1 day ago
-    is_answered: true,
-    reply_count: 3,
-    status: 'answered',
-    device: 'iOS',
-    browser: 'Safari Mobile 17.0',
-    is_bookmarked: true,
-    replies: [
-      {
-        id: 'r4_1',
-        user_name: 'Nguyễn Văn Minh (Bạn)',
-        role: 'instructor',
-        content: 'Chào Vy, Event trong React (SyntheticEvent) là wrapper chuẩn hóa chạy cross-browser, và sử dụng camelCase thay vì lowercase.',
-        created_at: '2026-07-18T16:30:00Z'
-      }
-    ]
-  },
-  {
-    id: '5',
-    student_name: 'Đỗ Minh Quân',
-    student_avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80',
-    content: 'Key có nhất thiết phải là id không ạ? Dùng index được không?',
-    course_name: 'React.js Cơ bản',
-    lesson_name: 'Bài 9: Lists & Keys',
-    created_at: '2026-07-18T08:30:00Z', // 1 day ago
-    is_answered: false,
-    reply_count: 1,
-    status: 'hidden',
-    device: 'Windows',
-    browser: 'Firefox 125.0',
-    is_bookmarked: false,
-    replies: [
-      {
-        id: 'r5_1',
-        user_name: 'Nguyễn Văn Minh (Bạn)',
-        role: 'instructor',
-        content: 'Chào Quân, dùng index có thể gây lỗi hiệu năng hoặc sai lệch UI khi danh sách thay đổi thứ tự. Nên ưu tiên dùng ID duy nhất nhé.',
-        created_at: '2026-07-18T10:30:00Z'
-      }
-    ]
-  },
-  {
-    id: '6',
-    student_name: 'Vũ Hoài Nam',
-    student_avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&auto=format&fit=crop&q=80',
-    content: 'Làm sao để handle validation cho form phức tạp trong React?',
-    course_name: 'React.js Cơ bản',
-    lesson_name: 'Bài 7: Forms trong React',
-    created_at: '2026-07-17T10:30:00Z', // 2 days ago
-    is_answered: true,
-    reply_count: 0,
-    status: 'answered',
-    device: 'macOS',
-    browser: 'Chrome 124.0.0.0',
-    is_bookmarked: false,
-    replies: []
-  }
-];
+const mapBackendQuestion = (q: any): Question => {
+  const isAns = q.is_answered ?? (q.question_status === 'answered' || q.status === 'answered');
+  return {
+    id: String(q.id || q.comment_id),
+    student_name: q.learner?.full_name || q.learner_name || 'Học viên',
+    student_avatar: q.learner?.avatar_url || q.learner_avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(q.learner?.full_name || 'HV')}&background=007A64&color=fff&bold=true`,
+    content: q.content || '',
+    course_name: q.course?.title || q.course_title || 'Khóa học',
+    lesson_name: q.lesson?.title || q.lesson_title || 'Bài học',
+    created_at: q.created_at || new Date().toISOString(),
+    is_answered: isAns,
+    reply_count: q.reply_count ?? q.replies?.length ?? 0,
+    status: q.status === 'hidden' ? 'hidden' : (isAns ? 'answered' : 'unanswered'),
+    device: q.learnerDevice || q.device || 'Windows',
+    browser: q.learnerBrowser || q.browser || 'Chrome 124.0',
+    is_bookmarked: !!q.is_bookmarked,
+    replies: Array.isArray(q.replies) ? q.replies.map((r: any) => ({
+      id: String(r.id),
+      user_name: r.user_full_name || r.author?.full_name || (r.user_role === 'instructor' || r.author?.role === 'instructor' ? 'Giảng viên (Bạn)' : 'Học viên'),
+      user_avatar: r.user_avatar || r.author?.avatar_url,
+      role: (r.user_role === 'instructor' || r.author?.role === 'instructor') ? 'instructor' : 'student',
+      content: r.content || '',
+      created_at: r.created_at || new Date().toISOString()
+    })) : []
+  };
+};
 
 export const InstructorQAModule: React.FC = () => {
-  const [questions, setQuestions] = useState<Question[]>(initialQuestions);
-  const [selectedQuestionId, setSelectedQuestionId] = useState<string>('1');
+  // Parse initial route/query params
+  const parseInitialState = () => {
+    if (typeof window === 'undefined') {
+      return { questionId: '', course: 'all', lesson: 'all', status: 'all' as const, keyword: '', sort: 'newest' as const, page: 1 };
+    }
+    const pathname = window.location.pathname;
+    const match = pathname.match(/\/instructor\/questions\/(\d+)/);
+    const qId = match ? match[1] : '';
+
+    const params = new URLSearchParams(window.location.search);
+    return {
+      questionId: qId,
+      course: params.get('course') || 'all',
+      lesson: params.get('lesson') || 'all',
+      status: (params.get('status') as any) || 'all',
+      keyword: params.get('search') || '',
+      sort: (params.get('sort') as any) || 'newest',
+      page: parseInt(params.get('page') || '1', 10) || 1,
+    };
+  };
+
+  const [initialParams] = useState(parseInitialState);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [selectedQuestionId, setSelectedQuestionId] = useState<string>(initialParams.questionId);
+  const [selectedQuestionDetail, setSelectedQuestionDetail] = useState<Question | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Options
+  const [courseOptions, setCourseOptions] = useState<Array<{ id: string | number; title: string }>>([]);
+  const [lessonOptions, setLessonOptions] = useState<Array<{ id: string | number; title: string }>>([]);
 
   // Filter state
   const [filter, setFilter] = useState<QAFilterState>({
-    keyword: '',
-    status: 'all',
-    course: 'all',
-    lesson: 'all',
-    sort: 'newest'
+    keyword: initialParams.keyword,
+    status: initialParams.status,
+    course: initialParams.course,
+    lesson: initialParams.lesson,
+    sort: initialParams.sort
   });
 
-  // Stat numbers matching the mockup exactly, but updating based on actions
-  const [unansweredCount, setUnansweredCount] = useState(18);
-  const [answeredCount, setAnsweredCount] = useState(156);
-  const [todayCommentsCount, setTodayCommentsCount] = useState(32);
-  const [bookmarkedCount, setBookmarkedCount] = useState(12);
+  // Pagination state
+  const [page, setPage] = useState<number>(initialParams.page);
+  const [lastPage, setLastPage] = useState<number>(1);
+  const [totalQuestions, setTotalQuestions] = useState<number>(0);
+
+  // Summary counts
+  const [unansweredCount, setUnansweredCount] = useState(0);
+  const [answeredCount, setAnsweredCount] = useState(0);
+  const [todayCommentsCount, setTodayCommentsCount] = useState(0);
+  const [bookmarkedCount, setBookmarkedCount] = useState(0);
+
+  // Loading states
+  const [isLoadingList, setIsLoadingList] = useState(true);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Filter and sort questions state
-  const filteredQuestions = questions.filter(q => {
-    // Course filter
-    if (filter.course !== 'all') {
-      if (filter.course === 'course1' && q.course_name !== 'React.js Cơ bản') return false;
-      if (filter.course === 'course2' && q.course_name !== 'Next.js Thực chiến') return false;
-    }
+  // Synchronize URL query and path
+  const updateUrl = useCallback((newQuestionId: string, newFilter: QAFilterState, newPage: number) => {
+    if (typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams();
+    if (newFilter.course && newFilter.course !== 'all') urlParams.set('course', newFilter.course);
+    if (newFilter.lesson && newFilter.lesson !== 'all') urlParams.set('lesson', newFilter.lesson);
+    if (newFilter.status && newFilter.status !== 'all') urlParams.set('status', newFilter.status);
+    if (newFilter.keyword && newFilter.keyword.trim()) urlParams.set('search', newFilter.keyword.trim());
+    if (newFilter.sort && newFilter.sort !== 'newest') urlParams.set('sort', newFilter.sort);
+    if (newPage > 1) urlParams.set('page', String(newPage));
 
-    // Lesson filter
-    if (filter.lesson !== 'all') {
-      if (filter.lesson === 'lesson12' && !q.lesson_name.includes('Bài 12')) return false;
-      if (filter.lesson === 'lesson8' && !q.lesson_name.includes('Bài 8')) return false;
-      if (filter.lesson === 'lesson10' && !q.lesson_name.includes('Bài 10')) return false;
-      if (filter.lesson === 'lesson6' && !q.lesson_name.includes('Bài 6')) return false;
-      if (filter.lesson === 'lesson9' && !q.lesson_name.includes('Bài 9')) return false;
-      if (filter.lesson === 'lesson7' && !q.lesson_name.includes('Bài 7')) return false;
-    }
+    const queryString = urlParams.toString() ? `?${urlParams.toString()}` : '';
+    const basePath = newQuestionId ? `/instructor/questions/${newQuestionId}` : '/instructor/questions';
+    const targetUrl = `${basePath}${queryString}`;
 
-    // Status filter
-    if (filter.status !== 'all') {
-      if (filter.status === 'bookmarked') {
-        if (!q.is_bookmarked) return false;
-      } else if (q.status !== filter.status) {
-        return false;
+    if (window.location.pathname + window.location.search !== targetUrl) {
+      window.history.pushState({}, '', targetUrl);
+    }
+  }, []);
+
+  // Fetch summary
+  const loadSummary = useCallback(async () => {
+    try {
+      const res = await ApiService.getInstructorQuestionSummary({
+        course_id: filter.course !== 'all' ? filter.course : undefined,
+        lesson_id: filter.lesson !== 'all' ? filter.lesson : undefined,
+      });
+      const data = res.data || res;
+      setUnansweredCount(data.unanswered_questions ?? 0);
+      setAnsweredCount(data.answered_questions ?? 0);
+      setTodayCommentsCount(data.comments_today ?? 0);
+      setBookmarkedCount(data.starred ?? 0);
+      setTotalQuestions(data.total_questions ?? 0);
+    } catch (err) {
+      console.warn("Failed to load question summary:", err);
+    }
+  }, [filter.course, filter.lesson]);
+
+  // Fetch course options
+  useEffect(() => {
+    ApiService.getInstructorQuestionCourseOptions().then((res: any) => {
+      const list = res.data || res;
+      if (Array.isArray(list)) {
+        setCourseOptions(list);
       }
+    }).catch(err => console.warn("Failed to load course options:", err));
+  }, []);
+
+  // Fetch lesson options when course filter changes
+  useEffect(() => {
+    ApiService.getInstructorQuestionLessonOptions(filter.course !== 'all' ? filter.course : undefined).then((res: any) => {
+      const list = res.data || res;
+      if (Array.isArray(list)) {
+        setLessonOptions(list);
+      }
+    }).catch(err => console.warn("Failed to load lesson options:", err));
+  }, [filter.course]);
+
+  // Fetch list of questions
+  const loadQuestions = useCallback(async () => {
+    setIsLoadingList(true);
+    setListError(null);
+    try {
+      const res = await ApiService.getInstructorQuestions({
+        course_id: filter.course,
+        lesson_id: filter.lesson,
+        status: filter.status === 'bookmarked' ? 'all' : filter.status,
+        search: filter.keyword,
+        sort: filter.sort,
+        page,
+        per_page: 10,
+      });
+
+      const listData = res.data || res;
+      const items = Array.isArray(listData) ? listData : (listData.items || res.items || []);
+      const mapped = items.map(mapBackendQuestion);
+      setQuestions(mapped);
+
+      const meta = res.meta || res.pagination || res;
+      if (meta.last_page) setLastPage(meta.last_page);
+
+      // Auto select first question if none selected or invalid
+      if (mapped.length > 0 && !selectedQuestionId) {
+        setSelectedQuestionId(mapped[0].id);
+      }
+    } catch (err: any) {
+      console.error("Failed to load instructor questions:", err);
+      setListError(err.message || "Không thể tải danh sách câu hỏi.");
+    } finally {
+      setIsLoadingList(false);
+    }
+  }, [filter, page, selectedQuestionId]);
+
+  useEffect(() => {
+    loadSummary();
+    loadQuestions();
+  }, [loadSummary, loadQuestions]);
+
+  // Fetch detail when selectedQuestionId changes
+  useEffect(() => {
+    if (!selectedQuestionId) {
+      setSelectedQuestionDetail(null);
+      return;
     }
 
-    // Keyword filter
-    if (filter.keyword) {
-      const lower = filter.keyword.toLowerCase();
-      const matchContent = q.content.toLowerCase().includes(lower);
-      const matchStudent = q.student_name.toLowerCase().includes(lower);
-      const matchLesson = q.lesson_name.toLowerCase().includes(lower);
-      if (!matchContent && !matchStudent && !matchLesson) return false;
-    }
+    setIsLoadingDetail(true);
+    ApiService.getInstructorQuestion(selectedQuestionId).then((res: any) => {
+      const detailData = res.data || res;
+      if (detailData) {
+        setSelectedQuestionDetail(mapBackendQuestion(detailData));
+      }
+    }).catch(err => {
+      console.warn("Failed to load question detail:", err);
+      // Fallback to list item if detail API fails
+      const fallback = questions.find(q => q.id === selectedQuestionId);
+      if (fallback) {
+        setSelectedQuestionDetail(fallback);
+      }
+    }).finally(() => {
+      setIsLoadingDetail(false);
+    });
 
-    return true;
-  }).sort((a, b) => {
-    const timeA = new Date(a.created_at).getTime();
-    const timeB = new Date(b.created_at).getTime();
-    return filter.sort === 'newest' ? timeB - timeA : timeA - timeB;
-  });
+    updateUrl(selectedQuestionId, filter, page);
+  }, [selectedQuestionId, filter, page, updateUrl, questions]);
 
-  const activeQuestion = questions.find(q => q.id === selectedQuestionId) || null;
-
-  // Handle Q&A Actions
-  const handleReply = (replyText: string, isOfficial: boolean, notifyStudent: boolean) => {
-    if (!activeQuestion) return;
-
-    const newReply: Reply = {
-      id: 'r_new_' + Date.now(),
-      user_name: 'Nguyễn Văn Minh (Bạn)',
-      role: 'instructor',
-      content: replyText,
-      created_at: new Date().toISOString()
+  // Listen to popstate (browser back/forward)
+  useEffect(() => {
+    const handlePopState = () => {
+      const parsed = parseInitialState();
+      setSelectedQuestionId(parsed.questionId);
+      setFilter({
+        keyword: parsed.keyword,
+        status: parsed.status,
+        course: parsed.course,
+        lesson: parsed.lesson,
+        sort: parsed.sort,
+      });
+      setPage(parsed.page);
     };
 
-    setQuestions(prev => prev.map(q => {
-      if (q.id === activeQuestion.id) {
-        const wasUnanswered = q.status === 'unanswered';
-        
-        // Update stats dynamically if transitioning from unanswered to answered
-        if (wasUnanswered) {
-          setUnansweredCount(c => Math.max(0, c - 1));
-          setAnsweredCount(c => c + 1);
-        }
-        setTodayCommentsCount(c => c + 1);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
-        return {
-          ...q,
-          is_answered: true,
-          status: 'answered' as const,
-          reply_count: (q.replies?.length ?? 0) + 1,
-          replies: [...(q.replies || []), newReply]
-        };
-      }
-      return q;
-    }));
+  // Handle Q&A Actions
+  const handleReply = async (replyText: string, isOfficial: boolean, notifyStudent: boolean) => {
+    if (!selectedQuestionId) return;
 
-    showToast('Trả lời học viên thành công!');
+    try {
+      const res = await ApiService.replyInstructorQuestion(selectedQuestionId, {
+        content: replyText,
+        is_official: isOfficial,
+        notify_learner: notifyStudent,
+      });
+      showToast('Đã gửi câu trả lời thành công!');
+
+      // Reload detail and list
+      loadSummary();
+      loadQuestions();
+
+      // Optimistically append reply
+      const newReply: Reply = {
+        id: String(res.data?.reply?.id || 'reply-' + Date.now()),
+        user_name: 'Giảng viên (Bạn)',
+        role: 'instructor',
+        content: replyText,
+        created_at: new Date().toISOString(),
+      };
+
+      setSelectedQuestionDetail(prev => prev ? {
+        ...prev,
+        is_answered: true,
+        status: 'answered',
+        reply_count: (prev.reply_count || 0) + 1,
+        replies: [...(prev.replies || []), newReply],
+      } : null);
+    } catch (err: any) {
+      console.error("Failed to reply question:", err);
+      showToast(err.message || "Gửi trả lời thất bại.", 'error');
+    }
   };
 
-  const handleHide = () => {
-    if (!activeQuestion) return;
-
-    setQuestions(prev => prev.map(q => {
-      if (q.id === activeQuestion.id) {
-        const wasUnanswered = q.status === 'unanswered';
-        const wasAnswered = q.status === 'answered';
-
-        if (wasUnanswered) {
-          setUnansweredCount(c => Math.max(0, c - 1));
-        } else if (wasAnswered) {
-          setAnsweredCount(c => Math.max(0, c - 1));
-        }
-
-        return {
-          ...q,
-          status: 'hidden' as const
-        };
-      }
-      return q;
-    }));
-
-    showToast('Đã ẩn câu hỏi thành công.');
+  const handleHide = async () => {
+    if (!selectedQuestionId) return;
+    try {
+      await ApiService.hideInstructorQuestion(selectedQuestionId);
+      showToast('Đã ẩn câu hỏi thành công.');
+      loadSummary();
+      loadQuestions();
+    } catch (err: any) {
+      showToast(err.message || "Ẩn câu hỏi thất bại.", 'error');
+    }
   };
 
-  const handleToggleBookmark = () => {
-    if (!activeQuestion) return;
-
-    setQuestions(prev => prev.map(q => {
-      if (q.id === activeQuestion.id) {
-        const nextBookmarked = !q.is_bookmarked;
-        if (nextBookmarked) {
-          setBookmarkedCount(c => c + 1);
-        } else {
-          setBookmarkedCount(c => Math.max(0, c - 1));
-        }
-
-        showToast(nextBookmarked ? 'Đã đánh dấu câu hỏi.' : 'Đã bỏ đánh dấu câu hỏi.');
-        return {
-          ...q,
-          is_bookmarked: nextBookmarked
-        };
+  const handleToggleBookmark = async () => {
+    if (!selectedQuestionDetail || !selectedQuestionId) return;
+    const isCurrentlyBookmarked = selectedQuestionDetail.is_bookmarked;
+    try {
+      if (isCurrentlyBookmarked) {
+        await ApiService.unstarInstructorQuestion(selectedQuestionId);
+      } else {
+        await ApiService.starInstructorQuestion(selectedQuestionId);
       }
-      return q;
-    }));
+      const nextState = !isCurrentlyBookmarked;
+      setSelectedQuestionDetail(prev => prev ? { ...prev, is_bookmarked: nextState } : null);
+      setQuestions(prev => prev.map(q => q.id === selectedQuestionId ? { ...q, is_bookmarked: nextState } : q));
+      loadSummary();
+      showToast(nextState ? 'Đã đánh dấu câu hỏi.' : 'Đã bỏ đánh dấu câu hỏi.');
+    } catch (err: any) {
+      showToast(err.message || 'Đánh dấu thất bại.', 'error');
+    }
   };
 
-  const handleFilterChange = (status: 'all' | 'unanswered' | 'answered' | 'hidden' | 'bookmarked') => {
+  const handleFilterChange = (status: QAFilterState['status']) => {
     setFilter(prev => ({ ...prev, status }));
+    setPage(1);
   };
 
   return (
@@ -336,29 +346,68 @@ export const InstructorQAModule: React.FC = () => {
       />
 
       {/* Filter Card */}
-      <QAFilter filter={filter} setFilter={setFilter} />
+      <QAFilter 
+        filter={filter} 
+        setFilter={(newFilterAction) => {
+          setFilter(newFilterAction);
+          setPage(1);
+        }}
+        courseOptions={courseOptions}
+        lessonOptions={lessonOptions}
+      />
 
       {/* Split Main Content Layout */}
       <div className="flex flex-col lg:flex-row gap-6 items-stretch">
         {/* Left column: List of Questions */}
         <div className="w-full lg:w-[48%] shrink-0">
-          <QAList 
-            questions={filteredQuestions} 
-            selectedQuestionId={selectedQuestionId}
-            onSelectQuestion={setSelectedQuestionId}
-            sort={filter.sort}
-            onSortChange={(sort) => setFilter(prev => ({ ...prev, sort }))}
-          />
+          {isLoadingList ? (
+            <div className="bg-white rounded-2xl shadow-3xs border border-slate-100 p-8 h-[750px] flex flex-col items-center justify-center">
+              <Loader2 className="w-8 h-8 text-brand-normal animate-spin mb-2" />
+              <p className="text-xs font-bold text-slate-500">Đang tải danh sách câu hỏi...</p>
+            </div>
+          ) : listError ? (
+            <div className="bg-white rounded-2xl shadow-3xs border border-slate-100 p-8 h-[750px] flex flex-col items-center justify-center text-center">
+              <AlertCircle className="w-10 h-10 text-rose-500 mb-2" />
+              <p className="text-xs font-bold text-slate-700">{listError}</p>
+              <button 
+                onClick={loadQuestions}
+                className="mt-3 px-4 py-2 text-xs font-bold bg-brand-normal text-white rounded-xl hover:bg-brand-hover cursor-pointer"
+              >
+                Thử lại
+              </button>
+            </div>
+          ) : (
+            <QAList 
+              questions={questions} 
+              selectedQuestionId={selectedQuestionId}
+              onSelectQuestion={setSelectedQuestionId}
+              sort={filter.sort}
+              onSortChange={(sort) => {
+                setFilter(prev => ({ ...prev, sort }));
+                setPage(1);
+              }}
+              page={page}
+              lastPage={lastPage}
+              onPageChange={setPage}
+            />
+          )}
         </div>
 
         {/* Right column: Conversation detail & reply form */}
         <div className="w-full lg:w-[52%] shrink-0">
-          <QADetailView 
-            question={activeQuestion}
-            onReply={handleReply}
-            onHide={handleHide}
-            onToggleBookmark={handleToggleBookmark}
-          />
+          {isLoadingDetail ? (
+            <div className="bg-white rounded-2xl shadow-3xs border border-slate-100 p-8 h-[750px] flex flex-col items-center justify-center">
+              <Loader2 className="w-8 h-8 text-brand-normal animate-spin mb-2" />
+              <p className="text-xs font-bold text-slate-500">Đang tải chi tiết câu hỏi...</p>
+            </div>
+          ) : (
+            <QADetailView 
+              question={selectedQuestionDetail}
+              onReply={handleReply}
+              onHide={handleHide}
+              onToggleBookmark={handleToggleBookmark}
+            />
+          )}
         </div>
       </div>
     </div>

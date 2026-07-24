@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar } from 'lucide-react';
-import { Coupon } from '../types';
+import { Coupon, CourseOption } from '../types';
 
 interface Props {
   coupon?: Coupon | null;
+  courseOptions: CourseOption[];
   onClose: () => void;
   onSubmit: (data: Partial<Coupon>) => Promise<void>;
 }
 
-export const CouponForm: React.FC<Props> = ({ coupon, onClose, onSubmit }) => {
+export const CouponForm: React.FC<Props> = ({ coupon, courseOptions, onClose, onSubmit }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<Partial<Coupon>>({
     code: '',
@@ -32,6 +33,7 @@ export const CouponForm: React.FC<Props> = ({ coupon, onClose, onSubmit }) => {
       const end = coupon.end_at ? coupon.end_at.substring(0, 16) : '';
       setFormData({
         ...coupon,
+        discount_type: (coupon.discount_type === 'percentage' ? 'percent' : coupon.discount_type) as any,
         start_at: start,
         end_at: end
       });
@@ -39,7 +41,7 @@ export const CouponForm: React.FC<Props> = ({ coupon, onClose, onSubmit }) => {
       setFormData({
         code: '',
         name: '',
-        course_id: '',
+        course_id: courseOptions.length > 0 ? String(courseOptions[0].id) : '',
         discount_type: 'percent',
         discount_value: 0,
         usage_limit: undefined,
@@ -50,10 +52,10 @@ export const CouponForm: React.FC<Props> = ({ coupon, onClose, onSubmit }) => {
       });
     }
     setValidationError('');
-  }, [coupon]);
+  }, [coupon, courseOptions]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
+    const { name, value } = e.target;
     
     if (name === 'code') {
       setFormData(prev => ({ ...prev, [name]: value.replace(/\s+/g, '').toUpperCase() }));
@@ -73,7 +75,7 @@ export const CouponForm: React.FC<Props> = ({ coupon, onClose, onSubmit }) => {
       setValidationError('Giá trị giảm giá phải lớn hơn 0.');
       return false;
     }
-    if (formData.discount_type === 'percent' && formData.discount_value > 100) {
+    if ((formData.discount_type === 'percent' || formData.discount_type === 'percentage') && formData.discount_value > 100) {
       setValidationError('Phần trăm giảm giá không được vượt quá 100%.');
       return false;
     }
@@ -100,20 +102,32 @@ export const CouponForm: React.FC<Props> = ({ coupon, onClose, onSubmit }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     if (!validate()) return;
 
     setIsSubmitting(true);
     try {
-      // Ensure ISO date strings are sent
+      // Format payload for backend
       const payload = {
         ...formData,
+        code: formData.code?.toUpperCase().trim(),
         name: formData.name || `Khuyến mãi ${formData.code}`,
+        course_id: Number(formData.course_id),
+        discount_type: formData.discount_type === 'percentage' ? 'percent' : formData.discount_type,
         start_at: new Date(formData.start_at!).toISOString(),
         end_at: new Date(formData.end_at!).toISOString(),
       };
       await onSubmit(payload);
       onClose();
     } catch (err: any) {
+      const fieldErrors = err?.errors || err?.data?.errors;
+      if (fieldErrors && typeof fieldErrors === 'object') {
+        const firstErr = Object.values(fieldErrors).flat()[0];
+        if (firstErr) {
+          setValidationError(String(firstErr));
+          return;
+        }
+      }
       setValidationError(err.message || 'Lỗi lưu thông tin mã giảm giá.');
     } finally {
       setIsSubmitting(false);
@@ -127,7 +141,15 @@ export const CouponForm: React.FC<Props> = ({ coupon, onClose, onSubmit }) => {
         <h2 className="text-xs font-black text-slate-800 uppercase tracking-wider">
           {coupon ? 'Chỉnh sửa mã giảm giá' : 'Tạo mã giảm giá'}
         </h2>
-        <button onClick={onClose} className="p-1 hover:bg-slate-200 rounded-lg text-slate-400 hover:text-slate-700 transition-colors cursor-pointer">
+        <button 
+          type="button" 
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onClose();
+          }} 
+          className="p-1 hover:bg-slate-200 rounded-lg text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+        >
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -156,6 +178,20 @@ export const CouponForm: React.FC<Props> = ({ coupon, onClose, onSubmit }) => {
             <p className="text-[9px] text-slate-400 font-semibold">Mã sẽ được viết hoa tự động, không dấu cách.</p>
           </div>
 
+          {/* Tên mã giảm giá */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tên chương trình *</label>
+            <input 
+              required 
+              type="text" 
+              name="name" 
+              value={formData.name || ''} 
+              onChange={handleChange} 
+              placeholder="Nhập tên chương trình khuyến mãi" 
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-normal font-bold" 
+            />
+          </div>
+
           {/* Loại giảm giá */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Loại giảm giá *</label>
@@ -167,20 +203,8 @@ export const CouponForm: React.FC<Props> = ({ coupon, onClose, onSubmit }) => {
                 onChange={handleChange} 
                 className="flex-1 px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-normal bg-white font-semibold cursor-pointer"
               >
-                <option value="percent">Phần trăm</option>
-                <option value="fixed">Số tiền</option>
-              </select>
-              <select
-                name="discount_type_unit"
-                value={formData.discount_type === 'percent' ? '%' : 'fixed'}
-                onChange={(e) => {
-                  const type = e.target.value === '%' ? 'percent' : 'fixed';
-                  setFormData(prev => ({ ...prev, discount_type: type, discount_value: 0 }));
-                }}
-                className="w-16 px-2 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-normal bg-white font-semibold cursor-pointer"
-              >
-                <option value="%">%</option>
-                <option value="fixed">đ</option>
+                <option value="percent">Phần trăm (%)</option>
+                <option value="fixed">Số tiền cố định (đ)</option>
               </select>
             </div>
           </div>
@@ -198,7 +222,7 @@ export const CouponForm: React.FC<Props> = ({ coupon, onClose, onSubmit }) => {
               className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-normal font-bold" 
             />
             <p className="text-[9px] text-slate-400 font-semibold">
-              Ví dụ: {formData.discount_type === 'percent' ? '20 cho 20%' : '100000 cho 100.000đ'}
+              Ví dụ: {formData.discount_type === 'percent' || formData.discount_type === 'percentage' ? '20 cho 20%' : '100000 cho 100.000đ'}
             </p>
           </div>
 
@@ -208,7 +232,7 @@ export const CouponForm: React.FC<Props> = ({ coupon, onClose, onSubmit }) => {
             <input 
               type="number" 
               name="usage_limit" 
-              value={formData.usage_limit || ''} 
+              value={formData.usage_limit ?? ''} 
               onChange={handleChange} 
               placeholder="Để trống nếu không giới hạn" 
               className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-normal font-semibold" 
@@ -258,17 +282,12 @@ export const CouponForm: React.FC<Props> = ({ coupon, onClose, onSubmit }) => {
               className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-normal bg-white font-semibold cursor-pointer"
             >
               <option value="">Chọn khóa học</option>
-              <option value="course_python">Lập trình Python cơ bản cho người mới bắt đầu</option>
-              <option value="course_uiux">Thiết kế UI/UX từ cơ bản đến nâng cao</option>
-              <option value="course_data">Data Analysis with Excel & SQL</option>
-              <option value="course_django">Lập trình Web với Django Framework</option>
-              <option value="course_devops">DevOps cơ bản với Docker & Kubernetes</option>
-              <option value="course_ml">Machine Learning cơ bản với Python</option>
-              <option value="course_marketing">Khóa học Marketing Online A-Z</option>
+              {courseOptions.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.title}
+                </option>
+              ))}
             </select>
-            <p className="text-[9px] text-slate-400 font-semibold">
-              Áp dụng cho một khóa học cụ thể hoặc để trống để áp dụng cho tất cả.
-            </p>
           </div>
 
           {/* Trạng thái */}
@@ -301,22 +320,26 @@ export const CouponForm: React.FC<Props> = ({ coupon, onClose, onSubmit }) => {
         </form>
       </div>
 
-      {/* Footer */}
-      <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/30 flex justify-end gap-2.5 shrink-0">
+      {/* Footer Actions */}
+      <div className="px-5 py-4 border-t border-slate-50 flex justify-end gap-2 shrink-0 bg-slate-50/50">
         <button 
           type="button" 
-          onClick={onClose} 
-          className="px-4 py-2 border border-slate-200 text-slate-655 hover:bg-slate-150 text-xs font-bold rounded-xl transition-all cursor-pointer"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onClose();
+          }} 
+          className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-100 rounded-xl font-bold transition-all text-xs cursor-pointer"
         >
           Hủy
         </button>
         <button 
-          form="coupon-drawer-form" 
           type="submit" 
-          disabled={isSubmitting} 
-          className="px-5 py-2 bg-brand-normal hover:bg-brand-hover text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer disabled:opacity-50"
+          form="coupon-drawer-form" 
+          disabled={isSubmitting}
+          className="px-4 py-2 bg-brand-normal hover:bg-brand-hover text-white rounded-xl font-bold transition-all text-xs shadow-sm cursor-pointer disabled:opacity-50"
         >
-          {coupon ? 'Lưu mã' : 'Tạo mã'}
+          {isSubmitting ? 'Đang lưu...' : (coupon ? 'Lưu thay đổi' : 'Tạo mã mới')}
         </button>
       </div>
     </div>

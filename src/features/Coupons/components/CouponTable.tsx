@@ -1,66 +1,45 @@
 import React, { useState } from 'react';
-import { Eye, Edit, Trash2, Power, PowerOff, Copy, MoreVertical, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Edit, Trash2, Power, PowerOff, Copy, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Coupon } from '../types';
 
 interface Props {
   coupons: Coupon[];
   isLoading: boolean;
+  pagination: {
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+  };
+  onPageChange: (page: number) => void;
+  onPerPageChange: (perPage: number) => void;
   onEdit: (coupon: Coupon) => void;
   onToggleStatus: (coupon: Coupon) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string | number) => void;
   onCopy: (code: string) => void;
 }
-
-const COURSE_MAP: Record<string, { title: string; image: string }> = {
-  course_python: {
-    title: 'Lập trình Python cơ bản cho người mới bắt đầu',
-    image: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=80&auto=format&fit=crop&q=60'
-  },
-  course_uiux: {
-    title: 'Thiết kế UI/UX từ cơ bản đến nâng cao',
-    image: 'https://images.unsplash.com/photo-1561070791-26c113006238?w=80&auto=format&fit=crop&q=60'
-  },
-  course_data: {
-    title: 'Data Analysis with Excel & SQL',
-    image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=80&auto=format&fit=crop&q=60'
-  },
-  course_django: {
-    title: 'Lập trình Web với Django Framework',
-    image: 'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?w=80&auto=format&fit=crop&q=60'
-  },
-  course_devops: {
-    title: 'DevOps cơ bản với Docker & Kubernetes',
-    image: 'https://images.unsplash.com/photo-1667372393119-3d4c48d07fc9?w=80&auto=format&fit=crop&q=60'
-  },
-  course_ml: {
-    title: 'Machine Learning cơ bản với Python',
-    image: 'https://images.unsplash.com/photo-1527474305487-b87b222841cc?w=80&auto=format&fit=crop&q=60'
-  },
-  course_marketing: {
-    title: 'Khóa học Marketing Online A-Z',
-    image: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=80&auto=format&fit=crop&q=60'
-  }
-};
 
 export const CouponTable: React.FC<Props> = ({ 
   coupons, 
   isLoading, 
+  pagination,
+  onPageChange,
+  onPerPageChange,
   onEdit, 
   onToggleStatus, 
   onDelete, 
   onCopy 
 }) => {
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [perPage, setPerPage] = useState('10');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | number | null>(null);
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('vi-VN').format(val) + 'đ';
   };
 
-  const formatDateTime = (isoString: string) => {
-    if (!isoString) return '';
+  const formatDateTime = (isoString?: string | null) => {
+    if (!isoString) return '—';
     const date = new Date(isoString);
+    if (isNaN(date.getTime())) return isoString;
     const dd = String(date.getDate()).padStart(2, '0');
     const mm = String(date.getMonth() + 1).padStart(2, '0');
     const yyyy = date.getFullYear();
@@ -69,7 +48,8 @@ export const CouponTable: React.FC<Props> = ({
     return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
   };
 
-  const renderBadge = (status: Coupon['status']) => {
+  const renderBadge = (coupon: Coupon) => {
+    const status = coupon.effective_status || coupon.status;
     switch (status) {
       case 'active':
         return <span className="inline-flex items-center whitespace-nowrap px-3 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[10px] font-black uppercase tracking-wider border border-emerald-150">Đang hoạt động</span>;
@@ -79,15 +59,17 @@ export const CouponTable: React.FC<Props> = ({
         return <span className="inline-flex items-center whitespace-nowrap px-3 py-0.5 bg-rose-50 text-rose-700 rounded-md text-[10px] font-black uppercase tracking-wider border border-rose-150">Đã hết hạn</span>;
       case 'used_up':
         return <span className="inline-flex items-center whitespace-nowrap px-3 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-black uppercase tracking-wider border border-amber-150">Đã dùng hết</span>;
+      case 'scheduled':
+        return <span className="inline-flex items-center whitespace-nowrap px-3 py-0.5 bg-blue-50 text-blue-700 rounded-md text-[10px] font-black uppercase tracking-wider border border-blue-150">Sắp diễn ra</span>;
       default:
-        return null;
+        return <span className="inline-flex items-center whitespace-nowrap px-3 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[10px] font-black uppercase tracking-wider border border-slate-200">{coupon.status_label || status}</span>;
     }
   };
 
   if (isLoading) {
     return (
       <div className="bg-white rounded-2xl shadow-3xs border border-slate-100 overflow-hidden">
-        <div className="p-8 text-center text-slate-400">Đang tải danh sách...</div>
+        <div className="p-12 text-center text-slate-400 font-bold text-xs">Đang tải danh sách mã giảm giá...</div>
       </div>
     );
   }
@@ -103,6 +85,9 @@ export const CouponTable: React.FC<Props> = ({
       </div>
     );
   }
+
+  const fromCount = (pagination.current_page - 1) * pagination.per_page + 1;
+  const toCount = Math.min(pagination.current_page * pagination.per_page, pagination.total);
 
   return (
     <div className="bg-white rounded-2xl shadow-3xs border border-slate-100 overflow-hidden relative">
@@ -122,12 +107,10 @@ export const CouponTable: React.FC<Props> = ({
               <th className="p-4 font-bold whitespace-nowrap text-center min-w-[120px]">Thao tác</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-50">
+          <tbody className="divide-y divide-slate-50 font-semibold text-slate-800">
             {coupons.map((coupon) => {
-              const courseInfo = COURSE_MAP[coupon.course_id] || {
-                title: coupon.course_id || 'Áp dụng tất cả khóa học',
-                image: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=80'
-              };
+              const courseTitle = coupon.course?.title || 'Áp dụng tất cả khóa học';
+              const isPercent = coupon.discount_type === 'percent' || coupon.discount_type === 'percentage';
 
               return (
                 <tr key={coupon.id} className="hover:bg-slate-50/50 transition-colors group">
@@ -141,20 +124,15 @@ export const CouponTable: React.FC<Props> = ({
                   {/* Course Details */}
                   <td className="p-4 min-w-[260px]">
                     <div className="flex items-center gap-3">
-                      <img 
-                        src={courseInfo.image} 
-                        alt="cover" 
-                        className="w-10 h-6 rounded object-cover border border-slate-100 shrink-0" 
-                      />
-                      <span className="text-xs font-bold text-slate-800 truncate max-w-[240px] whitespace-nowrap inline-block" title={courseInfo.title}>
-                        {courseInfo.title}
+                      <span className="text-xs font-bold text-slate-800 truncate max-w-[240px] whitespace-nowrap inline-block" title={courseTitle}>
+                        {courseTitle}
                       </span>
                     </div>
                   </td>
 
                   {/* Type */}
                   <td className="p-4 min-w-[90px] whitespace-nowrap">
-                    {coupon.discount_type === 'percent' ? (
+                    {isPercent ? (
                       <span className="inline-flex items-center whitespace-nowrap px-2.5 py-0.5 bg-blue-50 text-blue-750 text-[10px] font-bold rounded border border-blue-100">
                         Phần trăm
                       </span>
@@ -167,7 +145,7 @@ export const CouponTable: React.FC<Props> = ({
 
                   {/* Value */}
                   <td className="p-4 font-black text-xs text-slate-800 whitespace-nowrap">
-                    {coupon.discount_type === 'percent' ? `${coupon.discount_value}%` : formatCurrency(coupon.discount_value)}
+                    {isPercent ? `${coupon.discount_value}%` : formatCurrency(Number(coupon.discount_value))}
                   </td>
 
                   {/* Start Date */}
@@ -187,26 +165,36 @@ export const CouponTable: React.FC<Props> = ({
 
                   {/* Usage Limit */}
                   <td className="p-4 text-center text-xs font-bold text-slate-400 whitespace-nowrap">
-                    {coupon.usage_limit || '∞'}
+                    {coupon.usage_limit ?? 'Không giới hạn'}
                   </td>
 
                   {/* Status Badge */}
                   <td className="p-4 text-center min-w-[130px] whitespace-nowrap">
-                    {renderBadge(coupon.status)}
+                    {renderBadge(coupon)}
                   </td>
 
                   {/* Actions */}
                   <td className="p-4 min-w-[120px] whitespace-nowrap">
                     <div className="flex items-center justify-center gap-2 whitespace-nowrap">
                       <button 
-                        onClick={() => onCopy(coupon.code)} 
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onCopy(coupon.code);
+                        }} 
                         className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-slate-450 hover:text-brand-normal hover:bg-slate-100 transition-colors cursor-pointer" 
                         title="Copy mã"
                       >
                         <Copy className="w-4 h-4" />
                       </button>
                       <button 
-                        onClick={() => onToggleStatus(coupon)} 
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onToggleStatus(coupon);
+                        }} 
                         className={`h-8 w-8 inline-flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
                           coupon.status === 'active' 
                             ? 'text-slate-400 hover:text-amber-600 hover:bg-amber-50' 
@@ -217,14 +205,24 @@ export const CouponTable: React.FC<Props> = ({
                         {coupon.status === 'active' ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
                       </button>
                       <button 
-                        onClick={() => onEdit(coupon)}
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onEdit(coupon);
+                        }}
                         className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-slate-450 hover:text-orange-600 hover:bg-orange-50 transition-colors cursor-pointer"
                         title="Chỉnh sửa"
                       >
                         <Edit className="w-4 h-4" />
                       </button>
                       <button 
-                        onClick={() => setDeleteConfirmId(coupon.id)} 
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDeleteConfirmId(coupon.id);
+                        }} 
                         className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-slate-450 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer" 
                         title="Xóa"
                       >
@@ -242,14 +240,14 @@ export const CouponTable: React.FC<Props> = ({
       {/* Pagination Footer */}
       <div className="px-5 py-4 border-t border-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/20 text-slate-500 font-bold text-xs text-left">
         <div>
-          Hiển thị 1 đến {coupons.length} trong tổng số {coupons.length} mã
+          Hiển thị {pagination.total > 0 ? `${fromCount} đến ${toCount}` : 0} trong tổng số {pagination.total} mã
         </div>
         
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <select
-              value={perPage}
-              onChange={(e) => setPerPage(e.target.value)}
+              value={String(pagination.per_page)}
+              onChange={(e) => onPerPageChange(Number(e.target.value))}
               className="appearance-none px-3 py-1.5 border border-slate-200 bg-white rounded-lg outline-none cursor-pointer pr-8 relative font-bold text-slate-700"
               style={{ backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237c7f88' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundPosition: 'right 8px center', backgroundRepeat: 'no-repeat' }}
             >
@@ -259,29 +257,54 @@ export const CouponTable: React.FC<Props> = ({
             </select>
           </div>
 
-          <div className="flex items-center gap-1">
-            <button 
-              disabled={currentPage === 1}
-              className="p-1.5 border border-slate-200 rounded-lg bg-white text-slate-400 hover:text-slate-700 disabled:opacity-50 transition-colors"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-            <button className="w-7 h-7 bg-brand-normal text-white rounded-lg flex items-center justify-center font-black text-xs">
-              1
-            </button>
-            <button className="w-7 h-7 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-lg flex items-center justify-center font-black text-xs transition-colors">
-              2
-            </button>
-            <button className="w-7 h-7 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-lg flex items-center justify-center font-black text-xs transition-colors">
-              3
-            </button>
-            <button 
-              disabled={true}
-              className="p-1.5 border border-slate-200 rounded-lg bg-white text-slate-400 hover:text-slate-700 disabled:opacity-50 transition-colors"
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          {pagination.last_page > 1 && (
+            <div className="flex items-center gap-1">
+              <button 
+                type="button"
+                disabled={pagination.current_page <= 1}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onPageChange(pagination.current_page - 1);
+                }}
+                className="p-1.5 border border-slate-200 rounded-lg bg-white text-slate-400 hover:text-slate-700 disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              
+              {Array.from({ length: pagination.last_page }, (_, i) => i + 1).map((p) => (
+                <button
+                  type="button"
+                  key={p}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onPageChange(p);
+                  }}
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs transition-colors cursor-pointer ${
+                    p === pagination.current_page 
+                      ? 'bg-brand-normal text-white' 
+                      : 'border border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+
+              <button 
+                type="button"
+                disabled={pagination.current_page >= pagination.last_page}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onPageChange(pagination.current_page + 1);
+                }}
+                className="p-1.5 border border-slate-200 rounded-lg bg-white text-slate-400 hover:text-slate-700 disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -296,14 +319,22 @@ export const CouponTable: React.FC<Props> = ({
             <p className="text-slate-400 text-xs font-semibold mb-4 leading-normal">Bạn có chắc chắn muốn xóa mã giảm giá này? Hành động này không thể hoàn tác.</p>
             <div className="flex gap-2">
               <button
-                onClick={() => setDeleteConfirmId(null)}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDeleteConfirmId(null);
+                }}
                 className="px-3 py-2 border border-slate-200 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-bold text-xs flex-1 cursor-pointer"
               >
                 Hủy
               </button>
               <button
-                onClick={() => {
-                  onDelete(deleteConfirmId);
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (deleteConfirmId) onDelete(deleteConfirmId);
                   setDeleteConfirmId(null);
                 }}
                 className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl transition-colors font-bold text-xs flex-1 cursor-pointer"

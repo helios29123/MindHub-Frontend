@@ -2,10 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, BookOpen, Clock, Award, CheckCircle2, Circle, PlayCircle, 
   FileText, Download, Sparkles, Loader2, Copy, Check, Phone, 
-  Mail, Calendar, Play, FileCode, CheckCircle
+  Mail, Calendar, Play, FileCode, CheckCircle, AlertCircle, RefreshCw
 } from 'lucide-react';
 import { ApiService } from '../../services/api';
-import { INSTRUCTOR_STUDENTS_MOCK } from '../../data/instructorStudentsMock';
 
 interface StudentDetailDrawerProps {
   enrollmentId: number;
@@ -16,113 +15,68 @@ export default function StudentDetailDrawer({ enrollmentId, onClose }: StudentDe
   const [activeTab, setActiveTab] = useState<'roadmap' | 'lessons' | 'activity'>('roadmap');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchDetails = async () => {
       setLoading(true);
+      setError(null);
+      setData(null); // Anti-stale: Clear old student data immediately
+
       try {
         const res = await ApiService.getInstructorLearnerDetails(enrollmentId);
         const apiData = res?.data || res;
         
-        if (apiData && apiData.user && apiData.course) {
-          setData(apiData);
-        } else {
-          // Fallback to INSTRUCTOR_STUDENTS_MOCK
-          useMockData();
+        if (isMounted) {
+          if (apiData && apiData.user && apiData.course) {
+            setData(apiData);
+          } else {
+            setError('Không tìm thấy dữ liệu lượt ghi danh.');
+          }
         }
-      } catch (err) {
-        console.error('Failed to fetch student details, using mock:', err);
-        useMockData();
+      } catch (err: any) {
+        if (isMounted) {
+          console.error('Failed to fetch student details:', err);
+          setError(err?.message || 'Không thể tải thông tin lượt ghi danh.');
+        }
       } finally {
-        setLoading(false);
-      }
-    };
-
-    const useMockData = () => {
-      const mockStudent = INSTRUCTOR_STUDENTS_MOCK.students.find(s => s.id === enrollmentId) || INSTRUCTOR_STUDENTS_MOCK.students[0];
-      if (mockStudent) {
-        setData({
-          user: {
-            name: mockStudent.name,
-            email: mockStudent.email,
-            phone: mockStudent.phone,
-            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(mockStudent.name)}&background=007A64&color=fff&bold=true`
-          },
-          course: {
-            title: mockStudent.course
-          },
-          enrollment: {
-            enrolled_at: mockStudent.enrolledAt,
-            status: mockStudent.progress >= 100 ? 'completed' : 'learning',
-            progress: mockStudent.progress,
-            last_accessed_at: mockStudent.lastActive,
-            learning_duration: mockStudent.learningDuration,
-            course_duration: mockStudent.courseDuration,
-            enrollment_code: mockStudent.enrollmentCode,
-            lessons_completed: mockStudent.lessonsCompleted,
-            total_lessons: mockStudent.totalLessons
-          },
-          roadmap: mockStudent.lessonsTimeline,
-          activities: mockStudent.activities
-        });
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchDetails();
+
+    return () => {
+      isMounted = false;
+    };
   }, [enrollmentId]);
 
   const handleCopyEmail = (email: string) => {
+    if (!email) return;
     navigator.clipboard.writeText(email);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Generate activities based on the mock or api data
-  const activitiesList = React.useMemo(() => {
-    if (!data) return [];
-    if (data.activities) return data.activities;
+  const formatTimeAgo = (timeStr: string | null) => {
+    if (!timeStr) return 'Chưa học';
+    const date = new Date(timeStr);
+    if (isNaN(date.getTime())) return timeStr;
     
-    // Fallback dynamic generator if API returns standard items without custom activities
-    const list: any[] = [];
-    const isCompleted = data.enrollment?.status === 'completed' || Number(data.enrollment?.progress || 0) >= 100;
-    
-    if (isCompleted) {
-      list.push({
-        id: 'cert',
-        title: 'Đã nhận chứng chỉ hoàn thành',
-        desc: `Học viên đã hoàn thành xuất sắc tất cả bài học trong khóa "${data.course?.title}" và được cấp chứng chỉ hệ thống.`,
-        time: 'Vừa xong',
-        type: 'cert'
-      });
-    }
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
 
-    list.push({
-      id: 'act-1',
-      title: 'Đã xem bài học mới nhất',
-      desc: `Xem xong bài giảng video trong khóa học "${data.course?.title}".`,
-      time: data.enrollment?.last_accessed_at || 'Mới đây',
-      type: 'video'
-    });
-
-    list.push({
-      id: 'act-2',
-      title: 'Nộp bài tập thực hành',
-      desc: 'Nộp bài tập thực hành của chương học hiện tại.',
-      time: '1 ngày trước',
-      type: 'assignment'
-    });
-
-    list.push({
-      id: 'act-3',
-      title: 'Tải tài liệu đính kèm',
-      desc: 'Tải xuống tệp PDF tài nguyên học tập.',
-      time: '3 ngày trước',
-      type: 'resource'
-    });
-
-    return list;
-  }, [data]);
+    if (diffMins < 60) return `${diffMins > 0 ? diffMins : 1} phút trước`;
+    if (diffHours < 24) return `${diffHours} giờ trước`;
+    return `${diffDays} ngày trước`;
+  };
 
   return (
     <div className="fixed inset-y-0 right-0 w-full sm:w-[460px] bg-[#f8fafc] shadow-2xl z-[100] flex flex-col border-l border-[#e7e8ed] text-xs font-semibold text-[#121b4b] text-left animate-in slide-in-from-right duration-300">
@@ -130,7 +84,7 @@ export default function StudentDetailDrawer({ enrollmentId, onClose }: StudentDe
       {/* Header */}
       <div className="p-5 border-b border-[#e7e8ed] bg-white flex justify-between items-center shrink-0">
         <div>
-          <h2 className="font-black text-sm text-[#06091a] uppercase tracking-wide">Thông tin học viên</h2>
+          <h2 className="font-black text-sm text-[#06091a] uppercase tracking-wide">Thông tin lượt ghi danh #{enrollmentId}</h2>
         </div>
         <button 
           onClick={onClose} 
@@ -141,12 +95,30 @@ export default function StudentDetailDrawer({ enrollmentId, onClose }: StudentDe
       </div>
 
       {loading ? (
-        <div className="flex-1 p-6 flex justify-center items-center">
+        <div className="flex-1 p-6 flex flex-col justify-center items-center gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-[#007A64]" />
+          <span className="text-xs text-slate-500 font-bold">Đang tải dữ liệu lượt ghi danh...</span>
         </div>
-      ) : !data ? (
-        <div className="flex-1 p-6 flex justify-center items-center text-[#737373] font-bold">
-          Không thể tải dữ liệu chi tiết học viên.
+      ) : error || !data ? (
+        <div className="flex-1 p-6 flex flex-col justify-center items-center gap-3 text-center">
+          <AlertCircle className="w-10 h-10 text-red-500" />
+          <span className="font-bold text-red-600 text-sm">{error || 'Không thể tải dữ liệu.'}</span>
+          <button 
+            onClick={() => {
+              setLoading(true);
+              setError(null);
+              ApiService.getInstructorLearnerDetails(enrollmentId).then(res => {
+                setData(res?.data || res);
+                setLoading(false);
+              }).catch(err => {
+                setError(err?.message || 'Không thể tải dữ liệu.');
+                setLoading(false);
+              });
+            }}
+            className="mt-2 px-4 py-2 bg-[#007A64] text-white rounded-xl text-xs font-bold hover:bg-[#006653] cursor-pointer flex items-center gap-1.5"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Thử lại
+          </button>
         </div>
       ) : (
         <>
@@ -154,13 +126,17 @@ export default function StudentDetailDrawer({ enrollmentId, onClose }: StudentDe
           <div className="p-5 border-b border-[#e7e8ed] bg-white flex items-center gap-4 shrink-0">
             <img 
               src={data.user.avatar} 
-              alt="avatar" 
+              alt={data.user.name} 
               className="w-14 h-14 rounded-full object-cover border border-[#dbdde4]" 
             />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-black text-[#06091a] tracking-tight truncate">{data.user.name}</h3>
-                <span className={`inline-flex items-center bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wide shrink-0`}>
+                <span className={`inline-flex items-center font-bold border px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wide shrink-0 ${
+                  data.enrollment?.status === 'completed' 
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                }`}>
                   {data.enrollment?.status === 'completed' ? 'Hoàn thành' : 'Đang học'}
                 </span>
               </div>
@@ -177,12 +153,10 @@ export default function StudentDetailDrawer({ enrollmentId, onClose }: StudentDe
                 </button>
               </div>
 
-              {data.user.phone && (
-                <div className="flex items-center gap-1.5 text-[#737373] text-[9.5px] font-medium mt-0.5">
-                  <Phone className="w-3.5 h-3.5" />
-                  <span>{data.user.phone}</span>
-                </div>
-              )}
+              <div className="flex items-center gap-1.5 text-[#737373] text-[9.5px] font-medium mt-0.5">
+                <Phone className="w-3.5 h-3.5" />
+                <span>{data.user.phone}</span>
+              </div>
             </div>
           </div>
 
@@ -197,12 +171,12 @@ export default function StudentDetailDrawer({ enrollmentId, onClose }: StudentDe
             <div className="bg-[#f8fafc] p-2.5 rounded-xl border border-[#e7e8ed]">
               <span className="text-[#8c8c8c] font-bold block uppercase tracking-wide text-[8.5px]">Ngày ghi danh</span>
               <span className="text-[#06091a] font-bold block mt-1">
-                {data.enrollment?.enrolled_at}
+                {data.enrollment?.enrolled_at ? new Date(data.enrollment.enrolled_at).toLocaleDateString('vi-VN') : 'Chưa cập nhật'}
               </span>
             </div>
             <div className="bg-[#f8fafc] p-2.5 rounded-xl border border-[#e7e8ed]">
               <span className="text-[#8c8c8c] font-bold block uppercase tracking-wide text-[8.5px]">Hình thức học</span>
-              <span className="text-[#06091a] font-bold block mt-1">Online</span>
+              <span className="text-[#06091a] font-bold block mt-1">{data.enrollment?.learning_mode || 'Online'}</span>
             </div>
             <div className="bg-[#f8fafc] p-2.5 rounded-xl border border-[#e7e8ed]">
               <span className="text-[#8c8c8c] font-bold block uppercase tracking-wide text-[8.5px]">Mã ghi danh</span>
@@ -218,7 +192,7 @@ export default function StudentDetailDrawer({ enrollmentId, onClose }: StudentDe
             <div className="relative w-16 h-16 shrink-0 flex items-center justify-center">
               <svg className="w-full h-full transform -rotate-90">
                 <circle cx="32" cy="32" r="28" stroke="#f1f5f9" strokeWidth="6" fill="transparent" />
-                <circle cx="32" cy="32" r="28" stroke="#2563eb" strokeWidth="6" fill="transparent"
+                <circle cx="32" cy="32" r="28" stroke={data.enrollment?.progress >= 100 ? '#10b981' : '#2563eb'} strokeWidth="6" fill="transparent"
                   strokeDasharray={2 * Math.PI * 28}
                   strokeDashoffset={2 * Math.PI * 28 * (1 - (data.enrollment?.progress || 0) / 100)}
                   strokeLinecap="round" />
@@ -232,25 +206,25 @@ export default function StudentDetailDrawer({ enrollmentId, onClose }: StudentDe
               <div>
                 <span className="text-[#8c8c8c] font-bold uppercase tracking-wide text-[8px]">Bài giảng hoàn thành</span>
                 <span className="text-[#06091a] font-bold block mt-0.5">
-                  {data.enrollment?.lessons_completed || 43}/{data.enrollment?.total_lessons || 60}
+                  {data.enrollment?.lessons_completed || 0}/{data.enrollment?.total_lessons || 0}
                 </span>
               </div>
               <div>
                 <span className="text-[#8c8c8c] font-bold uppercase tracking-wide text-[8px]">Thời lượng đã học</span>
                 <span className="text-[#06091a] font-bold block mt-0.5">
-                  {data.enrollment?.learning_duration || '18h 45m'}
+                  {data.enrollment?.learning_duration || '0m'}
                 </span>
               </div>
               <div>
                 <span className="text-[#8c8c8c] font-bold uppercase tracking-wide text-[8px]">Thời lượng khóa học</span>
                 <span className="text-[#06091a] font-bold block mt-0.5">
-                  {data.enrollment?.course_duration || '25h 30m'}
+                  {data.enrollment?.course_duration || '0m'}
                 </span>
               </div>
               <div>
                 <span className="text-[#8c8c8c] font-bold uppercase tracking-wide text-[8px]">Lần truy cập cuối</span>
                 <span className="text-[#06091a] font-bold block mt-0.5 truncate" title={data.enrollment?.last_accessed_at}>
-                  {data.enrollment?.last_accessed_at || 'Vừa xong'}
+                  {formatTimeAgo(data.enrollment?.last_accessed_at)}
                 </span>
               </div>
             </div>
@@ -276,7 +250,7 @@ export default function StudentDetailDrawer({ enrollmentId, onClose }: StudentDe
                   : 'border-transparent text-[#737373] hover:text-[#06091a]'
               }`}
             >
-              Bài giảng
+              Bài giảng ({data.lessons?.length || 0})
             </button>
             <button 
               onClick={() => setActiveTab('activity')}
@@ -286,7 +260,7 @@ export default function StudentDetailDrawer({ enrollmentId, onClose }: StudentDe
                   : 'border-transparent text-[#737373] hover:text-[#06091a]'
               }`}
             >
-              Hoạt động gần đây
+              Hoạt động gần đây ({data.activities?.length || 0})
             </button>
           </div>
 
@@ -297,28 +271,36 @@ export default function StudentDetailDrawer({ enrollmentId, onClose }: StudentDe
             {activeTab === 'roadmap' && (
               <div className="bg-white p-5 rounded-2xl border border-[#e7e8ed] shadow-3xs space-y-5">
                 {(!data.roadmap || data.roadmap.length === 0) ? (
-                  <p className="text-center text-[#737373] py-6 font-medium">Chưa có dữ liệu lộ trình học tập.</p>
+                  <p className="text-center text-[#737373] py-6 font-medium">Chưa có chương học nào trong lộ trình khóa học này.</p>
                 ) : (
                   <div className="relative border-l-2 border-slate-100 ml-2.5 space-y-6 text-xs text-[#121b4b]">
                     {data.roadmap.map((milestone: any, idx: number) => {
                       const isComp = milestone.status === 'completed';
-                      const isPending = milestone.status === 'pending';
+                      const isLearning = milestone.status === 'learning';
                       return (
                         <div key={idx} className="relative pl-6">
                           <div className={`absolute -left-[9px] top-0 bg-white rounded-full ${
-                            isComp ? 'text-emerald-500' : isPending ? 'text-[#bfbfbf]' : 'text-blue-500'
+                            isComp ? 'text-emerald-500' : isLearning ? 'text-blue-500' : 'text-[#bfbfbf]'
                           }`}>
                             {isComp ? (
-                              <CheckCircle className="w-4 h-4 bg-white" />
+                              <CheckCircle className="w-4 h-4 bg-white fill-emerald-100 text-emerald-600" />
                             ) : (
-                              <Circle className="w-4 h-4 bg-white" />
+                              <Circle className="w-4 h-4 bg-white text-slate-300" />
                             )}
                           </div>
                           <div>
-                            <p className="font-black text-[#06091a] leading-tight text-[11.5px]">{milestone.title}</p>
-                            <p className="text-[10px] text-[#737373] mt-1 font-medium">
-                              {isComp ? 'Đã hoàn thành' : isPending ? 'Chưa bắt đầu' : 'Đang học'}
-                              {milestone.lastActive && ` • ${milestone.lastActive}`}
+                            <div className="flex justify-between items-baseline gap-2">
+                              <p className="font-black text-[#06091a] leading-tight text-[11.5px]">{milestone.title}</p>
+                              <span className="text-[10px] font-bold text-slate-500 shrink-0">
+                                {milestone.completed_lessons}/{milestone.total_lessons} bài ({milestone.progress}%)
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-[#737373] mt-1 font-medium flex items-center gap-1.5">
+                              <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+                                isComp ? 'bg-emerald-500' : isLearning ? 'bg-blue-500' : 'bg-slate-300'
+                              }`} />
+                              <span>{isComp ? 'Đã hoàn thành' : isLearning ? 'Đang học' : 'Chưa bắt đầu'}</span>
+                              {milestone.lastActive && <span>• {formatTimeAgo(milestone.lastActive)}</span>}
                             </p>
                           </div>
                         </div>
@@ -334,68 +316,74 @@ export default function StudentDetailDrawer({ enrollmentId, onClose }: StudentDe
               <div className="bg-white p-4 rounded-2xl border border-[#e7e8ed] shadow-3xs space-y-3 text-xs text-[#121b4b]">
                 <h4 className="font-black uppercase tracking-wider text-[10px] text-[#06091a] mb-2">Danh sách bài giảng chi tiết</h4>
                 
-                {/* Visualizing clean curriculum list */}
-                <div className="space-y-2.5">
-                  <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between">
-                    <span className="font-bold flex items-center gap-2"><Play className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" /> Bài 1.1: Giới thiệu về Python</span>
-                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-bold uppercase">Đã học</span>
+                {(!data.lessons || data.lessons.length === 0) ? (
+                  <p className="text-center text-[#737373] py-6 font-medium">Khóa học này chưa có bài giảng nào.</p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {data.lessons.map((les: any) => {
+                      const isComp = les.status === 'completed';
+                      const isLearning = les.status === 'learning';
+
+                      return (
+                        <div 
+                          key={les.id} 
+                          className={`p-3 rounded-xl border flex items-center justify-between transition-colors ${
+                            isComp ? 'bg-emerald-50/40 border-emerald-100' :
+                            isLearning ? 'bg-blue-50/50 border-blue-100' :
+                            'bg-slate-50/40 border-slate-100 text-[#737373]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                            {isComp ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                            ) : isLearning ? (
+                              <PlayCircle className="w-4 h-4 text-blue-600 shrink-0 animate-pulse" />
+                            ) : (
+                              <Circle className="w-4 h-4 text-slate-300 shrink-0" />
+                            )}
+                            <div className="min-w-0">
+                              <span className="font-bold text-[#06091a] block truncate text-[11px]">{les.title}</span>
+                              <span className="text-[9.5px] text-slate-400 font-medium block truncate">{les.section_title} • {les.duration}</span>
+                            </div>
+                          </div>
+
+                          <span className={`text-[9.5px] px-2 py-0.5 rounded font-bold uppercase shrink-0 ${
+                            isComp ? 'text-emerald-700 bg-emerald-100/60' :
+                            isLearning ? 'text-blue-700 bg-blue-100/60' :
+                            'text-slate-500 bg-slate-100'
+                          }`}>
+                            {isComp ? 'Đã học' : isLearning ? 'Đang học' : 'Chưa học'}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between">
-                    <span className="font-bold flex items-center gap-2"><Play className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" /> Bài 1.2: Cài đặt môi trường IDE</span>
-                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-bold uppercase">Đã học</span>
-                  </div>
-                  <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between">
-                    <span className="font-bold flex items-center gap-2"><Play className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" /> Bài 2.1: Lists và Tuples trong Python</span>
-                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-bold uppercase">Đã học</span>
-                  </div>
-                  <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between">
-                    <span className="font-bold flex items-center gap-2"><Play className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" /> Bài 2.2: Dictionaries và Sets</span>
-                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-bold uppercase">Đã học</span>
-                  </div>
-                  <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between">
-                    <span className="font-bold flex items-center gap-2"><Play className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" /> Bài 3.1: Định nghĩa hàm với def</span>
-                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-bold uppercase">Đã học</span>
-                  </div>
-                  <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl flex items-center justify-between">
-                    <span className="font-bold flex items-center gap-2"><PlayCircle className="w-3.5 h-3.5 text-blue-600" /> Bài 3.2: Hàm trong Python</span>
-                    <span className="text-[10px] text-blue-700 bg-blue-50 px-2 py-0.5 rounded font-bold uppercase animate-pulse">Đang học</span>
-                  </div>
-                  <div className="p-3 bg-slate-50/30 border border-slate-100 rounded-xl flex items-center justify-between text-[#737373]">
-                    <span className="font-medium flex items-center gap-2"><Circle className="w-3.5 h-3.5 text-[#a3a3a3]" /> Bài 4.1: Khái niệm Lớp và Đối tượng</span>
-                    <span className="text-[10px] text-[#737373] bg-slate-100 px-2 py-0.5 rounded font-bold uppercase">Chưa học</span>
-                  </div>
-                </div>
+                )}
               </div>
             )}
 
             {/* Activities Tab */}
             {activeTab === 'activity' && (
               <div className="space-y-3">
-                {activitiesList.length === 0 ? (
+                {(!data.activities || data.activities.length === 0) ? (
                   <div className="bg-white rounded-2xl border border-[#e7e8ed] p-6 text-center text-[#737373] font-medium">
-                    Chưa ghi nhận hoạt động nào của học viên.
+                    Chưa ghi nhận hoạt động nào của học viên trong khóa học này.
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {activitiesList.map((act: any) => {
+                    {data.activities.map((act: any) => {
                       let actIcon = <FileText className="w-4 h-4" />;
                       let colorClass = "bg-blue-50 text-blue-600 border-blue-200";
                       
                       if (act.type === 'video') {
                         actIcon = <PlayCircle className="w-4 h-4 text-blue-600" />;
                         colorClass = "bg-blue-50 text-blue-600 border-blue-200";
-                      } else if (act.type === 'chapter') {
-                        actIcon = <BookOpen className="w-4 h-4 text-amber-600" />;
-                        colorClass = "bg-amber-50 text-amber-600 border-amber-200";
-                      } else if (act.type === 'assignment') {
-                        actIcon = <FileCode className="w-4 h-4 text-emerald-600" />;
+                      } else if (act.type === 'enrollment') {
+                        actIcon = <BookOpen className="w-4 h-4 text-emerald-600" />;
                         colorClass = "bg-emerald-50 text-emerald-600 border-emerald-200";
-                      } else if (act.type === 'resource') {
-                        actIcon = <Download className="w-4 h-4 text-purple-600" />;
-                        colorClass = "bg-purple-50 text-purple-600 border-purple-200";
                       } else if (act.type === 'cert') {
-                        actIcon = <Award className="w-4 h-4 text-purple-600" />;
-                        colorClass = "bg-purple-50 text-purple-600 border-purple-200";
+                        actIcon = <Award className="w-4 h-4 text-amber-600" />;
+                        colorClass = "bg-amber-50 text-amber-600 border-amber-200";
                       }
                       
                       return (
@@ -409,16 +397,9 @@ export default function StudentDetailDrawer({ enrollmentId, onClose }: StudentDe
                           <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-baseline gap-2">
                               <h4 className="font-bold text-[#06091a] text-[11px] truncate leading-tight">{act.title}</h4>
-                              <span className="text-[9.5px] text-[#737373] font-medium shrink-0">{act.time}</span>
+                              <span className="text-[9.5px] text-[#737373] font-medium shrink-0">{formatTimeAgo(act.time)}</span>
                             </div>
                             <p className="text-[#595959] font-medium text-[10px] mt-1 leading-relaxed">{act.desc}</p>
-                            
-                            {/* Visual pill for nộp bài tập */}
-                            {act.type === 'assignment' && (
-                              <span className="inline-flex items-center gap-1 text-[8.5px] bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 px-2 py-0.5 rounded-lg mt-2 uppercase tracking-wide">
-                                <Check className="w-3 h-3" /> Đạt
-                              </span>
-                            )}
                           </div>
                         </div>
                       );

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Upload, X, Film, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import { ApiService } from '../../services/api';
+import { getVideoDurationSecondsFromFile, resolveMediaUrl } from '../../utils/format';
 
 interface UploaderProps {
   value: string;
@@ -12,25 +13,61 @@ interface UploaderProps {
 export const InstructorImageUploader: React.FC<UploaderProps> = ({ value, onChange, label }) => {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const resolvedImageUrl = previewUrl || resolveMediaUrl(value);
 
   const processFile = async (file: File) => {
     setError(null);
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setError('Chỉ chấp nhận định dạng JPG, PNG hoặc WEBP.');
+    const allowedMimes = ['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png', 'image/webp'];
+    const hasValidExt = /\.(jpg|jpeg|png|webp)$/i.test(file.name);
+    
+    if (!allowedMimes.includes(file.type.toLowerCase()) && !hasValidExt) {
+      setError('Chỉ chấp nhận ảnh JPG, JPEG, PNG hoặc WEBP.');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setError('Dung lượng hình ảnh không được vượt quá 5MB.');
+      setError('Ảnh không được vượt quá 5MB.');
       return;
     }
+
+    const localBlobUrl = URL.createObjectURL(file);
+    setPreviewUrl(localBlobUrl);
 
     try {
       setUploading(true);
       const res = await ApiService.uploadInstructorFile(file, 'course_thumbnail');
-      onChange(res.url);
-    } catch (e) {
-      setError('Tải lên thất bại. Vui lòng thử lại.');
+      if (res && res.url) {
+        onChange(res.url);
+        if (localBlobUrl) {
+          URL.revokeObjectURL(localBlobUrl);
+        }
+        setPreviewUrl(null);
+      } else {
+        throw new Error('Không nhận được URL ảnh từ máy chủ.');
+      }
+    } catch (e: any) {
+      console.error('[Upload Thumbnail Error]', e);
+      let errorMsg = 'Tải lên thất bại. Vui lòng thử lại.';
+      if (e.status === 413) {
+        errorMsg = 'Ảnh vượt quá dung lượng máy chủ cho phép.';
+      } else if (e.status === 422) {
+        errorMsg = e.message || 'Chỉ chấp nhận ảnh JPG, JPEG, PNG hoặc WEBP (tối đa 5MB).';
+      } else if (e.status === 401) {
+        errorMsg = 'Phiên đăng nhập đã hết hạn.';
+      } else if (e.status === 403) {
+        errorMsg = 'Bạn không có quyền cập nhật khóa học này.';
+      } else if (e.status === 500) {
+        errorMsg = 'Máy chủ không thể lưu ảnh. Vui lòng thử lại.';
+      } else if (e.message) {
+        errorMsg = e.message;
+      }
+      setError(errorMsg);
+      if (localBlobUrl) {
+        URL.revokeObjectURL(localBlobUrl);
+      }
+      setPreviewUrl(null);
     } finally {
       setUploading(false);
     }
@@ -43,9 +80,9 @@ export const InstructorImageUploader: React.FC<UploaderProps> = ({ value, onChan
         onClick={() => fileInputRef.current?.click()}
         className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:bg-slate-50 cursor-pointer transition-all"
       >
-        {value ? (
+        {resolvedImageUrl ? (
           <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-            <img src={value} alt="Preview" className="w-full max-h-32 object-cover rounded-lg border" />
+            <img src={resolvedImageUrl} alt="Preview" className="w-full max-h-32 object-cover rounded-lg border" />
             <button 
               type="button" 
               onClick={() => onChange('')}
@@ -76,11 +113,46 @@ export const InstructorImageUploader: React.FC<UploaderProps> = ({ value, onChan
 };
 
 // 2. Video Uploader
-export const InstructorVideoUploader: React.FC<UploaderProps & { type: 'course_intro_video' | 'lesson_video' }> = ({ value, onChange, label, type }) => {
+export const InstructorVideoUploader: React.FC<UploaderProps & { 
+  type: 'course_intro_video' | 'lesson_video';
+  onDurationExtracted?: (seconds: number) => void;
+}> = ({ value, onChange, label, type, onDurationExtracted }) => {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const activeBlobUrlRef = useRef<string | null>(null);
+
+  const currentDisplayUrl = previewBlobUrl || value;
+  const resolvedVideoUrl = resolveMediaUrl(currentDisplayUrl);
+
+  // Call video.load() when resolved URL changes
+  React.useEffect(() => {
+    if (videoRef.current && resolvedVideoUrl) {
+      videoRef.current.load();
+    }
+  }, [resolvedVideoUrl]);
+
+  // Clean up blob URL on unmount or before creating new one
+  React.useEffect(() => {
+    return () => {
+      if (activeBlobUrlRef.current) {
+        URL.revokeObjectURL(activeBlobUrlRef.current);
+        activeBlobUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleClearVideo = () => {
+    if (activeBlobUrlRef.current) {
+      URL.revokeObjectURL(activeBlobUrlRef.current);
+      activeBlobUrlRef.current = null;
+    }
+    setPreviewBlobUrl(null);
+    onChange('');
+  };
 
   const processFile = async (file: File) => {
     setError(null);
@@ -93,6 +165,20 @@ export const InstructorVideoUploader: React.FC<UploaderProps & { type: 'course_i
       return;
     }
 
+    // Revoke previous blob URL if any
+    if (activeBlobUrlRef.current) {
+      URL.revokeObjectURL(activeBlobUrlRef.current);
+    }
+    const newBlobUrl = URL.createObjectURL(file);
+    activeBlobUrlRef.current = newBlobUrl;
+    setPreviewBlobUrl(newBlobUrl);
+
+    if (onDurationExtracted) {
+      getVideoDurationSecondsFromFile(file)
+        .then((sec) => onDurationExtracted(sec))
+        .catch((err) => console.warn('Could not extract duration:', err));
+    }
+
     try {
       setUploading(true);
       setProgress(10);
@@ -103,13 +189,34 @@ export const InstructorVideoUploader: React.FC<UploaderProps & { type: 'course_i
       const res = await ApiService.uploadInstructorFile(file, type);
       clearInterval(progressTimer);
       setProgress(100);
+
+      // Once backend upload succeeds, switch to Backend URL and revoke blob URL
       setTimeout(() => {
+        if (activeBlobUrlRef.current) {
+          URL.revokeObjectURL(activeBlobUrlRef.current);
+          activeBlobUrlRef.current = null;
+        }
+        setPreviewBlobUrl(null);
         onChange(res.url);
         setUploading(false);
       }, 300);
-    } catch (e) {
-      setError('Tải lên video thất bại.');
+    } catch (e: any) {
+      if (activeBlobUrlRef.current) {
+        URL.revokeObjectURL(activeBlobUrlRef.current);
+        activeBlobUrlRef.current = null;
+      }
+      setPreviewBlobUrl(null);
       setUploading(false);
+
+      if (!value) {
+        // Create Mode (no initial video existed)
+        onChange('');
+        if (onDurationExtracted) onDurationExtracted(0);
+        setError('Tải video thất bại. Vui lòng chọn lại video.');
+      } else {
+        // Edit Mode (keep previous video URL)
+        setError('Tải video mới thất bại. Video hiện tại vẫn được giữ nguyên.');
+      }
     }
   };
 
@@ -120,18 +227,49 @@ export const InstructorVideoUploader: React.FC<UploaderProps & { type: 'course_i
         onClick={() => fileInputRef.current?.click()}
         className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:bg-slate-50 cursor-pointer transition-all"
       >
-        {value ? (
+        {resolvedVideoUrl ? (
           <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
             <div className="aspect-video max-h-32 bg-black rounded-lg overflow-hidden border">
-              <video src={value} controls className="w-full h-full object-contain" />
+              <video 
+                ref={videoRef}
+                key={resolvedVideoUrl}
+                controls 
+                preload="metadata"
+                playsInline
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  const v = e.currentTarget;
+                  console.error('[Video Error Details]', {
+                    networkState: v.networkState,
+                    readyState: v.readyState,
+                    error: v.error ? { code: v.error.code, message: v.error.message } : null,
+                    src: resolvedVideoUrl,
+                  });
+                }}
+              >
+                <source 
+                  src={resolvedVideoUrl} 
+                  type={resolvedVideoUrl.endsWith('.webm') ? 'video/webm' : resolvedVideoUrl.endsWith('.mov') ? 'video/quicktime' : 'video/mp4'} 
+                />
+                Trình duyệt không hỗ trợ phát định dạng video này.
+              </video>
             </div>
-            <button 
-              type="button" 
-              onClick={() => onChange('')}
-              className="text-rose-500 hover:underline font-bold text-[10px] cursor-pointer"
-            >
-              Xóa video
-            </button>
+            <div className="flex items-center justify-between gap-2 border-t pt-2">
+              <button 
+                type="button" 
+                onClick={() => fileInputRef.current?.click()}
+                className="text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1 rounded-lg font-bold text-[10px] cursor-pointer transition-colors"
+              >
+                Thay đổi video
+              </button>
+              <button 
+                type="button" 
+                onClick={handleClearVideo}
+                className="text-rose-600 hover:text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 px-3 py-1 rounded-lg font-bold text-[10px] cursor-pointer transition-colors"
+              >
+                Xóa video
+              </button>
+            </div>
           </div>
         ) : (
           <div className="py-2">
@@ -163,7 +301,7 @@ export const InstructorVideoUploader: React.FC<UploaderProps & { type: 'course_i
 
 // 3. Asset Uploader
 interface AssetUploaderProps {
-  onAssetUploaded: (asset: { file_url: string; file_name: string; file_type: string; file_size: number }) => void;
+  onAssetUploaded: (asset: { file_url: string; file_name: string; file_type: string; file_size: number; file?: File }) => void;
   label?: string;
 }
 
@@ -174,8 +312,17 @@ export const InstructorAssetUploader: React.FC<AssetUploaderProps> = ({ onAssetU
 
   const processFile = async (file: File) => {
     setError(null);
-    if (file.size > 20 * 1024 * 1024) {
-      setError('Dung lượng tài liệu không được vượt quá 20MB.');
+
+    const allowedExts = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'csv', 'zip', 'rar', '7z', 'jpg', 'jpeg', 'png', 'webp'];
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+
+    if (!allowedExts.includes(ext)) {
+      setError('Định dạng tài liệu không được hỗ trợ (chấp nhận PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, TXT, CSV, ZIP, RAR, 7Z, JPG, PNG).');
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      setError('Dung lượng tài liệu không được vượt quá 50MB.');
       return;
     }
 
@@ -183,13 +330,30 @@ export const InstructorAssetUploader: React.FC<AssetUploaderProps> = ({ onAssetU
       setUploading(true);
       const res = await ApiService.uploadInstructorFile(file, 'lesson_asset');
       onAssetUploaded({
+        file,
         file_url: res.url,
         file_name: file.name,
-        file_type: file.name.split('.').pop() || 'pdf',
+        file_type: ext || 'pdf',
         file_size: file.size
       });
-    } catch (e) {
-      setError('Tải lên tài liệu thất bại.');
+    } catch (e: any) {
+      let msg = 'Tải lên tài liệu thất bại.';
+      if (e?.status === 413) {
+        msg = 'Tệp vượt quá dung lượng máy chủ cho phép (tối đa 50MB).';
+      } else if (e?.status === 422) {
+        msg = e.errors?.file?.[0] || e.message || 'Định dạng tài liệu không được hỗ trợ.';
+      } else if (e?.status === 401) {
+        msg = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+      } else if (e?.status === 403) {
+        msg = 'Bạn không có quyền thêm tài liệu vào bài học này.';
+      } else if (e?.status === 404) {
+        msg = 'Không tìm thấy bài học.';
+      } else if (e?.status === 500) {
+        msg = 'Máy chủ không thể lưu tài liệu. Vui lòng thử lại sau.';
+      } else if (e?.message) {
+        msg = e.message;
+      }
+      setError(msg);
     } finally {
       setUploading(false);
     }
@@ -211,8 +375,9 @@ export const InstructorAssetUploader: React.FC<AssetUploaderProps> = ({ onAssetU
         ref={fileInputRef} 
         onChange={(e) => { if (e.target.files?.[0]) processFile(e.target.files[0]); }}
         className="hidden" 
+        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.zip,.rar,.7z,.jpg,.jpeg,.png,.webp"
       />
-      {error && <div className="text-[9px] text-rose-500 font-bold">{error}</div>}
+      {error && <div className="text-[9.5px] text-rose-500 font-bold bg-rose-50 p-2 rounded-lg border border-rose-200 mt-1">{error}</div>}
     </div>
   );
 };

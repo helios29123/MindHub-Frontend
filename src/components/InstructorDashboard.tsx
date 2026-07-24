@@ -1,11 +1,60 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Users, DollarSign, BookOpen, Clock, Plus, BarChart2, CheckCircle, 
   Settings, UserCheck, ShieldAlert, ArrowUpRight, FileText, Send, Trash2,
   Eye, EyeOff, Edit, PlusCircle, MinusCircle, Save, Check, ChevronRight, ChevronLeft,
-  AlertTriangle, Play, HelpCircle, Lock, Sparkles, Upload, ArrowUp, ArrowDown, Shield, Key, Smartphone, Mail, X, List, AlertCircle, Search, LayoutDashboard, Activity, MessageSquare, Tag, Landmark, Bell, Filter
+  AlertTriangle, Play, HelpCircle, Lock, Sparkles, Upload, ArrowUp, ArrowDown, Shield, Key, Smartphone, Mail, X, List, AlertCircle, Search, LayoutDashboard, Activity, MessageSquare, Tag, Landmark, Bell, Filter, RotateCcw, Menu
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
+import SubmitErrorModal from './instructor-course-form/SubmitErrorModal';
+import { resolveMediaUrl as formatResolveMediaUrl, mapLesson } from '../utils/format';
+import { InstructorSidebar } from './instructor-ui/InstructorSidebar';
+import { InstructorNotificationDropdown } from './instructor-ui/InstructorNotificationDropdown';
+import { getActiveNavigationKey, getBreadcrumbLabel, InstructorNavItem } from '../config/instructorNavigation';
+
+// --- HELPER COMPONENT FOR THUMBNAILS WITH FALLBACK ---
+const CourseThumbnail = ({ src, alt }: { src: string; alt: string }) => {
+  const [imgError, setImgError] = useState(false);
+
+  if (imgError || !src) {
+    return (
+      <div className="w-[88px] h-[50px] aspect-video bg-slate-100 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-stone-400 shrink-0 select-none">
+        <BookOpen className="w-5 h-5 text-stone-400" />
+        <span className="text-[7.5px] font-bold text-stone-400 mt-0.5 uppercase tracking-tighter">MindHub</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      onError={() => setImgError(true)}
+      className="w-[88px] h-[50px] aspect-video object-cover rounded-lg border border-slate-200/80 bg-slate-50 shrink-0"
+    />
+  );
+};
+
+// --- SKELETON LOADER FOR COURSE TABLE ---
+const CourseTableSkeleton = () => (
+  <div className="divide-y divide-slate-100 animate-pulse">
+    {[1, 2, 3, 4, 5].map((i) => (
+      <div key={i} className="p-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 flex-1">
+          <div className="w-[88px] h-[50px] bg-slate-200 rounded-lg shrink-0" />
+          <div className="space-y-2 flex-1">
+            <div className="h-3.5 bg-slate-200 rounded w-2/3" />
+            <div className="h-2.5 bg-slate-100 rounded w-1/3" />
+          </div>
+        </div>
+        <div className="h-6 w-20 bg-slate-100 rounded-full hidden md:block" />
+        <div className="h-4 w-12 bg-slate-100 rounded hidden md:block" />
+        <div className="h-4 w-20 bg-slate-100 rounded hidden md:block" />
+        <div className="h-7 w-28 bg-slate-200 rounded-lg" />
+      </div>
+    ))}
+  </div>
+);
 import { User, Course, Chapter, Lesson, Quiz, QuizQuestion, PayoutRequest } from '../types';
 import { safeLocalStorage as localStorage } from '../utils/safeStorage';
 import { ApiService } from '../services/api';
@@ -24,12 +73,49 @@ import InstructorProfilePage from './instructor-ui/InstructorProfilePage';
 
 interface InstructorDashboardProps {
   currentUser: User;
+  onUpdateUser?: (updatedUser: User) => void;
   courses: Course[];
   onCreateCourseDraft: (newC: Course) => void;
   onUpdateCourse: (c: Course) => void;
   onDeleteCourse: (courseId: string) => void;
   onClose: () => void;
 }
+
+// --- HELPER COMPONENT FOR USER AVATAR WITH INITIALS FALLBACK ---
+const UserAvatar = ({ name, src, size = 'sm' }: { name?: string; src?: string; size?: 'sm' | 'md' | 'lg' }) => {
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [src]);
+
+  const resolvedSrc = src ? formatResolveMediaUrl(src) : '';
+  const sizeClasses = size === 'lg' ? 'w-12 h-12 text-sm' : size === 'md' ? 'w-10 h-10 text-xs' : 'w-8 h-8 text-[11px]';
+
+  const getInitials = (str?: string) => {
+    if (!str) return 'GV';
+    const parts = str.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[parts.length - 2][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  if (!resolvedSrc || imgError) {
+    return (
+      <div className={`${sizeClasses} rounded-full bg-[#007A64] text-white font-bold flex items-center justify-center shrink-0 border border-emerald-600/30 select-none`}>
+        {getInitials(name)}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={resolvedSrc}
+      alt={name || 'Avatar'}
+      onError={() => setImgError(true)}
+      className={`${sizeClasses} rounded-full border border-slate-200/80 object-cover bg-slate-100 shrink-0`}
+    />
+  );
+};
 
 function InstructorSecurityPanel({ currentUser }: { currentUser: User }) {
   const [emailStatus, setEmailStatus] = useState(currentUser.isEmailVerified ? 'verified' : 'unverified');
@@ -303,6 +389,7 @@ function LaptopIcon() {
 
 export default function InstructorDashboard({
   currentUser,
+  onUpdateUser,
   courses,
   onCreateCourseDraft,
   onUpdateCourse,
@@ -310,21 +397,158 @@ export default function InstructorDashboard({
   onClose
 }: InstructorDashboardProps) {
   
-  // Tabs: 'overview' | 'revenue' | 'transactions' | 'courses' | 'grading' | 'qa' | 'builder' | 'students' | 'security' | 'coupons'
-  const [activeTab, setActiveTab] = useState<'overview' | 'revenue' | 'transactions' | 'courses' | 'grading' | 'qa' | 'builder' | 'students' | 'security' | 'coupons' | 'payout'>('overview');
+  // Helper: Parse current pathname and query into route state
+  const parseRouteFromLocation = () => {
+    if (typeof window === 'undefined') {
+      return { tab: 'overview' as const, courseId: null, step: 1 };
+    }
+    const pathname = window.location.pathname;
+    const search = window.location.search;
+    const urlParams = new URLSearchParams(search);
+    const stepParam = parseInt(urlParams.get('step') || '1', 10);
+    const validStep = (stepParam >= 1 && stepParam <= 4) ? stepParam : 1;
 
-  const [courseSearchQuery, setCourseSearchQuery] = useState('');
-  const [courseStatusFilter, setCourseStatusFilter] = useState('all');
-  
-  // --- BUILDER WIZARD STATES ---
-  const [builderStep, setBuilderStep] = useState<number>(1);
-  const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
+    if (pathname === '/instructor/courses/create') {
+      return { tab: 'builder' as const, courseId: null, step: validStep };
+    }
+
+    const editMatch = pathname.match(/\/instructor\/courses\/(\d+)\/edit/);
+    if (editMatch) {
+      return { tab: 'builder' as const, courseId: editMatch[1], step: validStep };
+    }
+
+    if (pathname.includes('/courses')) {
+      return { tab: 'courses' as const, courseId: null, step: 1 };
+    }
+    if (pathname.includes('/transactions')) {
+      return { tab: 'transactions' as const, courseId: null, step: 1 };
+    }
+    if (pathname.includes('/withdrawals') || pathname.includes('/revenues')) {
+      return { tab: 'payout' as const, courseId: null, step: 1 };
+    }
+    if (pathname.includes('/questions')) {
+      return { tab: 'qa' as const, courseId: null, step: 1 };
+    }
+    if (pathname.includes('/discount-codes') || pathname.includes('/coupons')) {
+      return { tab: 'coupons' as const, courseId: null, step: 1 };
+    }
+    if (pathname.includes('/profile') || pathname.includes('/security') || pathname.includes('/account')) {
+      return { tab: 'security' as const, courseId: null, step: 1 };
+    }
+
+    return { tab: 'overview' as const, courseId: null, step: 1 };
+  };
+
+  const initialRouteState = useMemo(() => parseRouteFromLocation(), []);
+  const [activeTab, setActiveTab] = useState<'overview' | 'revenue' | 'transactions' | 'courses' | 'grading' | 'qa' | 'builder' | 'students' | 'security' | 'coupons' | 'payout'>(initialRouteState.tab);
+  const [builderStep, setBuilderStep] = useState<number>(initialRouteState.step);
+  const [editingCourseId, setEditingCourseId] = useState<string | null>(initialRouteState.courseId);
+
+  const updateRouteUrl = (tab: string, courseId: string | null = null, step: number = 1, replace: boolean = false) => {
+    if (typeof window === 'undefined') return;
+    let targetUrl = '/instructor/dashboard';
+    if (tab === 'courses') {
+      targetUrl = '/instructor/courses';
+    } else if (tab === 'builder') {
+      if (courseId) {
+        targetUrl = `/instructor/courses/${courseId}/edit?step=${step}`;
+      } else {
+        targetUrl = `/instructor/courses/create?step=${step}`;
+      }
+    } else if (tab === 'transactions') {
+      targetUrl = '/instructor/transactions';
+    } else if (tab === 'payout') {
+      targetUrl = '/instructor/withdrawals';
+    } else if (tab === 'qa') {
+      targetUrl = '/instructor/questions';
+    } else if (tab === 'coupons') {
+      targetUrl = '/instructor/discount-codes';
+    } else if (tab === 'security') {
+      targetUrl = '/instructor/profile';
+    }
+
+    if (window.location.pathname + window.location.search !== targetUrl) {
+      if (replace) {
+        window.history.replaceState({}, '', targetUrl);
+      } else {
+        window.history.pushState({}, '', targetUrl);
+      }
+    }
+  };
+
+  const handleTabChange = (tab: 'overview' | 'revenue' | 'transactions' | 'courses' | 'grading' | 'qa' | 'builder' | 'students' | 'security' | 'coupons' | 'payout') => {
+    setActiveTab(tab);
+    updateRouteUrl(tab, editingCourseId, builderStep);
+  };
+
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState<number>(0);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchUnreadCount = async () => {
+      try {
+        const res = await ApiService.getInstructorUnreadNotificationCount();
+        if (isMounted) {
+          setUnreadNotificationCount(res?.unread_count ?? 0);
+        }
+      } catch {
+        if (isMounted) setUnreadNotificationCount(0);
+      }
+    };
+    fetchUnreadCount();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeTab]);
+
+  const activeNavKey = useMemo(() => {
+    return getActiveNavigationKey(
+      typeof window !== 'undefined' ? window.location.pathname : '',
+      activeTab,
+      builderStep
+    );
+  }, [activeTab, builderStep]);
+
+  const handleSidebarNavigate = (item: InstructorNavItem) => {
+    switch (item.key) {
+      case 'dashboard':
+        handleTabChange('overview');
+        break;
+      case 'courses':
+        handleTabChange('courses');
+        break;
+      case 'create-course':
+        startBuilderForCreate();
+        break;
+      case 'questions':
+        handleTabChange('qa');
+        break;
+      case 'students':
+        handleTabChange('students');
+        break;
+      case 'revenue':
+        handleTabChange('revenue');
+        break;
+      case 'withdrawals':
+        handleTabChange('payout');
+        break;
+      case 'discount-codes':
+        handleTabChange('coupons');
+        break;
+      case 'profile':
+        handleTabChange('security');
+        break;
+      default:
+        handleTabChange('overview');
+    }
+  };
   
   // Step 1: Basic Info
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('Development'); // strictly 'Development' | 'Artificial Intelligence'
+  const [category, setCategory] = useState('1'); // category ID integer string
   const [subcategory, setSubcategory] = useState('');
   const [price, setPrice] = useState<number>(500000);
   const [salePrice, setSalePrice] = useState<number>(350000);
@@ -332,11 +556,28 @@ export default function InstructorDashboard({
   const [requirements, setRequirements] = useState<string[]>(['Có máy tính cá nhân kết nối Internet']);
   const [newRequirement, setNewRequirement] = useState('');
   const [slug, setSlug] = useState('');
+  const [isManualSlug, setIsManualSlug] = useState<boolean>(false);
   const [level, setLevel] = useState('beginner');
   const [language, setLanguage] = useState('vi');
   const [introVideoUrl, setIntroVideoUrl] = useState('');
   const [willLearn, setWillLearn] = useState<string[]>(['Lập trình thành thạo ngôn ngữ ứng dụng với thực tế']);
   const [newWillLearn, setNewWillLearn] = useState('');
+
+  // Categories & Autosave States
+  const [dbCategories, setDbCategories] = useState<{ id: number | string; name: string; slug?: string }[]>([]);
+  const [isSavingDraft, setIsSavingDraft] = useState<boolean>(false);
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
+  const [submitErrorModalState, setSubmitErrorModalState] = useState<{
+    isOpen: boolean;
+    title?: string;
+    message?: string;
+    status?: number | null;
+    errors?: any;
+    missingItems?: string[];
+  }>({
+    isOpen: false,
+  });
 
   // Step 2: Syllabus (Chapters & Lessons)
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -349,7 +590,7 @@ export default function InstructorDashboard({
   const [newLessonTitle, setNewLessonTitle] = useState('');
   const [newLessonType, setNewLessonType] = useState<'video' | 'doc'>('video');
   const [newLessonDuration, setNewLessonDuration] = useState('15:00');
-  const [newLessonVideoUrl, setNewLessonVideoUrl] = useState('https://www.youtube.com/embed/dQw4w9WgXcQ');
+  const [newLessonVideoUrl, setNewLessonVideoUrl] = useState('');
   const [newLessonDocContent, setNewLessonDocContent] = useState('');
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
   const [newLessonIsPreview, setNewLessonIsPreview] = useState<boolean>(false);
@@ -411,9 +652,216 @@ export default function InstructorDashboard({
   const [overviewBalance, setOverviewBalance] = useState<number>(0);
   const [overviewUnansweredQA, setOverviewUnansweredQA] = useState<number>(0);
 
-  // Fetch stats when user changes
+  // --- REAL API DASHBOARD OVERVIEW STATES ---
+  const [dashboardOverview, setDashboardOverview] = useState<any>(null);
+  const [revenueChartData, setRevenueChartData] = useState<any[]>([]);
+  const [enrollmentChartData, setEnrollmentChartData] = useState<any[]>([]);
+  const [topCoursesData, setTopCoursesData] = useState<any[]>([]);
+  const [unansweredQuestions, setUnansweredQuestions] = useState<any[]>([]);
+  const [incompleteCoursesData, setIncompleteCoursesData] = useState<any[]>([]);
+  const [dashboardAlerts, setDashboardAlerts] = useState<any[]>([]);
+
+  // Loading states
+  const [isOverviewLoading, setIsOverviewLoading] = useState(false);
+  const [isRevenueChartLoading, setIsRevenueChartLoading] = useState(false);
+  const [isEnrollmentChartLoading, setIsEnrollmentChartLoading] = useState(false);
+  const [isSupportingLoading, setIsSupportingLoading] = useState(false);
+
+  // Time filters for charts
+  const [revenueTimeFilter, setRevenueTimeFilter] = useState<'month' | 'week' | 'year'>('month');
+  const [enrollmentTimeFilter, setEnrollmentTimeFilter] = useState<'month' | 'week' | 'year'>('month');
+
+  // Helper date resolver
+  const resolveDateFilter = (filterType: 'month' | 'week' | 'year') => {
+    const now = new Date();
+    let date_from: string;
+    let date_to: string = now.toISOString().split('T')[0];
+
+    if (filterType === 'week') {
+      const past = new Date();
+      past.setDate(now.getDate() - 7);
+      date_from = past.toISOString().split('T')[0];
+    } else if (filterType === 'year') {
+      date_from = `${now.getFullYear()}-01-01`;
+    } else {
+      const past = new Date();
+      past.setDate(now.getDate() - 30);
+      date_from = past.toISOString().split('T')[0];
+    }
+    return { date_from, date_to };
+  };
+
+  // Loader functions
+  const loadOverviewData = async () => {
+    setIsOverviewLoading(true);
+    try {
+      const res = await ApiService.getInstructorDashboard();
+      setDashboardOverview(res);
+    } catch (err: any) {
+      console.error("Error loading dashboard overview stats:", err);
+    } finally {
+      setIsOverviewLoading(false);
+    }
+  };
+
+  const loadRevenueChart = async (filterType: 'month' | 'week' | 'year') => {
+    setIsRevenueChartLoading(true);
+    try {
+      const dates = resolveDateFilter(filterType);
+      const res = await ApiService.getInstructorRevenueChart({
+        ...dates,
+        group_by: filterType === 'week' ? 'day' : 'month'
+      });
+      setRevenueChartData(res || []);
+    } catch (err: any) {
+      console.error("Error loading revenue chart data:", err);
+    } finally {
+      setIsRevenueChartLoading(false);
+    }
+  };
+
+  const loadEnrollmentChart = async (filterType: 'month' | 'week' | 'year') => {
+    setIsEnrollmentChartLoading(true);
+    try {
+      const dates = resolveDateFilter(filterType);
+      const res = await ApiService.getInstructorEnrollmentChart({
+        ...dates,
+        group_by: filterType === 'week' ? 'day' : 'month'
+      });
+      setEnrollmentChartData(res || []);
+    } catch (err: any) {
+      console.error("Error loading enrollment chart data:", err);
+    } finally {
+      setIsEnrollmentChartLoading(false);
+    }
+  };
+
+  const loadSupportingSections = async () => {
+    setIsSupportingLoading(true);
+    await Promise.allSettled([
+      ApiService.getInstructorTopCourses({ limit: 5 }).then(res => {
+        setTopCoursesData(res || []);
+      }).catch(err => console.error("Error loading top courses:", err)),
+
+      ApiService.getInstructorUnansweredQuestions({ per_page: 3 }).then(res => {
+        const questionsList = res?.data?.list?.data || res?.data?.items || res?.data || [];
+        setUnansweredQuestions(questionsList);
+      }).catch(err => console.error("Error loading unanswered questions:", err)),
+
+      ApiService.getInstructorIncompleteCourses().then(res => {
+        setIncompleteCoursesData(res || []);
+      }).catch(err => console.error("Error loading incomplete courses:", err)),
+
+      ApiService.getInstructorDashboardAlerts({ limit: 3 }).then(res => {
+        setDashboardAlerts(res || []);
+      }).catch(err => console.error("Error loading dashboard alerts:", err))
+    ]);
+    setIsSupportingLoading(false);
+  };
+
+  const [isAllAlertsExpanded, setIsAllAlertsExpanded] = useState(false);
+
+  const handleContinueIncompleteCourse = (ic: any) => {
+    const courseId = String(ic.id);
+    const found = allInstructorCourses.find(c => String(c.id) === courseId);
+    if (found) {
+      startBuilderForEdit(found);
+    } else {
+      const courseObj: any = {
+        id: courseId,
+        title: ic.title || 'Khóa học',
+        description: '',
+        category: 'Development',
+        price: 0,
+        rating: 5,
+        reviewCount: 0,
+        enrolledCount: 0,
+        instructorName: currentUser.name,
+        instructorId: currentUser.id,
+        image: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=800',
+        status: ic.status || 'draft',
+        completionRate: ic.progress ?? ic.completion_percentage ?? 0,
+        level: 'beginner',
+        chapters: []
+      };
+      startBuilderForEdit(courseObj);
+    }
+  };
+
+  const resolveInstructorActionUrl = (actionUrl: string | null | undefined): { tab?: any; action?: () => void } | null => {
+    if (!actionUrl) return null;
+
+    const url = actionUrl.trim();
+
+    if (url.includes('/instructor/questions')) {
+      return { tab: 'qa' };
+    }
+    if (url.includes('/instructor/revenues')) {
+      return { tab: 'revenue' };
+    }
+    if (url.includes('/instructor/withdrawals')) {
+      return { tab: 'payout' };
+    }
+    if (url.includes('/instructor/courses')) {
+      const courseIdMatch = url.match(/\/instructor\/courses\/(\d+)/);
+      if (courseIdMatch) {
+        const courseId = courseIdMatch[1];
+        return { action: () => handleContinueIncompleteCourse({ id: courseId }) };
+      }
+      return { tab: 'courses' };
+    }
+
+    return null;
+  };
+
+  const handleAlertClick = (n: any) => {
+    const target = resolveInstructorActionUrl(n.action_url);
+    if (target) {
+      if (target.action) {
+        target.action();
+      } else if (target.tab) {
+        setActiveTab(target.tab);
+      }
+    }
+  };
+
+  const handleViewAllAlerts = async () => {
+    if (isAllAlertsExpanded) {
+      setIsAllAlertsExpanded(false);
+      loadSupportingSections();
+    } else {
+      try {
+        const res = await ApiService.getInstructorDashboardAlerts({ limit: 20 });
+        setDashboardAlerts(res || []);
+        setIsAllAlertsExpanded(true);
+      } catch (err) {
+        console.error("Error fetching all alerts:", err);
+      }
+    }
+  };
+
   useEffect(() => {
-    if (currentUser?.id && currentUser.role === 'instructor') {
+    if (activeTab === 'overview' && ApiService.getConfig().mode === 'api') {
+      loadOverviewData();
+      loadSupportingSections();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'overview' && ApiService.getConfig().mode === 'api') {
+      loadRevenueChart(revenueTimeFilter);
+    }
+  }, [activeTab, revenueTimeFilter]);
+
+  useEffect(() => {
+    if (activeTab === 'overview' && ApiService.getConfig().mode === 'api') {
+      loadEnrollmentChart(enrollmentTimeFilter);
+    }
+  }, [activeTab, enrollmentTimeFilter]);
+
+  // Fetch stats when user changes (Mock mode fallback only)
+  useEffect(() => {
+    if (currentUser?.id && currentUser.role === 'instructor' && ApiService.getConfig().mode === 'mock') {
       ApiService.getInstructorEnrollmentStats(currentUser.id).then(res => {
         setTotalEnrollments(res.totalEnrollments);
       }).catch(err => console.error("Error fetching enrollment stats", err));
@@ -478,28 +926,278 @@ export default function InstructorDashboard({
     rejected: allInstructorCourses.filter(c => !(c as any).deleted_at && c.status === 'rejected').length,
   };
 
-  const overviewStats = baseOverviewStats.total > 0 ? baseOverviewStats : {
-    total: 12, published: 8, draft: 2, pending: 1, rejected: 1
-  };
+  const isApiMode = ApiService.getConfig().mode === 'api';
 
-  const displayTotalEnrollments = totalEnrollments > 0 ? totalEnrollments : 1250;
-  const displayTotalRevenue = revenueStats.totalRevenue > 0 ? revenueStats.totalRevenue : 45000000;
-  const displayOverviewBalance = overviewBalance > 0 ? overviewBalance : 15500000;
-  const displayOverviewUnansweredQA = overviewUnansweredQA > 0 ? overviewUnansweredQA : 5;
+  const overviewStats = isApiMode && dashboardOverview
+    ? {
+        total: dashboardOverview.course_summary?.total || 0,
+        published: dashboardOverview.course_summary?.published || 0,
+        draft: dashboardOverview.course_summary?.draft || 0,
+        pending: dashboardOverview.course_summary?.pending_review || 0,
+        rejected: dashboardOverview.course_summary?.rejected || 0,
+      }
+    : baseOverviewStats;
+
+  const displayTotalEnrollments = isApiMode && dashboardOverview
+    ? (dashboardOverview.enrollment_summary?.unique_learners ?? dashboardOverview.enrollment_summary?.total_students ?? dashboardOverview.enrollment_summary?.total_enrollments ?? 0)
+    : totalEnrollments;
+
+  const displayTotalRevenue = isApiMode && dashboardOverview
+    ? parseFloat(dashboardOverview.revenue_summary?.instructor_amount_this_month || '0')
+    : revenueStats.totalRevenue;
+
+  const displayOverviewBalance = isApiMode && dashboardOverview
+    ? parseFloat(dashboardOverview.withdraw_summary?.available_balance || '0')
+    : overviewBalance;
+
+  const displayOverviewUnansweredQA = isApiMode && dashboardOverview
+    ? dashboardOverview.interaction_summary?.unanswered_questions || 0
+    : overviewUnansweredQA;
+
+  const revenueChangePercentage = dashboardOverview?.revenue_summary?.change_percentage;
+  const enrollmentChangePercentage = dashboardOverview?.enrollment_summary?.change_percentage;
 
   const recentCourses = [...allInstructorCourses].sort((a, b) => {
     if (a.createdAt && b.createdAt) return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     return 0;
   }).slice(0, 5);
 
-  const [courseFilterStatus, setCourseFilterStatus] = useState<string>('all');
-  const instructorCourses = courseFilterStatus === 'all' 
-    ? allInstructorCourses 
-    : allInstructorCourses.filter(c => 
-        courseFilterStatus === 'active' ? (c.status === 'active' || (c.status as any) === 'published') : 
-        courseFilterStatus === 'pending' ? ((c.status as any) === 'pending_review' || c.status === 'pending') : 
-        c.status === courseFilterStatus
-      );
+  // --- MY COURSES REAL API STATES & FILTERS ---
+  const [apiCourses, setApiCourses] = useState<Course[]>([]);
+  const [apiCoursesMeta, setApiCoursesMeta] = useState<{ current_page: number; last_page: number; per_page: number; total: number }>({
+    current_page: 1,
+    last_page: 1,
+    per_page: 10,
+    total: 0,
+  });
+  const [isCoursesLoading, setIsCoursesLoading] = useState(false);
+  const [coursesError, setCoursesError] = useState<string | null>(null);
+
+  const [courseStatusFilter, setCourseStatusFilter] = useState<string>('all');
+  const [courseCategoryFilter, setCourseCategoryFilter] = useState<string>('all');
+  const [courseSearchQuery, setCourseSearchQuery] = useState<string>('');
+  const [debouncedCourseSearch, setDebouncedCourseSearch] = useState<string>('');
+  const [courseSortBy, setCourseSortBy] = useState<string>('newest');
+  const [coursePage, setCoursePage] = useState<number>(1);
+  const [categoriesList, setCategoriesList] = useState<any[]>([]);
+
+  // Debounce search query
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedCourseSearch(courseSearchQuery);
+      setCoursePage(1);
+    }, 400);
+    return () => clearTimeout(handler);
+  }, [courseSearchQuery]);
+
+  // Load categories
+  useEffect(() => {
+    if (activeTab === 'courses' && ApiService.getConfig().mode === 'api') {
+      ApiService.getCategories()
+        .then(res => {
+          const list = Array.isArray(res) ? res : (res as any)?.data || [];
+          setCategoriesList(list);
+        })
+        .catch(err => console.error("Error loading categories:", err));
+    }
+  }, [activeTab]);
+
+  // Load instructor courses list
+  const loadInstructorCoursesList = async () => {
+    if (ApiService.getConfig().mode !== 'api') return;
+    setIsCoursesLoading(true);
+    setCoursesError(null);
+    try {
+      const res: any = await ApiService.getInstructorCourses({
+        page: coursePage,
+        per_page: 10,
+        status: courseStatusFilter,
+        search: debouncedCourseSearch,
+        sort: courseSortBy,
+      });
+
+      const rawItems = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      const meta = res.meta || res.data?.meta || {
+        current_page: res.data?.current_page || 1,
+        last_page: res.data?.last_page || 1,
+        per_page: res.data?.per_page || 10,
+        total: res.data?.total || rawItems.length,
+      };
+
+      const mapped = rawItems.map((item: any) => {
+        const categoryName = item.categories && item.categories.length > 0
+          ? item.categories[0].name
+          : (item.category || 'Chưa phân loại');
+
+        let image = item.thumbnail_url || item.image || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=800';
+        if (image && !image.startsWith('http://') && !image.startsWith('https://') && !image.startsWith('data:')) {
+          const apiBase = ApiService.getConfig().baseUrl.replace(/\/api\/?$/, '');
+          image = `${apiBase}${image.startsWith('/') ? '' : '/'}${image}`;
+        }
+
+        let normalizedStatus = item.status || 'draft';
+        if (normalizedStatus === 'published' || normalizedStatus === 'approved') {
+          normalizedStatus = 'active';
+        } else if (normalizedStatus === 'pending_review') {
+          normalizedStatus = 'pending';
+        }
+
+        return {
+          id: String(item.id),
+          title: item.title || 'Khóa học',
+          subtitle: item.short_description || '',
+          description: item.description || item.short_description || '',
+          category: categoryName,
+          category_id: item.categories && item.categories.length > 0 ? item.categories[0].id : item.category_id,
+          subcategory: '',
+          price: typeof item.price === 'number' ? item.price : parseFloat(item.price || 0),
+          salePrice: item.sale_price !== null && item.sale_price !== undefined ? parseFloat(item.sale_price) : undefined,
+          rating: item.rating ? parseFloat(item.rating) : 5.0,
+          reviewCount: item.review_count || item.reviews_count || 0,
+          enrolledCount: item.enrollment_count || item.enrollments_count || 0,
+          revenue: typeof item.revenue_amount === 'number' ? item.revenue_amount : (parseFloat(item.revenue || '0') || 0),
+          revenueAmount: typeof item.revenue_amount === 'number' ? item.revenue_amount : (parseFloat(item.revenue || '0') || 0),
+          completionRate: item.completion_percentage || 0,
+          image,
+          instructorId: String(item.instructor_id || currentUser.id),
+          instructorName: currentUser.name,
+          instructorTitle: 'Giảng viên chuyên môn tại MindHub',
+          instructorAvatar: currentUser.avatar,
+          instructorBio: currentUser.bio || '',
+          status: normalizedStatus as any,
+          rawStatus: item.status,
+          statusLabel: item.status_label,
+          createdAt: item.created_at || item.createdAt,
+          updatedAt: item.updated_at || item.updatedAt,
+          rejectionReason: item.admin_reject_reason || item.rejectionReason,
+          chapters: [],
+        } as Course;
+      });
+
+      let finalMapped = mapped;
+      if (courseCategoryFilter !== 'all') {
+        finalMapped = mapped.filter((c: any) => String(c.category_id) === String(courseCategoryFilter) || c.category === courseCategoryFilter);
+      }
+
+      setApiCourses(finalMapped);
+      setApiCoursesMeta(meta);
+    } catch (err: any) {
+      console.error("Error loading instructor courses:", err);
+      setCoursesError(err.message || "Không thể tải danh sách khóa học.");
+    } finally {
+      setIsCoursesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'courses' && ApiService.getConfig().mode === 'api') {
+      loadInstructorCoursesList();
+      loadOverviewData();
+    }
+  }, [activeTab, coursePage, courseStatusFilter, debouncedCourseSearch, courseSortBy, courseCategoryFilter]);
+
+  // Load categories from API
+  useEffect(() => {
+    if (ApiService.getConfig().mode === 'api') {
+      ApiService.getCategories().then((cats: any) => {
+        const list = Array.isArray(cats) ? cats : (cats?.data || []);
+        if (list.length > 0) {
+          setDbCategories(list);
+          if (!category || category === 'Development' || isNaN(Number(category))) {
+            setCategory(String(list[0].id));
+          }
+        }
+      }).catch(err => console.warn("Failed to fetch categories:", err));
+    }
+  }, []);
+
+  // Load course details if initial route is /instructor/courses/:id/edit
+  useEffect(() => {
+    const initRoute = parseRouteFromLocation();
+    if (initRoute.tab === 'builder' && initRoute.courseId) {
+      const numericId = parseInt(initRoute.courseId, 10);
+      if (!isNaN(numericId) && numericId > 0) {
+        startBuilderForEdit(initRoute.courseId);
+      }
+    }
+  }, []);
+
+  // Listen to browser Back/Forward navigation (popstate)
+  useEffect(() => {
+    const handlePopState = () => {
+      const nextState = parseRouteFromLocation();
+      setActiveTab(nextState.tab);
+      setBuilderStep(nextState.step);
+      setEditingCourseId(nextState.courseId);
+      if (nextState.tab === 'builder' && nextState.courseId) {
+        startBuilderForEdit(nextState.courseId);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Autosave effect (Debounced 1200ms)
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    if (activeTab !== 'builder' || ApiService.getConfig().mode !== 'api' || !title.trim()) {
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSavingDraft(true);
+      setAutosaveError(null);
+      try {
+        const selectedCatInt = parseInt(String(category), 10);
+        const validCategoryInt = (Number.isInteger(selectedCatInt) && selectedCatInt > 0)
+          ? selectedCatInt
+          : (dbCategories.length > 0 ? (parseInt(String(dbCategories[0].id), 10) || 1) : 1);
+
+        const payload = {
+          title: title.trim(),
+          slug: slug.trim() || undefined,
+          category_id: validCategoryInt,
+          category_ids: [validCategoryInt],
+          level,
+          language,
+          subtitle,
+          description,
+          price,
+          salePrice,
+          image,
+          introVideoUrl,
+          requirements,
+          willLearn,
+        };
+
+        if (editingCourseId) {
+          await ApiService.updateCourseDraft(editingCourseId, payload);
+          updateRouteUrl('builder', editingCourseId, builderStep, true);
+        } else {
+          const res = await ApiService.createCourseDraft(payload);
+          const newId = String(res.data?.id || res.id);
+          if (newId) {
+            setEditingCourseId(newId);
+            updateRouteUrl('builder', newId, builderStep, true);
+          }
+        }
+        const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        setLastSavedTime(timeStr);
+      } catch (err: any) {
+        console.warn("Autosave failed:", err);
+        setAutosaveError(err.message || "Tự động lưu thất bại.");
+      } finally {
+        setIsSavingDraft(false);
+      }
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [title, subtitle, description, category, price, salePrice, image, introVideoUrl, requirements, willLearn, slug, level, language, builderStep]);
 
   const rawInstructorCourses = courses.filter(c => c.instructorName === currentUser.name && c.status !== 'archived');
   const filteredInstructorCourses = rawInstructorCourses.filter(c => {
@@ -514,6 +1212,9 @@ export default function InstructorDashboard({
     if (courseStatusFilter === 'hidden') return c.isHidden;
     return true;
   });
+
+  const displayedCourses = isApiMode ? apiCourses : filteredInstructorCourses;
+  const totalCoursesCount = isApiMode ? (apiCoursesMeta.total || apiCourses.length) : filteredInstructorCourses.length;
   const totalStudents = rawInstructorCourses.reduce((sum, c) => sum + c.enrolledCount, 0);
   const mockupAverageCompletion = Math.round(rawInstructorCourses.reduce((sum, c) => sum + c.completionRate, 0) / (rawInstructorCourses.length || 1));
 
@@ -652,7 +1353,7 @@ export default function InstructorDashboard({
 
       setChapters(updated);
       setNewLessonTitle('');
-      setNewLessonVideoUrl('https://www.youtube.com/embed/dQw4w9WgXcQ');
+      setNewLessonVideoUrl('');
       setNewLessonDocContent('');
       setNewLessonIsPreview(false);
       setEditingLessonId(null);
@@ -664,7 +1365,8 @@ export default function InstructorDashboard({
         id: newLesId,
         title: newLessonTitle.trim(),
         type: newLessonType,
-        duration: newLessonDuration || '10:00',
+        duration: newLessonDuration || '00:00',
+        video_duration_seconds: newLessonDuration ? (newLessonDuration.split(':').reduce((acc, time) => (60 * acc) + +time, 0)) : 0,
         videoUrl: newLessonType === 'video' ? newLessonVideoUrl : undefined,
         docContent: newLessonType === 'doc' ? newLessonDocContent : undefined,
         content: newLessonType === 'doc' ? newLessonDocContent : 'Bài học video từ giảng viên.',
@@ -684,7 +1386,7 @@ export default function InstructorDashboard({
 
       setChapters(updated);
       setNewLessonTitle('');
-      setNewLessonVideoUrl('https://www.youtube.com/embed/dQw4w9WgXcQ');
+      setNewLessonVideoUrl('');
       setNewLessonDocContent('');
       setNewLessonIsPreview(false);
       alert('Đã thêm bài học vào giáo trình thành công!');
@@ -734,7 +1436,7 @@ export default function InstructorDashboard({
       }, 200);
     } else {
       // Real API Upload
-      ApiService.uploadLessonVideo(file, (progress, status) => {
+      ApiService.uploadLessonVideoWithProgress(file, (progress, status) => {
         setVideoUploadProgress(progress);
         setVideoUploadStatus(status);
       })
@@ -838,12 +1540,11 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
 
   // Launch unified wizard screen
   const startBuilderForCreate = () => {
-    
     setEditingCourseId(null);
     setTitle('');
     setSubtitle('');
     setDescription('');
-    setCategory('Development');
+    setCategory(dbCategories.length > 0 ? String(dbCategories[0].id) : '1');
     setSubcategory('');
     setPrice(500000);
     setSalePrice(350000);
@@ -860,99 +1561,278 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
     setFreeVideoDuration(30);
     setFaqs([]);
     setSlug('');
+    setIsManualSlug(false);
     setLevel('beginner');
     setLanguage('vi');
     setIntroVideoUrl('');
+    setLastSavedTime(null);
+    setAutosaveError(null);
     setBuilderStep(1);
     setActiveTab('builder');
+    updateRouteUrl('builder', null, 1);
   };
 
-  const startBuilderForEdit = (course: Course) => {
-    setEditingCourseId(course.id);
-    setTitle(course.title);
-    setSubtitle(course.subtitle || '');
-    setDescription(course.description || '');
-    setCategory(course.category || 'Development');
-    setSubcategory(course.subcategory || '');
-    setPrice(course.price || 0);
-    setSalePrice(course.salePrice || course.price);
-    setImage(course.image);
-    setRequirements(course.requirements || []);
-    setWillLearn(course.willLearn || []);
-    setChapters(course.chapters || []);
-    setAllowSkip(course.allowSkip !== undefined ? course.allowSkip : true);
-    setAllowDownload(course.allowDownload || false);
-    setAllowDiscussion(course.allowDiscussion !== undefined ? course.allowDiscussion : true);
-    setGiveCertificate(course.giveCertificate || false);
-    setAllowFreeDoc(course.allowFreeDoc || false);
-    setAllowFreeVideo(course.allowFreeVideo || false);
-    setFreeVideoDuration(course.freeVideoDuration || 30);
-    setFaqs(course.faqs || []);
-    setSlug(course.slug || '');
-    setLevel(course.level || 'beginner');
-    setLanguage(course.language || 'vi');
-    setIntroVideoUrl(course.introVideoUrl || '');
+  const startBuilderForEdit = async (courseOrId: Course | string | number) => {
+    const courseId = typeof courseOrId === 'object' ? String(courseOrId.id) : String(courseOrId);
+    const courseObj = typeof courseOrId === 'object' ? courseOrId : courses.find(c => String(c.id) === courseId);
+
+    setEditingCourseId(courseId);
     setBuilderStep(1);
     setActiveTab('builder');
+    updateRouteUrl('builder', courseId, 1);
+
+    if (ApiService.getConfig().mode === 'api') {
+      try {
+        const res = await ApiService.getCourseDetail(courseId);
+        const detail = res.data || res;
+        setTitle(detail.title || courseObj?.title || '');
+        setSubtitle(detail.short_description || courseObj?.subtitle || '');
+        setDescription(detail.description || courseObj?.description || '');
+        if (detail.categories && detail.categories.length > 0) {
+          setCategory(String(detail.categories[0].id));
+        } else if (detail.category_id) {
+          setCategory(String(detail.category_id));
+        } else {
+          setCategory(courseObj?.category || '1');
+        }
+        setPrice(typeof detail.price === 'number' ? detail.price : parseFloat(detail.price || 0));
+        setSalePrice(detail.sale_price !== null && detail.sale_price !== undefined ? parseFloat(detail.sale_price) : (courseObj?.salePrice || courseObj?.price || 0));
+        setImage(detail.thumbnail_url || courseObj?.image || '');
+        setIntroVideoUrl(detail.intro_video_url || courseObj?.introVideoUrl || '');
+        setSlug(detail.slug || courseObj?.slug || '');
+        setIsManualSlug(true);
+        setLevel(detail.level || courseObj?.level || 'beginner');
+        setLanguage(detail.language || courseObj?.language || 'vi');
+
+        let reqs = courseObj?.requirements || [];
+        if (typeof detail.requirements === 'string') {
+          try { reqs = JSON.parse(detail.requirements); } catch { reqs = [detail.requirements]; }
+        }
+        setRequirements(Array.isArray(reqs) ? reqs : []);
+
+        let outcomes = courseObj?.willLearn || [];
+        if (typeof detail.outcomes === 'string') {
+          try { outcomes = JSON.parse(detail.outcomes); } catch { outcomes = [detail.outcomes]; }
+        }
+        setWillLearn(Array.isArray(outcomes) ? outcomes : []);
+
+        // Load full course curriculum (sections & lessons) from Backend content API
+        try {
+          const contentRes = await ApiService.getCourseContent(courseId);
+          const contentData = contentRes?.data || contentRes;
+          const rawSections = contentData?.sections || [];
+          if (Array.isArray(rawSections) && rawSections.length > 0) {
+            const loadedChapters = rawSections.map((sec: any) => ({
+              id: sec.id,
+              title: sec.title,
+              description: sec.description || '',
+              sort_order: sec.sort_order || 1,
+              status: sec.status || 'published',
+              lessons: (sec.lessons || []).map((les: any) => mapLesson(les))
+            }));
+            setChapters(loadedChapters);
+          } else {
+            setChapters(courseObj?.chapters || []);
+          }
+        } catch (contentErr) {
+          console.warn("Could not fetch course content sections, using fallback:", contentErr);
+          setChapters(courseObj?.chapters || []);
+        }
+      } catch (err) {
+        console.error("Failed to load course detail for edit:", err);
+      }
+    } else if (courseObj) {
+      setTitle(courseObj.title);
+      setSubtitle(courseObj.subtitle || '');
+      setDescription(courseObj.description || '');
+      setCategory(courseObj.category || 'Development');
+      setSubcategory(courseObj.subcategory || '');
+      setPrice(courseObj.price || 0);
+      setSalePrice(courseObj.salePrice || courseObj.price);
+      setImage(courseObj.image);
+      setRequirements(courseObj.requirements || []);
+      setWillLearn(courseObj.willLearn || []);
+      setChapters(courseObj.chapters || []);
+      setAllowSkip(courseObj.allowSkip !== undefined ? courseObj.allowSkip : true);
+      setAllowDownload(courseObj.allowDownload || false);
+      setAllowDiscussion(courseObj.allowDiscussion !== undefined ? courseObj.allowDiscussion : true);
+      setGiveCertificate(courseObj.giveCertificate || false);
+      setAllowFreeDoc(courseObj.allowFreeDoc || false);
+      setAllowFreeVideo(courseObj.allowFreeVideo || false);
+      setFreeVideoDuration(courseObj.freeVideoDuration || 30);
+      setFaqs(courseObj.faqs || []);
+      setSlug(courseObj.slug || '');
+      setLevel(courseObj.level || 'beginner');
+      setLanguage(courseObj.language || 'vi');
+      setIntroVideoUrl(courseObj.introVideoUrl || '');
+    }
   };
 
   const handleFinishCoursePublish = async () => {
     if (!title.trim() || !description.trim()) {
-      alert('Vui lòng hoàn thành điền Tên khóa học và Mô tả ở Bước 1 trước khi xuất bản.');
+      setSubmitErrorModalState({
+        isOpen: true,
+        title: 'Thông tin chưa đầy đủ',
+        message: 'Vui lòng hoàn thành điền Tên khóa học và Mô tả chi tiết ở Bước 1 trước khi gửi duyệt.',
+        status: 400,
+        errors: {
+          title: !title.trim() ? ['Tiêu đề khóa học là bắt buộc'] : [],
+          description: !description.trim() ? ['Mô tả chi tiết khóa học là bắt buộc'] : [],
+        },
+      });
       setBuilderStep(1);
       return;
     }
 
-    const payload: Course = {
-      id: editingCourseId || 'course-' + Date.now(),
-      title,
-      subtitle: subtitle || 'Nhãn phụ chi tiết khóa học mới',
-      description,
-      category,
-      subcategory: subcategory || 'Chuyên gia nâng cao',
-      price,
-      salePrice,
-      rating: editingCourseId ? (courses.find(c => c.id === editingCourseId)?.rating || 4.8) : 5.0,
-      reviewCount: editingCourseId ? (courses.find(c => c.id === editingCourseId)?.reviewCount || 1) : 0,
-      enrolledCount: editingCourseId ? (courses.find(c => c.id === editingCourseId)?.enrolledCount || 10) : 0,
-      completionRate: editingCourseId ? (courses.find(c => c.id === editingCourseId)?.completionRate || 92) : 0,
-      image,
-      instructorId: currentUser.id,
-      instructorName: currentUser.name,
-      instructorTitle: 'Giảng viên chuyên môn tại MindHub',
-      instructorAvatar: currentUser.avatar,
-      instructorBio: currentUser.bio || 'Chuyên gia giảng dạy công nghệ thực tiễn.',
-      chapters,
-      requirements,
-      willLearn,
-      status: 'pending', // Pending moderator review workflow
-      allowSkip,
-      allowDownload,
-      allowDiscussion,
-      giveCertificate,
-      allowFreeDoc,
-      allowFreeVideo,
-      freeVideoDuration,
-      reviews: editingCourseId ? (courses.find(c => c.id === editingCourseId)?.reviews || []) : [],
-      faqs: faqs,
-      isHidden: false,
-      slug,
-      level,
-      language,
-      introVideoUrl
-    };
+    if (ApiService.getConfig().mode === 'api') {
+      try {
+        setIsSavingDraft(true);
+        let courseId = editingCourseId;
+        const selectedCatInt = parseInt(String(category), 10);
+        const validCategoryInt = (Number.isInteger(selectedCatInt) && selectedCatInt > 0)
+          ? selectedCatInt
+          : (dbCategories.length > 0 ? (parseInt(String(dbCategories[0].id), 10) || 1) : 1);
 
-    if (editingCourseId) {
-      onUpdateCourse(payload);
-      alert('Đã cập nhật chỉnh sửa khóa học thành công! Giáo án đã được chuyển sang trạng thái chờ duyệt thẩm định.');
+        const payload = {
+          title: title.trim(),
+          slug: slug.trim() || undefined,
+          category_id: validCategoryInt,
+          category_ids: [validCategoryInt],
+          level: level || 'beginner',
+          language: language || 'vi',
+          short_description: subtitle || title.trim(),
+          subtitle: subtitle || title.trim(),
+          description: description.trim(),
+          price: Number(price) || 0,
+          sale_price: salePrice !== null ? Number(salePrice) : undefined,
+          salePrice: salePrice !== null ? Number(salePrice) : undefined,
+          image,
+          thumbnail_url: image || undefined,
+          introVideoUrl,
+          intro_video_url: introVideoUrl || undefined,
+          requirements: Array.isArray(requirements) ? requirements.filter(Boolean).join('\n') : (requirements || ''),
+          willLearn: Array.isArray(willLearn) ? willLearn.filter(Boolean).join('\n') : (willLearn || ''),
+          outcomes: Array.isArray(willLearn) ? willLearn.filter(Boolean).join('\n') : (willLearn || ''),
+        };
+
+        if (!courseId) {
+          const res = await ApiService.createCourseDraft(payload);
+          courseId = String(res.data?.id || res.id);
+          setEditingCourseId(courseId);
+        } else {
+          await ApiService.updateCourseDraft(courseId, payload);
+        }
+
+        // Synchronize chapters (sections & lessons) to Backend if present in state
+        if (chapters && chapters.length > 0 && courseId) {
+          for (let sIdx = 0; sIdx < chapters.length; sIdx++) {
+            const ch = chapters[sIdx];
+            let secId = ch.id;
+            if (!secId || String(secId).startsWith('sec-') || isNaN(Number(secId))) {
+              const createdSec = await ApiService.createSection({
+                course_id: Number(courseId),
+                title: ch.title,
+                sort_order: sIdx + 1,
+              });
+              secId = createdSec.data?.id || createdSec.id;
+            } else {
+              await ApiService.updateSection(secId, {
+                title: ch.title,
+                sort_order: sIdx + 1,
+              });
+            }
+
+            if (ch.lessons && ch.lessons.length > 0) {
+              for (let lIdx = 0; lIdx < ch.lessons.length; lIdx++) {
+                const les = ch.lessons[lIdx];
+                const lessonPayload = {
+                  course_id: Number(courseId),
+                  course_section_id: Number(secId),
+                  title: les.title,
+                  lesson_type: les.lesson_type || les.type || 'video',
+                  sort_order: lIdx + 1,
+                  is_preview: les.is_preview ?? les.isPreview ?? false,
+                  video_url: les.video_url || les.videoUrl || undefined,
+                  video_duration_seconds: les.video_duration_seconds ?? (les as any).duration_seconds ?? 0,
+                  content: les.content || les.docContent || undefined,
+                };
+                if (!les.id || String(les.id).startsWith('les-') || isNaN(Number(les.id))) {
+                  await ApiService.createLesson(lessonPayload);
+                } else {
+                  await ApiService.updateLesson(les.id, lessonPayload);
+                }
+              }
+            }
+          }
+        }
+
+        await ApiService.submitCourseToAdminVerification(courseId);
+        alert('Đã gửi yêu cầu duyệt khóa học thành công! Khóa học đã được chuyển sang trạng thái Chờ duyệt (pending_review).');
+        loadInstructorCoursesList();
+        setActiveTab('courses');
+      } catch (err: any) {
+        console.error("Error submitting course for review:", err);
+        setSubmitErrorModalState({
+          isOpen: true,
+          title: 'Gửi duyệt khóa học thất bại',
+          message: err.message || 'Khóa học chưa đủ điều kiện để gửi duyệt. Vui lòng hoàn thiện các thông tin cơ bản, danh mục, chương học và bài học.',
+          status: err.status || 400,
+          errors: err.errors || null,
+        });
+      } finally {
+        setIsSavingDraft(false);
+      }
     } else {
-      onCreateCourseDraft(payload);
-      alert('Đã khởi tạo khóa học mới thành công! Giáo án đã được chuyển lên Ban Kế Hoạch Kiểm Duyệt thẩm định xuất bản.');
-    }
+      const payload: Course = {
+        id: editingCourseId || 'course-' + Date.now(),
+        title,
+        subtitle: subtitle || 'Nhãn phụ chi tiết khóa học mới',
+        description,
+        category,
+        subcategory: subcategory || 'Chuyên gia nâng cao',
+        price,
+        salePrice,
+        rating: editingCourseId ? (courses.find(c => c.id === editingCourseId)?.rating || 4.8) : 5.0,
+        reviewCount: editingCourseId ? (courses.find(c => c.id === editingCourseId)?.reviewCount || 1) : 0,
+        enrolledCount: editingCourseId ? (courses.find(c => c.id === editingCourseId)?.enrolledCount || 10) : 0,
+        completionRate: editingCourseId ? (courses.find(c => c.id === editingCourseId)?.completionRate || 92) : 0,
+        image,
+        instructorId: currentUser.id,
+        instructorName: currentUser.name,
+        instructorTitle: 'Giảng viên chuyên môn tại MindHub',
+        instructorAvatar: currentUser.avatar,
+        instructorBio: currentUser.bio || 'Chuyên gia giảng dạy công nghệ thực tiễn.',
+        chapters,
+        requirements,
+        willLearn,
+        status: 'pending',
+        allowSkip,
+        allowDownload,
+        allowDiscussion,
+        giveCertificate,
+        allowFreeDoc,
+        allowFreeVideo,
+        freeVideoDuration,
+        reviews: editingCourseId ? (courses.find(c => c.id === editingCourseId)?.reviews || []) : [],
+        faqs: faqs,
+        isHidden: false,
+        slug,
+        level,
+        language,
+        introVideoUrl
+      };
 
-    // Clean up local storage drafting states
-    localStorage.removeItem('mindhub_course_creation_draft');
-    setActiveTab('courses');
+      if (editingCourseId) {
+        onUpdateCourse(payload);
+        alert('Đã cập nhật chỉnh sửa khóa học thành công! Giáo án đã được chuyển sang trạng thái chờ duyệt thẩm định.');
+      } else {
+        onCreateCourseDraft(payload);
+        alert('Đã khởi tạo khóa học mới thành công! Giáo án đã được chuyển lên Ban Kế Hoạch Kiểm Duyệt thẩm định xuất bản.');
+      }
+
+      localStorage.removeItem('mindhub_course_creation_draft');
+      setActiveTab('courses');
+    }
   };
 
   const formatNumber = (num: number) => {
@@ -973,251 +1853,189 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
     alert(`Đã chấm điểm thành công: ${points}/100!`);
   };
 
-  const mockRevenueData = [
-    { name: '01/05', value: 20000000 },
-    { name: '06/05', value: 22000000 },
-    { name: '11/05', value: 21000000 },
-    { name: '16/05', value: 30000000 },
-    { name: '21/05', value: 35000000 },
-    { name: '26/05', value: 41000000 },
-    { name: '31/05', value: 42680000 }
-  ];
+  // Helper functions for media and period formatting
+  const resolveMediaUrl = (path?: string | null): string => {
+    if (!path) return 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=800';
+    return formatResolveMediaUrl(path);
+  };
 
-  const mockEnrollmentsData = [
-    { name: '01/05', value: 150 },
-    { name: '06/05', value: 180 },
-    { name: '11/05', value: 165 },
-    { name: '16/05', value: 280 },
-    { name: '21/05', value: 298 },
-    { name: '26/05', value: 320 },
-    { name: '31/05', value: 356 }
-  ];
-
-  const unansweredQuestionsMock = [
-    {
-      id: 'q1',
-      userName: 'Trần Quốc Bảo',
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
-      courseTitle: 'Lập trình Python cơ bản từ A-Z',
-      question: 'Anh ơi, em bị lỗi ModuleNotFoundError: No module named \'numpy\' khi chạy bài tập, phải xử lý sao ạ?',
-      time: '2 giờ trước'
-    },
-    {
-      id: 'q2',
-      userName: 'Nguyễn Thị Lan',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150',
-      courseTitle: 'Thiết kế UI/UX với Figma',
-      question: 'Em không tìm thấy plugin Auto Layout, anh hướng dẫn cách cài đặt với ạ?',
-      time: '5 giờ trước'
-    },
-    {
-      id: 'q3',
-      userName: 'Lê Minh Hiếu',
-      avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=150',
-      courseTitle: 'Marketing Digital thực chiến 2025',
-      question: 'Phần chạy quảng cáo Facebook, ngân sách tối ưu là bao nhiêu ạ?',
-      time: '1 ngày trước'
+  const resolveAvatarUrl = (avatarUrl?: string | null, userName?: string) => {
+    if (avatarUrl) {
+      return resolveMediaUrl(avatarUrl);
     }
-  ];
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(userName || 'HV')}&background=007A64&color=fff&bold=true`;
+  };
 
-  const incompleteCoursesMock = [
-    { id: 'ic1', title: 'Lập trình Python nâng cao', progress: 65 },
-    { id: 'ic2', title: 'Data Analysis với Excel & Power BI', progress: 40 }
-  ];
+  const formatChartPeriod = (period: string, filterType: string) => {
+    if (!period) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(period)) {
+      const parts = period.split('-');
+      return `${parts[2]}/${parts[1]}`;
+    }
+    if (/^\d{4}-\d{2}$/.test(period)) {
+      const parts = period.split('-');
+      return `T${parts[1]}`;
+    }
+    return period;
+  };
 
-  const notificationsMock = [
-    { id: 'n1', content: 'Khóa học "Lập trình Python cơ bản từ A-Z" của bạn vừa có đánh giá mới 5*', time: '2 giờ trước' },
-    { id: 'n2', content: 'MindHub sẽ bảo trì hệ thống vào 02:00 - 04:00 ngày 25/05/2025', time: '1 ngày trước' },
-    { id: 'n3', content: 'Chương trình ưu đãi tháng 5: Giảm 30% phí rút tiền cho giảng viên', time: '2 ngày trước' }
-  ];
+  // --- API DATA MAPPINGS ---
+  const activeRevenueChartData = useMemo(() => {
+    if (isApiMode && revenueChartData.length > 0) {
+      return revenueChartData.map(pt => ({
+        name: pt.name || formatChartPeriod(pt.date || pt.period, revenueTimeFilter),
+        value: Number(pt.value ?? pt.instructor_amount ?? 0)
+      }));
+    }
+    return [];
+  }, [isApiMode, revenueChartData, revenueTimeFilter]);
 
-  const topCourses = useMemo(() => {
-    const sorted = [...allInstructorCourses].sort((a, b) => b.enrolledCount - a.enrolledCount);
-    if (sorted.length > 0) return sorted.slice(0, 5);
-    return [
-      { id: 'mc1', title: 'Lập trình Python cơ bản từ A-Z', level: 'Cơ bản', enrolledCount: 532, price: 499000, image: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=800' },
-      { id: 'mc2', title: 'Thiết kế UI/UX với Figma cho người mới bắt đầu', level: 'Trung cấp', enrolledCount: 298, price: 799000, image: 'https://images.unsplash.com/photo-1613909207039-6b173b755cc1?auto=format&fit=crop&q=80&w=800' },
-      { id: 'mc3', title: 'Marketing Digital thực chiến 2025', level: 'Nâng cao', enrolledCount: 187, price: 699000, image: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&q=80&w=800' },
-      { id: 'mc4', title: 'Excel nâng cao cho người đi làm', level: 'Trung cấp', enrolledCount: 142, price: 599000, image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=800' },
-      { id: 'mc5', title: 'Tiếng Anh giao tiếp cho người bận rộn', level: 'Cơ bản', enrolledCount: 89, price: 399000, image: 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&q=80&w=800' }
-    ];
-  }, [allInstructorCourses]);
+  const activeEnrollmentChartData = useMemo(() => {
+    if (isApiMode && enrollmentChartData.length > 0) {
+      return enrollmentChartData.map(pt => ({
+        name: pt.name || formatChartPeriod(pt.date || pt.period, enrollmentTimeFilter),
+        value: Number(pt.value ?? pt.enrollment_count ?? 0)
+      }));
+    }
+    return [];
+  }, [isApiMode, enrollmentChartData, enrollmentTimeFilter]);
+
+  const activeTopCourses = useMemo(() => {
+    if (isApiMode && topCoursesData.length > 0) {
+      return topCoursesData.map((c, idx) => {
+        const matchingCourse = courses.find(item => String(item.id) === String(c.course_id));
+        const levelLabel = c.level === 'intermediate' ? 'Trung cấp' : c.level === 'advanced' ? 'Nâng cao' : (c.level === 'beginner' ? 'Cơ bản' : (matchingCourse?.level || 'Cơ bản'));
+        const enrolled = c.enrollment_count ?? c.unique_learner_count ?? c.studentCount ?? 0;
+        const rawRev = typeof c.revenue === 'number' ? c.revenue : parseFloat(String(c.revenue || '0').replace(/[^0-9.-]/g, ''));
+        const safeRev = Number.isFinite(rawRev) ? rawRev : (matchingCourse?.price ? enrolled * matchingCourse.price : 0);
+        return {
+          id: String(c.course_id),
+          rank: c.rank || (idx + 1),
+          title: c.title,
+          level: levelLabel,
+          enrolledCount: enrolled,
+          revenue: safeRev,
+          price: c.price || matchingCourse?.price || 0,
+          image: c.thumbnail_url ? resolveMediaUrl(c.thumbnail_url) : (matchingCourse?.image || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=800')
+        };
+      });
+    }
+    return [];
+  }, [isApiMode, topCoursesData, courses]);
+
+  const activeUnansweredQuestions = useMemo(() => {
+    if (isApiMode && unansweredQuestions.length > 0) {
+      return unansweredQuestions.map(q => ({
+        id: String(q.id),
+        userName: q.learner?.full_name || 'Học viên',
+        avatar: resolveAvatarUrl(q.learner?.avatar_url, q.learner?.full_name),
+        courseTitle: q.course?.title || 'Khóa học',
+        question: q.content,
+        time: q.created_at ? new Date(q.created_at).toLocaleDateString('vi-VN') : 'Vừa xong'
+      }));
+    }
+    return [];
+  }, [isApiMode, unansweredQuestions]);
+
+  const activeIncompleteCourses = useMemo(() => {
+    if (isApiMode && incompleteCoursesData.length > 0) {
+      return incompleteCoursesData.map(ic => ({
+        id: String(ic.id),
+        title: ic.title,
+        status: ic.status,
+        progress: ic.completion_percentage ?? 0,
+        missing_items: ic.missing_items || [],
+        warnings: ic.warnings || [],
+        raw: ic
+      }));
+    }
+    return [];
+  }, [isApiMode, incompleteCoursesData]);
+
+  const activeNotifications = useMemo(() => {
+    if (isApiMode && dashboardAlerts.length > 0) {
+      return dashboardAlerts.map((n, idx) => ({
+        id: String(n.id || idx),
+        type: n.type,
+        title: n.title || 'Thông báo',
+        content: n.message || n.title,
+        action_url: n.action_url || null,
+        read_at: n.read_at || null,
+        time: n.created_at ? new Date(n.created_at).toLocaleDateString('vi-VN') : 'Vừa xong',
+        raw: n
+      }));
+    }
+    return [];
+  }, [isApiMode, dashboardAlerts]);
 
   return (
     <div className="min-h-screen w-full bg-slate-50 text-main-darker animate-fade-in font-sans instructor-theme">
       <div className="flex min-h-screen w-full flex-col md:flex-row">
         
-        {/* Sidebar Navigation */}
-        <aside className="w-full md:w-[240px] shrink-0 sticky top-0 md:h-screen bg-white border-b md:border-b-0 md:border-r border-slate-100 p-4 flex flex-col justify-between overflow-y-auto">
-        <div className="space-y-6">
-          {/* Logo Branding */}
-          <div className="hidden md:flex items-center gap-2 px-2 pb-5 border-b mb-4">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-5 h-5">
-                <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-                <path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5" />
-              </svg>
+        {/* Standarized Instructor Sidebar Component */}
+        <InstructorSidebar 
+          activeKey={activeNavKey}
+          onNavigate={handleSidebarNavigate}
+          isOpenMobile={isMobileDrawerOpen}
+          onCloseMobile={() => setIsMobileDrawerOpen(false)}
+        />
+
+        {/* Main Content Area Container */}
+        <main className="flex-1 min-w-0 flex flex-col bg-slate-50/40">
+          
+          {/* Top Header */}
+          <header className="h-16 bg-white border-b border-slate-100 px-6 flex justify-between items-center shrink-0">
+            <div className="flex items-center gap-2">
+              <button 
+                type="button" 
+                onClick={() => setIsMobileDrawerOpen(true)}
+                className="lg:hidden p-1.5 hover:bg-slate-100 rounded-lg text-stone-600 cursor-pointer mr-1"
+                aria-label="Open Mobile Menu"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <span className="text-xs font-bold text-stone-400">Giảng viên</span>
+              <ChevronRight className="w-3 h-3 text-stone-300" />
+              <span className="text-xs font-extrabold text-stone-750">
+                {getBreadcrumbLabel(activeNavKey)}
+              </span>
             </div>
-            <div className="text-left">
-              <h1 className="text-sm font-black tracking-wide text-stone-900 leading-none">MindHub</h1>
-              <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Instructor</span>
-            </div>
-          </div>
-
-          {/* Buttons List */}
-          <div className="flex md:flex-col overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 gap-1.5 md:gap-1 scrollbar-none scroll-smooth">
-            <button 
-              onClick={() => setActiveTab('overview')}
-              className={`whitespace-nowrap px-3.5 py-2.5 text-xs font-semibold rounded-xl flex items-center gap-2.5 shrink-0 transition-all ${activeTab === 'overview' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-stone-600 hover:bg-slate-50'}`}
-            >
-              <LayoutDashboard className="w-4 h-4" /> Tổng quan
-            </button>
-            
-            <button 
-              onClick={() => setActiveTab('courses')}
-              className={`whitespace-nowrap px-3.5 py-2.5 text-xs font-semibold rounded-xl flex items-center gap-2.5 shrink-0 transition-all ${activeTab === 'courses' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-stone-600 hover:bg-slate-50'}`}
-            >
-              <BookOpen className="w-4 h-4" /> Khóa học của tôi
-            </button>
-
-            <button 
-              onClick={startBuilderForCreate}
-              className={`whitespace-nowrap px-3.5 py-2.5 text-xs font-semibold rounded-xl flex items-center gap-2.5 shrink-0 transition-all ${activeTab === 'builder' && builderStep < 5 ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-stone-600 hover:bg-slate-50'}`}
-            >
-              <Plus className="w-4 h-4" /> Tạo khóa học
-            </button>
-
-            <button 
-              onClick={() => {
-                if (allInstructorCourses.length > 0) {
-                  startBuilderForEdit(allInstructorCourses[0]);
-                  setBuilderStep(5);
-                } else {
-                  alert("Bạn chưa có khóa học nào để chỉnh sửa bài học. Hãy tạo khóa học trước.");
-                }
-              }}
-              className={`whitespace-nowrap px-3.5 py-2.5 text-xs font-semibold rounded-xl flex items-center gap-2.5 shrink-0 transition-all ${activeTab === 'builder' && builderStep === 5 ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-stone-600 hover:bg-slate-50'}`}
-            >
-              <FileText className="w-4 h-4" /> Nội dung bài học
-            </button>
-            
-            <button 
-              onClick={() => setActiveTab('qa')}
-              className={`whitespace-nowrap px-3.5 py-2.5 text-xs font-semibold rounded-xl flex items-center gap-2.5 shrink-0 transition-all ${activeTab === 'qa' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-stone-600 hover:bg-slate-50'}`}
-            >
-              <MessageSquare className="w-4 h-4" /> Hỏi đáp & Bình luận
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('students')}
-              className={`whitespace-nowrap px-3.5 py-2.5 text-xs font-semibold rounded-xl flex items-center gap-2.5 shrink-0 transition-all ${activeTab === 'students' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-stone-600 hover:bg-slate-50'}`}
-            >
-              <Users className="w-4 h-4" /> Học viên
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('revenue')}
-              className={`whitespace-nowrap px-3.5 py-2.5 text-xs font-semibold rounded-xl flex items-center gap-2.5 shrink-0 transition-all ${activeTab === 'revenue' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-stone-600 hover:bg-slate-50'}`}
-            >
-              <BarChart2 className="w-4 h-4" /> Doanh thu
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('payout')}
-              className={`whitespace-nowrap px-3.5 py-2.5 text-xs font-semibold rounded-xl flex items-center gap-2.5 shrink-0 transition-all ${activeTab === 'payout' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-stone-600 hover:bg-slate-50'}`}
-            >
-              <DollarSign className="w-4 h-4" /> Rút tiền
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('coupons')}
-              className={`whitespace-nowrap px-3.5 py-2.5 text-xs font-semibold rounded-xl flex items-center gap-2.5 shrink-0 transition-all ${activeTab === 'coupons' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-stone-600 hover:bg-slate-50'}`}
-            >
-              <Tag className="w-4 h-4" /> Mã giảm giá
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('security')}
-              className={`whitespace-nowrap px-3.5 py-2.5 text-xs font-semibold rounded-xl flex items-center gap-2.5 shrink-0 transition-all ${activeTab === 'security' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-stone-600 hover:bg-slate-50'}`}
-            >
-              <UserCheck className="w-4 h-4" /> Hồ sơ
-            </button>
-
-          </div>
-        </div>
-
-        {/* Sidebar Footer Upgrades */}
-        <div className="hidden md:block space-y-4">
-          <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl text-left">
-            <h4 className="font-extrabold text-[11px] text-emerald-800 flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 fill-emerald-200 text-emerald-600" /> Nâng cấp tài khoản
-            </h4>
-            <p className="text-[9.5px] text-emerald-600/80 font-medium mt-1 leading-relaxed">
-              Mở khóa các tính năng nâng cao dành cho giảng viên.
-            </p>
-            <button className="w-full mt-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] py-1.5 rounded-lg transition-colors shadow-3xs">
-              Nâng cấp ngay
-            </button>
-          </div>
-
-          <div 
-            onClick={() => alert("Chuyển hướng đến help.mindhub.vn")}
-            className="flex items-center justify-between p-2 border-t text-stone-500 hover:text-stone-850 transition-colors cursor-pointer text-[10px] font-bold"
-          >
-            <span className="flex items-center gap-2">
-              <HelpCircle className="w-4 h-4 text-stone-400" />
-              <div>
-                <p className="leading-none text-stone-700">Trung tâm hỗ trợ</p>
-                <p className="text-[8px] text-stone-400 font-medium mt-0.5">help.mindhub.vn</p>
-              </div>
-            </span>
-            <ChevronRight className="w-3 h-3 text-stone-450" />
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Content Area Container */}
-      <main className="flex-1 min-w-0 flex flex-col bg-slate-50/40">
-        
-        {/* Top Header */}
-        <header className="h-16 bg-white border-b border-slate-100 px-6 flex justify-between items-center shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-stone-400">Giảng viên</span>
-            <ChevronRight className="w-3 h-3 text-stone-300" />
-            <span className="text-xs font-extrabold text-stone-750">
-              {activeTab === 'overview' ? 'Tổng quan' :
-               activeTab === 'courses' ? 'Khóa học của tôi' :
-               activeTab === 'builder' ? 'Nội dung bài học' :
-               activeTab === 'qa' ? 'Hỏi đáp & Bình luận' :
-               activeTab === 'students' ? 'Học viên' :
-               activeTab === 'revenue' ? 'Doanh thu' :
-               activeTab === 'payout' ? 'Rút tiền' :
-               activeTab === 'coupons' ? 'Mã giảm giá' : 'Hồ sơ'}
-            </span>
-          </div>
           
           <div className="flex items-center gap-4">
             <button 
+              type="button"
               onClick={onClose}
-              className="text-[10px] font-bold text-stone-600 border border-slate-200 px-3 py-1.5 rounded-xl hover:bg-slate-50 transition-colors flex items-center gap-1"
+              className="text-[10px] font-bold text-stone-600 border border-slate-200 px-3 py-1.5 rounded-xl hover:bg-slate-50 transition-colors flex items-center gap-1 cursor-pointer"
             >
               <Eye className="w-3.5 h-3.5 text-stone-500" /> Xem trang học viên
             </button>
             
-            <div className="relative cursor-pointer hover:bg-slate-50 p-2 rounded-full transition-colors">
-              <Bell className="w-4 h-4 text-stone-600" />
-              <span className="absolute top-1.5 right-1.5 w-3.5 h-3.5 bg-rose-500 border-2 border-white rounded-full flex items-center justify-center text-[7.5px] text-white font-black">
-                5
-              </span>
-            </div>
+            <InstructorNotificationDropdown 
+              unreadCount={unreadNotificationCount}
+              onUnreadCountChange={(newCount) => setUnreadNotificationCount(newCount)}
+              onViewAllNotifications={() => {
+                handleTabChange('security');
+                if (typeof window !== 'undefined') {
+                  window.history.pushState({}, '', '/instructor/profile?tab=notifications');
+                }
+              }}
+            />
             
             <div className="h-8 w-[1px] bg-slate-100" />
             
-            <div className="flex items-center gap-2">
-              <img src={currentUser.avatar} alt="avatar" className="w-8 h-8 rounded-full border object-cover" />
+            <div 
+              onClick={() => handleTabChange('security')}
+              className="flex items-center gap-2.5 cursor-pointer hover:opacity-90 transition-opacity"
+              title="Trang hồ sơ giảng viên"
+            >
+              <UserAvatar name={currentUser?.name || currentUser?.full_name} src={currentUser?.avatar || currentUser?.avatar_url} size="sm" />
               <div className="text-left hidden sm:block">
-                <p className="text-[10.5px] font-extrabold text-stone-850 leading-none">{currentUser.name}</p>
-                <span className="text-[8px] bg-emerald-50 border border-emerald-100 text-emerald-700 font-extrabold px-1.5 py-0.2 rounded mt-0.5 inline-block uppercase">Giảng viên</span>
+                <p className="text-[10.5px] font-extrabold text-stone-850 leading-none max-w-[140px] truncate">
+                  {currentUser?.name || currentUser?.full_name || 'Giảng viên'}
+                </p>
+                <span className="text-[8px] bg-emerald-50 border border-emerald-100 text-emerald-700 font-extrabold px-1.5 py-0.2 rounded mt-0.5 inline-block uppercase">
+                  {currentUser?.role === 'admin' ? 'Quản trị viên' : 'Giảng viên'}
+                </span>
               </div>
             </div>
           </div>
@@ -1340,7 +2158,13 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                   </div>
                   <div>
                     <h4 className="text-lg font-black text-stone-850">{formatNumber(displayTotalEnrollments)}</h4>
-                    <p className="text-[8.5px] text-emerald-650 font-bold mt-0.5">↑ 156 so với tháng trước</p>
+                    {enrollmentChangePercentage !== undefined && enrollmentChangePercentage !== null ? (
+                      <p className={`text-[8.5px] font-bold mt-0.5 ${enrollmentChangePercentage >= 0 ? 'text-emerald-650' : 'text-rose-600'}`}>
+                        {enrollmentChangePercentage >= 0 ? `↑ ${enrollmentChangePercentage}%` : `↓ ${Math.abs(enrollmentChangePercentage)}%`} so với kỳ trước
+                      </p>
+                    ) : (
+                      <p className="text-[8.5px] text-stone-400 font-bold mt-0.5">—</p>
+                    )}
                   </div>
                 </div>
 
@@ -1355,7 +2179,13 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                   </div>
                   <div>
                     <h4 className="text-xs md:text-sm font-black text-emerald-700">{formatVND(displayTotalRevenue)}</h4>
-                    <p className="text-[8.5px] text-emerald-650 font-bold mt-0.5">↑ 18% so với tháng trước</p>
+                    {revenueChangePercentage !== undefined && revenueChangePercentage !== null ? (
+                      <p className={`text-[8.5px] font-bold mt-0.5 ${revenueChangePercentage >= 0 ? 'text-emerald-650' : 'text-rose-600'}`}>
+                        {revenueChangePercentage >= 0 ? `↑ ${revenueChangePercentage}%` : `↓ ${Math.abs(revenueChangePercentage)}%`} so với kỳ trước
+                      </p>
+                    ) : (
+                      <p className="text-[8.5px] text-stone-400 font-bold mt-0.5">—</p>
+                    )}
                   </div>
                 </div>
 
@@ -1386,27 +2216,51 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                 <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-3xs text-left space-y-4">
                   <div className="flex justify-between items-center border-b pb-2">
                     <div>
-                      <p className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Doanh thu (tháng này)</p>
+                      <p className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">
+                        Doanh thu {isRevenueChartLoading && <span className="text-[9px] text-stone-400 lowercase font-normal animate-pulse">(đang tải...)</span>}
+                      </p>
                       <div className="flex items-baseline gap-2 mt-1">
                         <span className="text-xl font-black text-stone-850">{formatVND(displayTotalRevenue)}</span>
-                        <span className="bg-emerald-50 text-emerald-700 text-[8.5px] font-black px-1.5 py-0.5 rounded border border-emerald-100">+ 18% so với tháng trước</span>
+                        {revenueChangePercentage !== undefined && revenueChangePercentage !== null && (
+                          <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded border ${
+                            revenueChangePercentage >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'
+                          }`}>
+                            {revenueChangePercentage >= 0 ? `+ ${revenueChangePercentage}%` : `${revenueChangePercentage}%`} so với kỳ trước
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <select className="border border-slate-150 rounded-lg p-1 text-[9.5px] font-bold bg-white focus:outline-none cursor-pointer">
-                      <option>Tháng này</option>
-                      <option>Tuần này</option>
-                      <option>Năm nay</option>
+                    <select 
+                      value={revenueTimeFilter}
+                      onChange={(e) => setRevenueTimeFilter(e.target.value as any)}
+                      className="border border-slate-150 rounded-lg p-1 text-[9.5px] font-bold bg-white focus:outline-none cursor-pointer"
+                    >
+                      <option value="month">Tháng này</option>
+                      <option value="week">Tuần này</option>
+                      <option value="year">Năm nay</option>
                     </select>
                   </div>
                   <div className="h-44 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={mockRevenueData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
-                        <XAxis dataKey="name" stroke="#a8a29e" fontSize={9} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#a8a29e" fontSize={9} tickLine={false} axisLine={false} tickFormatter={(v) => `${v/1000000}M`} />
-                        <ChartTooltip formatter={(value: any) => formatVND(Number(value))} labelStyle={{ fontSize: '9px', fontWeight: 'bold' }} contentStyle={{ fontSize: '9px' }} />
-                        <Area type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorRevenue)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
+                    {isRevenueChartLoading ? (
+                      <div className="h-full w-full flex items-center justify-center text-stone-400 text-[11px] animate-pulse">
+                        Đang tải dữ liệu biểu đồ...
+                      </div>
+                    ) : activeRevenueChartData.length === 0 ? (
+                      <div className="h-full w-full flex flex-col items-center justify-center text-stone-400 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                        <BarChart2 className="w-7 h-7 text-stone-300 mb-1" />
+                        <p className="text-[11px] font-bold text-stone-500">Chưa có dữ liệu doanh thu</p>
+                        <p className="text-[9.5px] text-stone-400 mt-0.5">Không có giao dịch doanh thu trong khoảng thời gian này.</p>
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={activeRevenueChartData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                          <XAxis dataKey="name" stroke="#a8a29e" fontSize={9} tickLine={false} axisLine={false} />
+                          <YAxis stroke="#a8a29e" fontSize={9} tickLine={false} axisLine={false} tickFormatter={(v) => v >= 1000000 ? `${(v/1000000).toFixed(1)}M` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} />
+                          <ChartTooltip formatter={(value: any) => [formatVND(Number(value)), 'Doanh thu giảng viên']} labelStyle={{ fontSize: '9px', fontWeight: 'bold' }} contentStyle={{ fontSize: '9px' }} />
+                          <Area type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorRevenue)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    )}
                   </div>
                 </div>
 
@@ -1414,84 +2268,125 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                 <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-3xs text-left space-y-4">
                   <div className="flex justify-between items-center border-b pb-2">
                     <div>
-                      <p className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Lượt ghi danh (học viên mới)</p>
+                      <p className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">
+                        Lượt ghi danh (học viên mới) {isEnrollmentChartLoading && <span className="text-[9px] text-stone-400 lowercase font-normal animate-pulse">(đang tải...)</span>}
+                      </p>
                       <div className="flex items-baseline gap-2 mt-1">
-                        <span className="text-xl font-black text-stone-850">356</span>
-                        <span className="bg-emerald-50 text-emerald-700 text-[8.5px] font-black px-1.5 py-0.5 rounded border border-emerald-100">+ 12% so với tháng trước</span>
+                        <span className="text-xl font-black text-stone-850">
+                          {isApiMode 
+                            ? (dashboardOverview?.enrollment_summary?.new_this_month ?? activeEnrollmentChartData.reduce((sum, item) => sum + item.value, 0))
+                            : totalEnrollments
+                          }
+                        </span>
+                        {enrollmentChangePercentage !== undefined && enrollmentChangePercentage !== null && (
+                          <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded border ${
+                            enrollmentChangePercentage >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'
+                          }`}>
+                            {enrollmentChangePercentage >= 0 ? `+ ${enrollmentChangePercentage}%` : `${enrollmentChangePercentage}%`} so với kỳ trước
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <select className="border border-slate-150 rounded-lg p-1 text-[9.5px] font-bold bg-white focus:outline-none cursor-pointer">
-                      <option>Tháng này</option>
-                      <option>Tuần này</option>
-                      <option>Năm nay</option>
+                    <select 
+                      value={enrollmentTimeFilter}
+                      onChange={(e) => setEnrollmentTimeFilter(e.target.value as any)}
+                      className="border border-slate-150 rounded-lg p-1 text-[9.5px] font-bold bg-white focus:outline-none cursor-pointer"
+                    >
+                      <option value="month">Tháng này</option>
+                      <option value="week">Tuần này</option>
+                      <option value="year">Năm nay</option>
                     </select>
                   </div>
                   <div className="h-44 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={mockEnrollmentsData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                        <XAxis dataKey="name" stroke="#a8a29e" fontSize={9} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#a8a29e" fontSize={9} tickLine={false} axisLine={false} />
-                        <ChartTooltip labelStyle={{ fontSize: '9px', fontWeight: 'bold' }} contentStyle={{ fontSize: '9px' }} />
-                        <Area type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorEnrollments)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
+                    {isEnrollmentChartLoading ? (
+                      <div className="h-full w-full flex items-center justify-center text-stone-400 text-[11px] animate-pulse">
+                        Đang tải dữ liệu biểu đồ...
+                      </div>
+                    ) : activeEnrollmentChartData.length === 0 ? (
+                      <div className="h-full w-full flex flex-col items-center justify-center text-stone-400 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                        <Users className="w-7 h-7 text-stone-300 mb-1" />
+                        <p className="text-[11px] font-bold text-stone-500">Chưa có lượt ghi danh mới</p>
+                        <p className="text-[9.5px] text-stone-400 mt-0.5">Không có lượt học viên đăng ký trong khoảng thời gian này.</p>
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={activeEnrollmentChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                          <XAxis dataKey="name" stroke="#a8a29e" fontSize={9} tickLine={false} axisLine={false} />
+                          <YAxis stroke="#a8a29e" fontSize={9} tickLine={false} axisLine={false} allowDecimals={false} />
+                          <ChartTooltip formatter={(value: any) => [`${value} học viên mới`, 'Ghi danh']} labelStyle={{ fontSize: '9px', fontWeight: 'bold' }} contentStyle={{ fontSize: '9px' }} />
+                          <Area type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorEnrollments)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    )}
                   </div>
                 </div>
               </div>
 
               {/* Bottom Row: Top Courses, QA, Incomplete & Alerts */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4 items-start">
                 {/* Top Courses */}
-                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-3xs text-left space-y-3 flex flex-col justify-between">
+                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-3xs text-left space-y-3 h-auto self-start">
                   <div className="flex justify-between items-center border-b pb-2">
                     <h4 className="font-extrabold text-xs text-stone-850">Top khóa học nhiều học viên</h4>
                     <button onClick={() => setActiveTab('courses')} className="text-[10px] text-blue-600 hover:underline font-bold">Xem tất cả</button>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[10px]">
-                      <thead>
-                        <tr className="text-stone-400 border-b">
-                          <th className="py-2 text-left font-bold w-6">#</th>
-                          <th className="py-2 text-left font-bold">Khóa học</th>
-                          <th className="py-2 text-center font-bold">Học viên</th>
-                          <th className="py-2 text-right font-bold">Doanh thu</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {topCourses.map((c, idx) => (
-                          <tr key={c.id} className="hover:bg-slate-50/50">
-                            <td className="py-2.5 font-bold text-stone-500">{idx + 1}</td>
-                            <td className="py-2.5 font-bold text-stone-800 flex items-center gap-2">
-                              <img src={c.image} alt="" className="w-8 h-6 object-cover rounded border bg-white shrink-0" />
-                              <div className="truncate max-w-[100px]">
-                                <p className="truncate leading-tight font-extrabold">{c.title}</p>
-                                <span className={`text-[7px] uppercase font-bold px-1 rounded inline-block mt-0.5 ${c.level === 'Cơ bản' ? 'bg-emerald-50 text-emerald-700' : c.level === 'Nâng cao' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'}`}>
-                                  {c.level}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-2.5 text-center font-bold text-stone-750">{c.enrolledCount}</td>
-                            <td className="py-2.5 text-right font-black text-emerald-650">{formatVND(c.enrolledCount * (c.price || 499000))}</td>
+                  {activeTopCourses.length === 0 ? (
+                    <div className="py-8 text-center text-stone-400">
+                      <BookOpen className="w-8 h-8 mx-auto mb-2 text-stone-300 stroke-[1.5]" />
+                      <p className="text-[11px] font-bold text-stone-500">Chưa có dữ liệu khóa học</p>
+                      <p className="text-[9.5px] text-stone-400 mt-0.5">Top khóa học nhiều học viên sẽ hiển thị tại đây</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-[10px]">
+                        <thead>
+                          <tr className="text-stone-400 border-b">
+                            <th className="py-2 text-left font-bold w-6">#</th>
+                            <th className="py-2 text-left font-bold">Khóa học</th>
+                            <th className="py-2 text-center font-bold">Học viên</th>
+                            <th className="py-2 text-right font-bold">Doanh thu</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {activeTopCourses.map((c, idx) => (
+                            <tr key={c.id} className="hover:bg-slate-50/50">
+                              <td className="py-2.5 font-bold text-stone-500">{c.rank || (idx + 1)}</td>
+                              <td className="py-2.5 font-bold text-stone-800 flex items-center gap-2">
+                                <img src={c.image} alt="" className="w-8 h-6 object-cover rounded border bg-white shrink-0" />
+                                <div className="truncate max-w-[100px]">
+                                  <p className="truncate leading-tight font-extrabold">{c.title}</p>
+                                  <span className={`text-[7px] uppercase font-bold px-1 rounded inline-block mt-0.5 ${c.level === 'Cơ bản' ? 'bg-emerald-50 text-emerald-700' : c.level === 'Nâng cao' ? 'bg-purple-50 text-purple-700' : c.level === '—' ? 'bg-stone-50 text-stone-500' : 'bg-blue-50 text-blue-700'}`}>
+                                    {c.level}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="py-2.5 text-center font-bold text-stone-750">{c.enrolledCount}</td>
+                              <td className="py-2.5 text-right font-black text-emerald-650">
+                                {formatVND(c.revenue)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
 
                 {/* Unanswered QAs */}
-                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-3xs text-left space-y-3 flex flex-col justify-between">
+                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-3xs text-left space-y-3 h-auto self-start">
                   <div className="flex justify-between items-center border-b pb-2">
                     <h4 className="font-extrabold text-xs text-stone-850 flex items-center gap-1.5">
                       <span>Câu hỏi chưa trả lời</span>
-                      <span className="bg-rose-500 text-white font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center">12</span>
+                      <span className="bg-rose-500 text-white font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center">
+                        {displayOverviewUnansweredQA}
+                      </span>
                     </h4>
                     <button onClick={() => setActiveTab('qa')} className="text-[10px] text-blue-600 hover:underline font-bold">Xem tất cả</button>
                   </div>
-                  <div className="space-y-3 flex-1 py-1">
-                    {unansweredQuestionsMock.map((q) => (
+                  <div className="space-y-3 py-1">
+                    {activeUnansweredQuestions.map((q) => (
                       <div key={q.id} className="flex gap-3 items-start p-2 bg-slate-50/50 hover:bg-slate-50 rounded-xl transition-all border border-slate-100/50">
-                        <img src={q.avatar} alt="" className="w-7 h-7 rounded-full border object-cover shrink-0" />
+                        <img src={q.avatar} alt="" className="w-7 h-7 rounded-full border object-cover shrink-0 animate-fade-in" />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between">
                             <span className="font-bold text-stone-850 text-[10.5px]">{q.userName}</span>
@@ -1503,6 +2398,9 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 self-center" />
                       </div>
                     ))}
+                    {activeUnansweredQuestions.length === 0 && (
+                      <p className="text-[10px] text-stone-400 py-6 text-center">Không có câu hỏi chưa trả lời nào.</p>
+                    )}
                   </div>
                   <button 
                     onClick={() => setActiveTab('qa')} 
@@ -1513,28 +2411,32 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                 </div>
 
                 {/* Rightmost column: Incomplete courses & Alerts */}
-                <div className="space-y-4 text-left">
+                <div className="space-y-4 text-left h-auto self-start">
                   
                   {/* Khóa học cần hoàn thiện */}
                   <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-3xs space-y-3">
                     <div className="flex justify-between items-center border-b pb-2">
                       <h4 className="font-extrabold text-xs text-stone-850 flex items-center gap-1.5">
                         <span>Khóa học cần hoàn thiện</span>
-                        <span className="bg-amber-500 text-white font-black text-[9px] px-1 rounded">2</span>
+                        <span className="bg-amber-500 text-white font-black text-[9px] px-1 rounded">
+                          {isApiMode ? incompleteCoursesData.length : 0}
+                        </span>
                       </h4>
-                      <button onClick={() => setActiveTab('courses')} className="text-[10px] text-blue-600 hover:underline font-bold">Xem tất cả</button>
+                      <button 
+                        onClick={() => { setCourseStatusFilter('draft'); setActiveTab('courses'); }} 
+                        className="text-[10px] text-blue-600 hover:underline font-bold cursor-pointer"
+                      >
+                        Xem tất cả
+                      </button>
                     </div>
-                    <div className="space-y-3.5 py-1">
-                      {incompleteCoursesMock.map(ic => (
+                    <div className="space-y-3.5 py-1 max-h-[260px] overflow-y-auto pr-1">
+                      {activeIncompleteCourses.slice(0, 5).map(ic => (
                         <div key={ic.id} className="space-y-1.5">
                           <div className="flex justify-between items-center font-bold">
-                            <span className="text-stone-800 text-[10px] truncate max-w-[130px]">{ic.title}</span>
+                            <span className="text-stone-800 text-[10px] truncate max-w-[130px]" title={ic.title}>{ic.title}</span>
                             <button 
-                              onClick={() => {
-                                const found = allInstructorCourses.find(c => c.title.toLowerCase().includes('python'));
-                                if (found) startBuilderForEdit(found);
-                              }}
-                              className="text-[9px] bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-stone-600 border border-slate-200 px-2 py-0.5 rounded transition-all cursor-pointer font-bold"
+                              onClick={() => handleContinueIncompleteCourse(ic)}
+                              className="text-[9px] bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-stone-600 border border-slate-200 px-2 py-0.5 rounded transition-all cursor-pointer font-bold shrink-0"
                             >
                               Tiếp tục
                             </button>
@@ -1543,10 +2445,15 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                             <div className="flex-1 bg-stone-100 h-1.5 rounded-full overflow-hidden">
                               <div style={{ width: `${ic.progress}%` }} className="bg-emerald-500 h-full rounded-full" />
                             </div>
-                            <span className="text-[8.5px] font-bold text-stone-400 font-mono">Đã hoàn thành {ic.progress}%</span>
+                            <span className="text-[8.5px] font-bold text-stone-400 font-mono">
+                              Đã hoàn thành {ic.progress}%
+                            </span>
                           </div>
                         </div>
                       ))}
+                      {activeIncompleteCourses.length === 0 && (
+                        <p className="text-[10px] text-stone-400 text-center py-2">Không có khóa học chưa hoàn thiện nào.</p>
+                      )}
                     </div>
                   </div>
 
@@ -1555,20 +2462,49 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                     <div className="flex justify-between items-center border-b pb-2">
                       <h4 className="font-extrabold text-xs text-stone-850 flex items-center gap-1.5">
                         <span>Thông báo mới</span>
-                        <span className="bg-blue-500 text-white font-black text-[9px] px-1.5 rounded">3</span>
+                        <span className="bg-blue-500 text-white font-black text-[9px] px-1.5 rounded">
+                          {isApiMode ? dashboardAlerts.filter(n => !n.read_at).length : 0}
+                        </span>
                       </h4>
-                      <button onClick={() => alert("Mở trang thông báo")} className="text-[10px] text-blue-600 hover:underline font-bold">Xem tất cả</button>
+                      <button 
+                        onClick={handleViewAllAlerts} 
+                        className="text-[10px] text-blue-600 hover:underline font-bold cursor-pointer"
+                      >
+                        {isAllAlertsExpanded ? 'Thu gọn' : 'Xem tất cả'}
+                      </button>
                     </div>
-                    <div className="space-y-3 py-1">
-                      {notificationsMock.map(n => (
-                        <div key={n.id} className="flex gap-2 items-start text-[10px]">
-                          <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-stone-700 leading-normal font-medium">{n.content}</p>
-                            <span className="text-[8px] text-stone-400 font-bold block mt-0.5">{n.time}</span>
+                    <div className="space-y-2.5 py-1 max-h-[240px] overflow-y-auto pr-1">
+                      {activeNotifications.map(n => {
+                        const hasAction = Boolean(n.action_url && resolveInstructorActionUrl(n.action_url));
+                        return (
+                          <div 
+                            key={n.id} 
+                            onClick={() => hasAction && handleAlertClick(n)}
+                            onKeyDown={(e) => {
+                              if (hasAction && (e.key === 'Enter' || e.key === ' ')) {
+                                e.preventDefault();
+                                handleAlertClick(n);
+                              }
+                            }}
+                            role={hasAction ? "button" : undefined}
+                            tabIndex={hasAction ? 0 : undefined}
+                            className={`flex gap-2 items-start text-[10px] p-2 rounded-xl border border-slate-100/50 transition-all ${
+                              hasAction ? 'cursor-pointer hover:bg-slate-50 hover:border-slate-200/80 shadow-3xs' : 'bg-slate-50/30'
+                            }`}
+                          >
+                            <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${n.read_at ? 'bg-stone-300' : 'bg-blue-500'}`} />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-stone-850 text-[10.5px] leading-snug">{n.title}</p>
+                              <p className="text-stone-600 leading-normal font-medium text-[9.5px] mt-0.5">{n.content}</p>
+                              <span className="text-[8px] text-stone-400 font-bold block mt-1">{n.time}</span>
+                            </div>
+                            {hasAction && <ChevronRight className="w-3.5 h-3.5 text-stone-400 self-center shrink-0" />}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
+                      {activeNotifications.length === 0 && (
+                        <p className="text-[10px] text-stone-400 text-center py-2">Không có thông báo mới.</p>
+                      )}
                     </div>
                   </div>
 
@@ -1585,134 +2521,319 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
 
         {/* LIST OF COURSES TAB */}
         {activeTab === 'courses' && (
-          <div className="space-y-6 animate-fade-in text-xs text-left">
+          <div className="space-y-6 animate-fade-in text-xs text-left" id="courses-list-section">
             
             {/* Header: Title, Subtitle, Button */}
-            <div className="flex justify-between items-center border-b pb-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
               <div>
-                <h3 className="text-base font-extrabold text-stone-900">
+                <h3 className="text-base font-extrabold text-stone-900 tracking-tight">
                   Khóa học của tôi
                 </h3>
-                <p className="text-[10px] text-stone-400 font-bold mt-1">Quản lý và theo dõi tất cả các khóa học của bạn trên MindHub.</p>
+                <p className="text-[11px] text-stone-500 font-medium mt-0.5">Quản lý và theo dõi tất cả các khóa học của bạn trên MindHub.</p>
               </div>
               <button 
                 onClick={startBuilderForCreate}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-4 rounded-xl flex items-center gap-1.5 shadow-3xs transition-all shrink-0 cursor-pointer"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 shadow-3xs transition-all shrink-0 cursor-pointer w-full sm:w-auto justify-center"
               >
-                <Plus className="w-4 h-4" /> Tạo khóa học
+                <Plus className="w-4 h-4" /> Tạo khóa học mới
               </button>
             </div>
 
-            {/* Metrics cards row */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div className="bg-white border border-slate-100 rounded-xl p-4 shadow-3xs flex flex-col justify-between h-20">
-                <span className="text-[9px] uppercase font-bold text-stone-450 block">Tất cả khóa học</span>
-                <div className="flex items-baseline justify-between mt-1">
-                  <span className="text-xl font-black text-stone-800">{rawInstructorCourses.length}</span>
-                  <span className="text-[8px] text-emerald-600 font-bold bg-emerald-50 px-1 rounded">↑ 12%</span>
+            {/* Overview cards row */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 md:gap-4">
+              {/* Card 1: Tất cả khóa học */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCourseStatusFilter('all');
+                  setCoursePage(1);
+                }}
+                aria-pressed={courseStatusFilter === 'all'}
+                className={`relative overflow-hidden rounded-xl border p-3.5 md:p-4 text-left transition-all duration-200 cursor-pointer flex flex-col justify-between min-h-[116px] md:min-h-[128px] ${
+                  courseStatusFilter === 'all'
+                    ? 'bg-slate-50/90 border-slate-400 shadow-xs ring-2 ring-slate-400/20'
+                    : 'bg-white border-slate-200/80 shadow-3xs hover:-translate-y-0.5 hover:shadow-xs hover:border-slate-300'
+                }`}
+              >
+                <div className="absolute inset-y-0 left-0 w-1 bg-slate-800 rounded-l-xl" />
+                
+                <div className="flex items-start justify-between gap-3 pl-1">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] md:text-[11px] uppercase font-extrabold tracking-wider text-stone-500">
+                      Tất cả khóa học
+                    </p>
+                    <p className="mt-2 text-2xl md:text-3xl font-black text-stone-900 tabular-nums tracking-tight">
+                      {isApiMode && dashboardOverview?.course_summary ? dashboardOverview.course_summary.total : rawInstructorCourses.length}
+                    </p>
+                  </div>
+
+                  <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-slate-100 border border-slate-200/80 flex items-center justify-center shrink-0 text-slate-800 shadow-3xs">
+                    <BookOpen className="w-5 h-5" aria-hidden="true" />
+                  </div>
                 </div>
-              </div>
-              <div className="bg-white border border-slate-100 rounded-xl p-4 shadow-3xs flex flex-col justify-between h-20">
-                <span className="text-[9px] uppercase font-bold text-stone-450 block">Published</span>
-                <div className="flex items-baseline justify-between mt-1">
-                  <span className="text-xl font-black text-emerald-600">
-                    {rawInstructorCourses.filter(c => c.status === 'active').length}
-                  </span>
-                  <span className="text-[8px] text-emerald-600 font-bold bg-emerald-50 px-1 rounded">↑ 18%</span>
+
+                <p className="mt-2 text-[10.5px] text-stone-500 font-medium leading-tight pl-1">
+                  Tổng số khóa học hiện có
+                </p>
+              </button>
+
+              {/* Card 2: Published */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCourseStatusFilter('published');
+                  setCoursePage(1);
+                }}
+                aria-pressed={courseStatusFilter === 'published'}
+                className={`relative overflow-hidden rounded-xl border p-3.5 md:p-4 text-left transition-all duration-200 cursor-pointer flex flex-col justify-between min-h-[116px] md:min-h-[128px] ${
+                  courseStatusFilter === 'published'
+                    ? 'bg-emerald-50/60 border-emerald-400 shadow-xs ring-2 ring-emerald-500/20'
+                    : 'bg-white border-slate-200/80 shadow-3xs hover:-translate-y-0.5 hover:shadow-xs hover:border-slate-300'
+                }`}
+              >
+                <div className="absolute inset-y-0 left-0 w-1 bg-emerald-500 rounded-l-xl" />
+                
+                <div className="flex items-start justify-between gap-3 pl-1">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] md:text-[11px] uppercase font-extrabold tracking-wider text-stone-500">
+                      Published
+                    </p>
+                    <p className="mt-2 text-2xl md:text-3xl font-black text-emerald-700 tabular-nums tracking-tight">
+                      {isApiMode && dashboardOverview?.course_summary ? ((dashboardOverview.course_summary.published || 0) + (dashboardOverview.course_summary.approved || 0)) : rawInstructorCourses.filter(c => c.status === 'active').length}
+                    </p>
+                  </div>
+
+                  <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center shrink-0 text-emerald-700 shadow-3xs">
+                    <CheckCircle className="w-5 h-5" aria-hidden="true" />
+                  </div>
                 </div>
-              </div>
-              <div className="bg-white border border-slate-100 rounded-xl p-4 shadow-3xs flex flex-col justify-between h-20">
-                <span className="text-[9px] uppercase font-bold text-stone-455 block">Draft</span>
-                <div className="flex items-baseline justify-between mt-1">
-                  <span className="text-xl font-black text-stone-600">
-                    {rawInstructorCourses.filter(c => c.status === 'draft').length}
-                  </span>
-                  <span className="text-[8px] text-stone-550 font-bold bg-slate-50 px-1 rounded">→ 2%</span>
+
+                <p className="mt-2 text-[10.5px] text-stone-500 font-medium leading-tight pl-1">
+                  Đang hiển thị cho học viên
+                </p>
+              </button>
+
+              {/* Card 3: Draft */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCourseStatusFilter('draft');
+                  setCoursePage(1);
+                }}
+                aria-pressed={courseStatusFilter === 'draft'}
+                className={`relative overflow-hidden rounded-xl border p-3.5 md:p-4 text-left transition-all duration-200 cursor-pointer flex flex-col justify-between min-h-[116px] md:min-h-[128px] ${
+                  courseStatusFilter === 'draft'
+                    ? 'bg-slate-50/90 border-slate-400 shadow-xs ring-2 ring-slate-400/20'
+                    : 'bg-white border-slate-200/80 shadow-3xs hover:-translate-y-0.5 hover:shadow-xs hover:border-slate-300'
+                }`}
+              >
+                <div className="absolute inset-y-0 left-0 w-1 bg-slate-500 rounded-l-xl" />
+                
+                <div className="flex items-start justify-between gap-3 pl-1">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] md:text-[11px] uppercase font-extrabold tracking-wider text-stone-500">
+                      Draft
+                    </p>
+                    <p className="mt-2 text-2xl md:text-3xl font-black text-stone-700 tabular-nums tracking-tight">
+                      {isApiMode && dashboardOverview?.course_summary ? (dashboardOverview.course_summary.draft || 0) : rawInstructorCourses.filter(c => c.status === 'draft').length}
+                    </p>
+                  </div>
+
+                  <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-slate-100 border border-slate-200/80 flex items-center justify-center shrink-0 text-slate-700 shadow-3xs">
+                    <FileText className="w-5 h-5" aria-hidden="true" />
+                  </div>
                 </div>
-              </div>
-              <div className="bg-white border border-slate-100 rounded-xl p-4 shadow-3xs flex flex-col justify-between h-20">
-                <span className="text-[9px] uppercase font-bold text-stone-450 block">Pending Review</span>
-                <div className="flex items-baseline justify-between mt-1">
-                  <span className="text-xl font-black text-purple-600">
-                    {rawInstructorCourses.filter(c => c.status === 'pending').length}
-                  </span>
-                  <span className="text-[8px] text-purple-600 font-bold bg-purple-50 px-1 rounded">↑ 1%</span>
+
+                <p className="mt-2 text-[10.5px] text-stone-500 font-medium leading-tight pl-1">
+                  Chưa gửi xét duyệt
+                </p>
+              </button>
+
+              {/* Card 4: Pending Review */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCourseStatusFilter('pending_review');
+                  setCoursePage(1);
+                }}
+                aria-pressed={courseStatusFilter === 'pending_review'}
+                className={`relative overflow-hidden rounded-xl border p-3.5 md:p-4 text-left transition-all duration-200 cursor-pointer flex flex-col justify-between min-h-[116px] md:min-h-[128px] ${
+                  courseStatusFilter === 'pending_review'
+                    ? 'bg-amber-50/60 border-amber-400 shadow-xs ring-2 ring-amber-500/20'
+                    : 'bg-white border-slate-200/80 shadow-3xs hover:-translate-y-0.5 hover:shadow-xs hover:border-slate-300'
+                }`}
+              >
+                <div className="absolute inset-y-0 left-0 w-1 bg-amber-500 rounded-l-xl" />
+                
+                <div className="flex items-start justify-between gap-3 pl-1">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] md:text-[11px] uppercase font-extrabold tracking-wider text-stone-500">
+                      Pending Review
+                    </p>
+                    <p className="mt-2 text-2xl md:text-3xl font-black text-amber-700 tabular-nums tracking-tight">
+                      {isApiMode && dashboardOverview?.course_summary ? (dashboardOverview.course_summary.pending_review || 0) : rawInstructorCourses.filter(c => c.status === 'pending').length}
+                    </p>
+                  </div>
+
+                  <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-center shrink-0 text-amber-700 shadow-3xs">
+                    <Clock className="w-5 h-5" aria-hidden="true" />
+                  </div>
                 </div>
-              </div>
-              <div className="bg-white border border-slate-100 rounded-xl p-4 shadow-3xs flex flex-col justify-between h-20">
-                <span className="text-[9px] uppercase font-bold text-stone-450 block">Rejected</span>
-                <div className="flex items-baseline justify-between mt-1">
-                  <span className="text-xl font-black text-rose-600">
-                    {rawInstructorCourses.filter(c => c.status === 'rejected').length}
-                  </span>
-                  <span className="text-[8px] text-stone-450 font-bold bg-slate-50 px-1 rounded">→ 0%</span>
+
+                <p className="mt-2 text-[10.5px] text-stone-500 font-medium leading-tight pl-1">
+                  Đang chờ quản trị viên duyệt
+                </p>
+              </button>
+
+              {/* Card 5: Rejected */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCourseStatusFilter('rejected');
+                  setCoursePage(1);
+                }}
+                aria-pressed={courseStatusFilter === 'rejected'}
+                className={`relative overflow-hidden rounded-xl border p-3.5 md:p-4 text-left transition-all duration-200 cursor-pointer flex flex-col justify-between min-h-[116px] md:min-h-[128px] col-span-2 sm:col-span-1 ${
+                  courseStatusFilter === 'rejected'
+                    ? 'bg-rose-50/60 border-rose-400 shadow-xs ring-2 ring-rose-500/20'
+                    : 'bg-white border-slate-200/80 shadow-3xs hover:-translate-y-0.5 hover:shadow-xs hover:border-slate-300'
+                }`}
+              >
+                <div className="absolute inset-y-0 left-0 w-1 bg-rose-500 rounded-l-xl" />
+                
+                <div className="flex items-start justify-between gap-3 pl-1">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] md:text-[11px] uppercase font-extrabold tracking-wider text-stone-500">
+                      Rejected
+                    </p>
+                    <p className="mt-2 text-2xl md:text-3xl font-black text-rose-600 tabular-nums tracking-tight">
+                      {isApiMode && dashboardOverview?.course_summary ? (dashboardOverview.course_summary.rejected || 0) : rawInstructorCourses.filter(c => c.status === 'rejected').length}
+                    </p>
+                  </div>
+
+                  <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-rose-50 border border-rose-200/80 flex items-center justify-center shrink-0 text-rose-600 shadow-3xs">
+                    <AlertCircle className="w-5 h-5" aria-hidden="true" />
+                  </div>
                 </div>
-              </div>
+
+                <p className="mt-2 text-[10.5px] text-stone-500 font-medium leading-tight pl-1">
+                  Cần chỉnh sửa và gửi lại
+                </p>
+              </button>
             </div>
 
             {/* Filters Row */}
-            <div className="bg-white border border-slate-100 rounded-xl p-4 shadow-3xs flex flex-wrap items-center justify-between gap-3">
+            <div className="bg-white border border-slate-100 rounded-xl p-3.5 shadow-3xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-3 flex-1">
                 {/* Trạng thái dropdown */}
-                <div className="flex flex-col">
-                  <span className="text-[8.5px] text-stone-400 font-bold uppercase mb-1">Trạng thái</span>
+                <div className="flex flex-col w-full sm:w-[150px]">
+                  <span className="text-[9px] text-stone-500 font-bold uppercase tracking-wider mb-1">Trạng thái</span>
                   <select
                     value={courseStatusFilter}
-                    onChange={e => setCourseStatusFilter(e.target.value)}
-                    className="border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-[10px] font-bold focus:outline-none cursor-pointer"
+                    onChange={e => {
+                      setCourseStatusFilter(e.target.value);
+                      setCoursePage(1);
+                    }}
+                    className="w-full h-[38px] border border-slate-200 rounded-lg px-2.5 bg-white text-xs font-semibold focus:outline-none focus:border-emerald-500 cursor-pointer"
                   >
                     <option value="all">Tất cả trạng thái</option>
+                    <option value="published">Đang công khai</option>
                     <option value="draft">Đang hoàn thiện</option>
-                    <option value="pending">Chờ duyệt</option>
+                    <option value="pending_review">Chờ duyệt</option>
                     <option value="rejected">Bị từ chối</option>
-                    <option value="active">Đang công khai</option>
                     <option value="hidden">Đã ẩn</option>
                   </select>
                 </div>
 
                 {/* Danh mục dropdown */}
-                <div className="flex flex-col">
-                  <span className="text-[8.5px] text-stone-400 font-bold uppercase mb-1">Danh mục</span>
+                <div className="flex flex-col w-full sm:w-[180px]">
+                  <span className="text-[9px] text-stone-500 font-bold uppercase tracking-wider mb-1">Danh mục</span>
                   <select
-                    className="border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-[10px] font-bold focus:outline-none cursor-pointer"
+                    value={courseCategoryFilter}
+                    onChange={e => {
+                      setCourseCategoryFilter(e.target.value);
+                      setCoursePage(1);
+                    }}
+                    className="w-full h-[38px] border border-slate-200 rounded-lg px-2.5 bg-white text-xs font-semibold focus:outline-none focus:border-emerald-500 cursor-pointer truncate"
                   >
-                    <option>Tất cả danh mục</option>
-                    <option>Lập trình & Công nghệ</option>
-                    <option>Trí tuệ nhân tạo (AI)</option>
+                    <option value="all">Tất cả danh mục</option>
+                    {categoriesList.map((cat: any) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 {/* Từ khóa */}
-                <div className="flex flex-col flex-1 min-w-[200px]">
-                  <span className="text-[8.5px] text-stone-400 font-bold uppercase mb-1">Từ khóa</span>
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-stone-400" />
+                <div className="flex flex-col flex-1 min-w-[200px] w-full">
+                  <span className="text-[9px] text-stone-500 font-bold uppercase tracking-wider mb-1">Từ khóa</span>
+                  <div className="relative w-full">
+                    <Search className="absolute left-3 top-3 w-4 h-4 text-stone-400" />
                     <input
                       type="text"
                       placeholder="Tìm kiếm khóa học..."
                       value={courseSearchQuery}
                       onChange={e => setCourseSearchQuery(e.target.value)}
-                      className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-[10px] font-bold focus:outline-none"
+                      className="w-full h-[38px] border border-slate-200 rounded-lg pl-9 pr-8 text-xs font-semibold focus:outline-none focus:border-emerald-500"
                     />
+                    {courseSearchQuery && (
+                      <button
+                        onClick={() => setCourseSearchQuery('')}
+                        className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-600 cursor-pointer p-0.5"
+                        title="Xóa từ khóa"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-end gap-2.5 self-end">
+              <div className="flex items-end gap-2.5 w-full sm:w-auto justify-between sm:justify-end">
                 {/* Sắp xếp */}
-                <div className="flex flex-col">
-                  <span className="text-[8.5px] text-stone-400 font-bold uppercase mb-1">Sắp xếp</span>
+                <div className="flex flex-col w-full sm:w-[170px]">
+                  <span className="text-[9px] text-stone-500 font-bold uppercase tracking-wider mb-1">Sắp xếp</span>
                   <select
-                    className="border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-[10px] font-bold focus:outline-none cursor-pointer"
+                    value={courseSortBy}
+                    onChange={e => {
+                      setCourseSortBy(e.target.value);
+                      setCoursePage(1);
+                    }}
+                    className="w-full h-[38px] border border-slate-200 rounded-lg px-2.5 bg-white text-xs font-semibold focus:outline-none focus:border-emerald-500 cursor-pointer"
                   >
-                    <option>Cập nhật gần nhất</option>
-                    <option>Mới nhất</option>
-                    <option>Nhiều học viên nhất</option>
+                    <option value="newest">Cập nhật gần nhất</option>
+                    <option value="oldest">Cũ nhất</option>
+                    <option value="title_asc">Tên A–Z</option>
+                    <option value="title_desc">Tên Z–A</option>
                   </select>
                 </div>
-                {/* Bộ lọc button */}
-                <button className="border border-slate-200 hover:bg-slate-50 p-2 rounded-lg flex items-center justify-center shrink-0 cursor-pointer h-[28px] w-[32px]">
-                  <Filter className="w-4 h-4 text-stone-500" />
+
+                {/* Reset filter button if active */}
+                {(courseStatusFilter !== 'all' || courseCategoryFilter !== 'all' || courseSearchQuery !== '' || courseSortBy !== 'newest') && (
+                  <button
+                    onClick={() => {
+                      setCourseStatusFilter('all');
+                      setCourseCategoryFilter('all');
+                      setCourseSearchQuery('');
+                      setCourseSortBy('newest');
+                      setCoursePage(1);
+                    }}
+                    className="h-[38px] px-3 border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                    title="Đặt lại bộ lọc"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Đặt lại</span>
+                  </button>
+                )}
+
+                {/* Nút filter nâng cao */}
+                <button 
+                  className="h-[38px] w-[38px] border border-slate-200 hover:bg-slate-50 p-2 rounded-lg flex items-center justify-center shrink-0 cursor-pointer transition-colors"
+                  title="Bộ lọc nâng cao"
+                  aria-label="Bộ lọc nâng cao"
+                >
+                  <Filter className="w-4 h-4 text-stone-600" />
                 </button>
               </div>
             </div>
@@ -1722,191 +2843,525 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
               
               {/* Table side (span 3) */}
               <div className="lg:col-span-3 bg-white border border-slate-100 rounded-2xl shadow-3xs overflow-hidden">
-                {filteredInstructorCourses.length === 0 ? (
-                  <div className="text-center py-16 bg-slate-50">
-                    <BookOpen className="w-12 h-12 text-stone-300 mx-auto mb-2" />
-                    <p className="text-stone-500 font-medium text-xs">Không tìm thấy khóa học nào khớp với bộ lọc.</p>
+                {isCoursesLoading ? (
+                  <CourseTableSkeleton />
+                ) : coursesError ? (
+                  <div className="text-center py-16 bg-slate-50 px-4 space-y-3">
+                    <AlertTriangle className="w-12 h-12 text-rose-500 mx-auto" />
+                    <div>
+                      <p className="text-rose-600 font-bold text-sm">{coursesError}</p>
+                      <p className="text-stone-500 font-medium text-xs mt-1">Không thể tải danh sách khóa học từ máy chủ. Vui lòng thử lại.</p>
+                    </div>
+                    <button 
+                      onClick={() => loadInstructorCoursesList()}
+                      disabled={isCoursesLoading}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-3xs inline-flex items-center gap-2"
+                    >
+                      <RotateCcw className={`w-3.5 h-3.5 ${isCoursesLoading ? 'animate-spin' : ''}`} />
+                      {isCoursesLoading ? 'Đang tải...' : 'Thử lại'}
+                    </button>
+                  </div>
+                ) : displayedCourses.length === 0 ? (
+                  <div className="text-center py-16 bg-slate-50 px-4 space-y-3">
+                    <BookOpen className="w-12 h-12 text-stone-300 mx-auto" />
+                    <p className="text-stone-500 font-medium text-xs max-w-sm mx-auto">
+                      {courseSearchQuery || courseStatusFilter !== 'all' || courseCategoryFilter !== 'all'
+                        ? 'Không tìm thấy khóa học nào phù hợp với bộ lọc.'
+                        : 'Bạn chưa có khóa học nào trong danh sách.'}
+                    </p>
+                    {(courseSearchQuery || courseStatusFilter !== 'all' || courseCategoryFilter !== 'all') && (
+                      <button
+                        onClick={() => {
+                          setCourseStatusFilter('all');
+                          setCourseCategoryFilter('all');
+                          setCourseSearchQuery('');
+                          setCourseSortBy('newest');
+                          setCoursePage(1);
+                        }}
+                        className="px-3.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-stone-700 rounded-lg text-xs font-bold cursor-pointer transition-colors shadow-3xs inline-flex items-center gap-1.5"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" /> Đặt lại bộ lọc
+                      </button>
+                    )}
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-[10.5px]">
-                      <thead>
-                        <tr className="bg-slate-50/50 text-stone-400 border-b">
-                          <th className="p-3.5 font-bold">Khóa học</th>
-                          <th className="p-3.5 font-bold">Cấp độ</th>
-                          <th className="p-3.5 font-bold">Giá</th>
-                          <th className="p-3.5 font-bold">Trạng thái</th>
-                          <th className="p-3.5 font-bold text-center">Học viên</th>
-                          <th className="p-3.5 font-bold text-right">Doanh thu</th>
-                          <th className="p-3.5 font-bold">Cập nhật gần nhất</th>
-                          <th className="p-3.5 font-bold text-center">Thao tác</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {filteredInstructorCourses.map(course => {
-                          const courseLevelLabel = 
-                            course.level === 'beginner' || course.level === 'Cơ bản' ? 'Cơ bản' :
-                            course.level === 'expert' || course.level === 'Nâng cao' ? 'Nâng cao' : 'Trung cấp';
-                          
-                          const levelColorClass =
-                            courseLevelLabel === 'Cơ bản' ? 'bg-emerald-50 text-emerald-700' :
-                            courseLevelLabel === 'Nâng cao' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700';
+                  <>
+                    {/* DESKTOP / TABLET TABLE VIEW */}
+                    <div id="courses-list-section" className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="bg-slate-50/80 text-stone-500 border-b border-slate-100 uppercase text-[9px] tracking-wider font-extrabold">
+                            <th className="py-3 px-4 min-w-[360px]">Khóa học</th>
+                            <th className="py-3 px-3 w-[130px] min-w-[130px]">Trạng thái</th>
+                            <th className="py-3 px-3 w-[90px] min-w-[90px] text-right">Học viên</th>
+                            <th className="py-3 px-3 w-[110px] min-w-[110px] text-right">Doanh thu</th>
+                            <th className="py-3 px-4 w-[110px] min-w-[110px] text-center">Cập nhật</th>
+                            <th className="py-3 px-4 w-[140px] min-w-[140px] text-center">Thao tác</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {displayedCourses.map(course => {
+                            const courseLevelLabel = 
+                              course.level === 'beginner' || course.level === 'Cơ bản' ? 'Cơ bản' :
+                              course.level === 'expert' || course.level === 'Nâng cao' ? 'Nâng cao' : 'Trung cấp';
 
-                          return (
-                            <tr key={course.id} className="hover:bg-slate-50/40">
-                              <td className="p-3.5 font-bold text-stone-850 flex items-center gap-3">
-                                <img src={course.image} alt="" className="w-16 h-11 object-cover rounded-lg border bg-white shrink-0" />
-                                <div className="max-w-[150px]">
-                                  <p className="font-extrabold truncate text-[10.5px] leading-tight text-stone-900">{course.title}</p>
-                                  <span className="text-[8px] text-stone-400 font-semibold">{course.category === 'Development' ? 'Lập trình' : 'Trí tuệ nhân tạo (AI)'}</span>
-                                </div>
-                              </td>
-                              
-                              <td className="p-3.5 font-bold">
-                                <span className={`text-[8.5px] font-extrabold px-2 py-0.5 rounded-full ${levelColorClass}`}>
-                                  {courseLevelLabel}
-                                </span>
-                              </td>
-                              
-                              <td className="p-3.5 font-black text-stone-800">
-                                {formatVND(course.salePrice || course.price || 0)}
-                              </td>
+                            const displayStatus = (course as any).rawStatus || course.status;
+                            const statusLabel = (course as any).statusLabel || (
+                              displayStatus === 'published' || displayStatus === 'active' ? 'Đang công khai' :
+                              displayStatus === 'rejected' ? 'Bị từ chối' :
+                              displayStatus === 'draft' ? 'Bản nháp' :
+                              displayStatus === 'hidden' ? 'Đã ẩn' : 'Chờ duyệt'
+                            );
 
-                              <td className="p-3.5 font-bold">
-                                <span className="flex items-center gap-1.5">
-                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                    course.status === 'active' ? 'bg-emerald-500' :
-                                    course.status === 'rejected' ? 'bg-rose-500' :
-                                    course.status === 'draft' ? 'bg-amber-500' : 'bg-purple-500'
-                                  }`} />
-                                  <span className="text-[9.5px]">
-                                    {course.status === 'active' ? 'Published' :
-                                     course.status === 'rejected' ? 'Rejected' :
-                                     course.status === 'draft' ? 'Draft' : 'Pending Review'}
+                            const statusBadgeClass = 
+                              displayStatus === 'published' || displayStatus === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80' :
+                              displayStatus === 'rejected' ? 'bg-rose-50 text-rose-700 border-rose-200/80' :
+                              displayStatus === 'draft' ? 'bg-amber-50 text-amber-700 border-amber-200/80' :
+                              displayStatus === 'hidden' ? 'bg-slate-100 text-slate-600 border-slate-200' :
+                              'bg-purple-50 text-purple-700 border-purple-200/80';
+
+                            const formattedDate = course.updatedAt 
+                              ? new Date(course.updatedAt).toLocaleDateString('vi-VN') 
+                              : (course.createdAt ? new Date(course.createdAt).toLocaleDateString('vi-VN') : '—');
+
+                            return (
+                              <tr key={course.id} className="hover:bg-slate-50/60 transition-colors h-[76px]">
+                                <td className="py-3 px-4 min-w-[360px]">
+                                  <div className="flex items-center gap-3">
+                                    <CourseThumbnail src={course.image} alt={course.title} />
+                                    <div className="min-w-0 flex-1 overflow-hidden">
+                                      <h4 
+                                        title={course.title} 
+                                        className="font-bold text-xs text-stone-900 line-clamp-2 break-words leading-snug hover:text-emerald-700 transition-colors cursor-pointer"
+                                        onClick={() => startBuilderForEdit(course)}
+                                      >
+                                        {course.title}
+                                      </h4>
+                                      <div className="text-[11px] text-stone-500 font-medium mt-1 flex items-center gap-1.5 flex-wrap">
+                                        <span>{course.category}</span>
+                                        <span>·</span>
+                                        <span className="text-stone-600">{courseLevelLabel}</span>
+                                        <span>·</span>
+                                        <span className="font-extrabold text-stone-850 whitespace-nowrap">{formatVND(course.salePrice || course.price || 0)}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                                
+                                <td className="py-3 px-3 w-[130px] min-w-[130px]">
+                                  <span className={`inline-flex whitespace-nowrap items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border min-w-0 shrink-0 ${statusBadgeClass}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                      displayStatus === 'published' || displayStatus === 'active' ? 'bg-emerald-500' :
+                                      displayStatus === 'rejected' ? 'bg-rose-500' :
+                                      displayStatus === 'draft' ? 'bg-amber-500' :
+                                      displayStatus === 'hidden' ? 'bg-slate-400' : 'bg-purple-500'
+                                    }`} />
+                                    {statusLabel}
                                   </span>
-                                </span>
-                              </td>
+                                </td>
 
-                              <td className="p-3.5 font-black text-center text-stone-700">
-                                {formatNumber(course.enrolledCount)}
-                              </td>
+                                <td className="py-3 px-3 w-[90px] min-w-[90px] text-right font-bold text-xs text-stone-700 tabular-nums whitespace-nowrap">
+                                  {formatNumber(course.enrolledCount)}
+                                </td>
 
-                              <td className="p-3.5 font-black text-right text-emerald-650">
-                                {formatVND(course.enrolledCount * (course.salePrice || course.price || 499000))}
-                              </td>
+                                <td className="py-3 px-3 w-[110px] min-w-[110px] text-right font-black text-xs text-emerald-700 tabular-nums whitespace-nowrap">
+                                  {formatVND(course.enrolledCount * (course.salePrice || course.price || 0))}
+                                </td>
 
-                              <td className="p-3.5 font-bold text-stone-400">
-                                {course.createdAt ? new Date(course.createdAt).toLocaleDateString('vi-VN') : '20/05/2025'}
-                              </td>
+                                <td className="py-3 px-4 w-[110px] min-w-[110px] text-center text-[10.5px] font-medium text-stone-500 whitespace-nowrap">
+                                  {formattedDate}
+                                </td>
 
-                              <td className="p-3.5 text-center">
-                                <div className="flex items-center justify-center gap-1.5">
-                                  {course.status === 'rejected' && (
+                                <td className="py-3 px-4 w-[140px] min-w-[140px] text-center">
+                                  <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                                    {(displayStatus === 'rejected' || course.status === 'rejected') && (
+                                      <button 
+                                        onClick={() => alert(`Lý do từ chối: ${course.rejectionReason || 'Không có lý do chi tiết.'}`)}
+                                        className="h-9 min-w-[76px] px-2.5 inline-flex items-center justify-center whitespace-nowrap bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[10px] font-bold transition-colors cursor-pointer shrink-0"
+                                      >
+                                        Xem lý do
+                                      </button>
+                                    )}
+
+                                    {(displayStatus === 'draft' || course.status === 'draft') && (
+                                      <button 
+                                        onClick={() => {
+                                          if (window.confirm('Bạn có muốn gửi khóa học này cho Admin duyệt không?')) {
+                                            ApiService.submitCourseToAdminVerification(course.id)
+                                              .then(() => {
+                                                alert('Đã gửi yêu cầu duyệt khóa học thành công!');
+                                                loadInstructorCoursesList();
+                                              })
+                                              .catch(err => alert(err.message || 'Lỗi gửi duyệt'));
+                                          }
+                                        }}
+                                        className="h-9 min-w-[76px] px-2.5 inline-flex items-center justify-center whitespace-nowrap bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold transition-colors cursor-pointer shrink-0"
+                                      >
+                                        Gửi duyệt
+                                      </button>
+                                    )}
+
                                     <button 
-                                      onClick={() => alert(`Lý do từ chối: ${course.rejectionReason || 'Không có lý do chi tiết.'}`)}
-                                      className="text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-100 px-2 py-1 rounded-lg text-[9px] font-bold transition-all"
+                                      onClick={() => startBuilderForEdit(course)}
+                                      className="h-9 min-w-[80px] px-3 inline-flex items-center justify-center whitespace-nowrap bg-white hover:bg-slate-50 text-stone-700 border border-slate-200 rounded-lg text-xs font-bold cursor-pointer shadow-3xs transition-colors shrink-0"
                                     >
-                                      Xem lý do
+                                      Chỉnh sửa
                                     </button>
-                                  )}
 
-                                  {course.status === 'draft' && (
                                     <button 
                                       onClick={() => {
-                                        if (window.confirm('Bạn có muốn gửi khóa học này cho Admin duyệt không?')) {
-                                          onUpdateCourse({ ...course, status: 'pending' });
-                                          alert('Đã gửi yêu cầu duyệt khóa học thành công!');
+                                        if (window.confirm('Bạn có chắc chắn muốn xóa vĩnh viễn khóa học này? Thao tác này không thể thu hồi.')) {
+                                          onDeleteCourse(course.id);
                                         }
                                       }}
-                                      className="text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 px-2 py-1 rounded-lg text-[9px] font-bold transition-all"
+                                      className="w-9 h-9 inline-flex items-center justify-center text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 rounded-lg transition-colors cursor-pointer shrink-0"
+                                      title="Xóa khóa học"
+                                      aria-label="Xóa khóa học"
                                     >
-                                      Gửi duyệt
+                                      <Trash2 className="w-4 h-4" />
                                     </button>
-                                  )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
 
-                                  <button 
-                                    onClick={() => startBuilderForEdit(course)}
-                                    className="text-stone-700 bg-stone-50 hover:bg-stone-100 border border-stone-200 px-2 py-1 rounded-lg text-[9px] font-bold transition-all"
-                                  >
-                                    Chỉnh sửa
-                                  </button>
+                    {/* MOBILE CARD LIST VIEW (< 768px) */}
+                    <div className="block md:hidden p-3 space-y-3">
+                      {displayedCourses.map(course => {
+                        const courseLevelLabel = 
+                          course.level === 'beginner' || course.level === 'Cơ bản' ? 'Cơ bản' :
+                          course.level === 'expert' || course.level === 'Nâng cao' ? 'Nâng cao' : 'Trung cấp';
 
-                                  <button 
-                                    onClick={() => {
-                                      if (window.confirm('Bạn có chắc chắn muốn xóa vĩnh viễn khóa học này? Thao tác này không thể thu hồi.')) {
-                                        onDeleteCourse(course.id);
+                        const displayStatus = (course as any).rawStatus || course.status;
+                        const statusLabel = (course as any).statusLabel || (
+                          displayStatus === 'published' || displayStatus === 'active' ? 'Đang công khai' :
+                          displayStatus === 'rejected' ? 'Bị từ chối' :
+                          displayStatus === 'draft' ? 'Bản nháp' :
+                          displayStatus === 'hidden' ? 'Đã ẩn' : 'Chờ duyệt'
+                        );
+
+                        const statusBadgeClass = 
+                          displayStatus === 'published' || displayStatus === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80' :
+                          displayStatus === 'rejected' ? 'bg-rose-50 text-rose-700 border-rose-200/80' :
+                          displayStatus === 'draft' ? 'bg-amber-50 text-amber-700 border-amber-200/80' :
+                          displayStatus === 'hidden' ? 'bg-slate-100 text-slate-600 border-slate-200' :
+                          'bg-purple-50 text-purple-700 border-purple-200/80';
+
+                        const formattedDate = course.updatedAt 
+                          ? new Date(course.updatedAt).toLocaleDateString('vi-VN') 
+                          : (course.createdAt ? new Date(course.createdAt).toLocaleDateString('vi-VN') : '—');
+
+                        return (
+                          <div key={course.id} className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-3xs space-y-3">
+                            <div className="flex gap-3 items-start">
+                              <CourseThumbnail src={course.image} alt={course.title} />
+                              <div className="min-w-0 flex-1 overflow-hidden">
+                                <h4 
+                                  title={course.title}
+                                  className="font-bold text-xs text-stone-900 line-clamp-2 break-words leading-snug cursor-pointer hover:text-emerald-700"
+                                  onClick={() => startBuilderForEdit(course)}
+                                >
+                                  {course.title}
+                                </h4>
+                                <p className="text-[11px] text-stone-500 font-medium mt-1 flex flex-wrap items-center gap-1">
+                                  <span>{course.category}</span>
+                                  <span>·</span>
+                                  <span className="text-stone-600">{courseLevelLabel}</span>
+                                </p>
+                                <p className="font-extrabold text-xs text-stone-850 mt-1">
+                                  {formatVND(course.salePrice || course.price || 0)}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center justify-between border-t border-b border-slate-100 py-2 text-xs gap-2">
+                              <span className={`inline-flex whitespace-nowrap items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${statusBadgeClass}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                  displayStatus === 'published' || displayStatus === 'active' ? 'bg-emerald-500' :
+                                  displayStatus === 'rejected' ? 'bg-rose-500' :
+                                  displayStatus === 'draft' ? 'bg-amber-500' :
+                                  displayStatus === 'hidden' ? 'bg-slate-400' : 'bg-purple-500'
+                                }`} />
+                                {statusLabel}
+                              </span>
+                              <div className="flex items-center gap-2 text-[11px] text-stone-600 font-medium tabular-nums">
+                                <span>Học viên: <strong className="text-stone-800">{formatNumber(course.enrolledCount)}</strong></span>
+                                <span>|</span>
+                                <span>Doanh thu: <strong className="text-emerald-700 font-extrabold">{formatVND(course.enrolledCount * (course.salePrice || course.price || 0))}</strong></span>
+                                <span>|</span>
+                                <span>Cập nhật: <strong className="text-stone-800">{formattedDate}</strong></span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-1 whitespace-nowrap">
+                              {(displayStatus === 'draft' || course.status === 'draft') && (
+                                <button 
+                                  onClick={async () => {
+                                    if (window.confirm('Bạn có muốn gửi khóa học này cho Admin duyệt không?')) {
+                                      try {
+                                        await ApiService.submitCourseToAdminVerification(course.id);
+                                        alert('Đã gửi yêu cầu duyệt khóa học thành công!');
+                                        loadInstructorCoursesList();
+                                      } catch (err: any) {
+                                        console.error("Error submitting course for review:", err);
+                                        setSubmitErrorModalState({
+                                          isOpen: true,
+                                          title: 'Gửi duyệt khóa học thất bại',
+                                          message: err.message || 'Khóa học chưa đủ điều kiện gửi duyệt.',
+                                          status: err.status || 400,
+                                          errors: err.errors || null,
+                                        });
                                       }
-                                    }}
-                                    className="text-rose-600 hover:bg-rose-50 p-1 rounded-lg border border-transparent hover:border-rose-100 font-bold"
-                                    title="Xóa khóa học"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                                    }
+                                  }}
+                                  className="h-9 min-w-[76px] px-2.5 inline-flex items-center justify-center whitespace-nowrap bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold cursor-pointer shrink-0"
+                                >
+                                  Gửi duyệt
+                                </button>
+                              )}
+
+                              <button 
+                                onClick={() => startBuilderForEdit(course)}
+                                className="h-9 min-w-[80px] px-3 inline-flex items-center justify-center whitespace-nowrap bg-white text-stone-700 border border-slate-200 rounded-lg text-xs font-bold cursor-pointer shadow-3xs shrink-0"
+                              >
+                                Chỉnh sửa
+                              </button>
+
+                              <button 
+                                onClick={() => {
+                                  if (window.confirm('Bạn có chắc chắn muốn xóa vĩnh viễn khóa học này? Thao tác này không thể thu hồi.')) {
+                                    onDeleteCourse(course.id);
+                                  }
+                                }}
+                                className="w-9 h-9 inline-flex items-center justify-center text-rose-600 hover:bg-rose-50 border border-slate-200 rounded-lg transition-colors cursor-pointer shrink-0"
+                                title="Xóa khóa học"
+                                aria-label="Xóa khóa học"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
                 )}
                 
                 {/* Pagination */}
-                <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-[10px] font-bold text-stone-500">
-                  <span>Hiển thị 1 - {filteredInstructorCourses.length} trên {filteredInstructorCourses.length} khóa học</span>
-                  <div className="flex items-center gap-1">
-                    <button className="p-1.5 border rounded-lg hover:bg-white bg-slate-50 text-stone-400" disabled>&lt;</button>
-                    <button className="px-2.5 py-1 border rounded-lg bg-emerald-600 text-white">1</button>
-                    <button className="p-1.5 border rounded-lg hover:bg-white bg-slate-50 text-stone-400" disabled>&gt;</button>
-                  </div>
+                {!isCoursesLoading && !coursesError && totalCoursesCount > 0 && (
+                  <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-medium text-stone-600 min-h-[60px]">
+                    {(() => {
+                      const currentPage = isApiMode ? (apiCoursesMeta.current_page || 1) : coursePage;
+                      const perPage = isApiMode ? (apiCoursesMeta.per_page || 10) : 10;
+                      const total = isApiMode ? (apiCoursesMeta.total || 0) : filteredInstructorCourses.length;
+                      const lastPage = isApiMode ? (apiCoursesMeta.last_page || 1) : Math.ceil(filteredInstructorCourses.length / perPage) || 1;
+                    const from = total > 0 ? (currentPage - 1) * perPage + 1 : 0;
+                    const to = Math.min(currentPage * perPage, total);
+
+                    const handlePageChange = (newPage: number) => {
+                      if (newPage < 1 || newPage > lastPage || newPage === currentPage) return;
+                      setCoursePage(newPage);
+                      document.getElementById('courses-list-section')?.scrollIntoView({ behavior: 'smooth' });
+                    };
+
+                    const getPageNumbers = (current: number, totalPages: number) => {
+                      if (totalPages <= 7) {
+                        return Array.from({ length: totalPages }, (_, i) => i + 1);
+                      }
+                      if (current <= 4) {
+                        return [1, 2, 3, 4, 5, '...', totalPages];
+                      }
+                      if (current >= totalPages - 3) {
+                        return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+                      }
+                      return [1, '...', current - 1, current, current + 1, '...', totalPages];
+                    };
+
+                    const pageNumbers = getPageNumbers(currentPage, lastPage);
+
+                    return (
+                      <>
+                        <span className="text-xs text-stone-500 font-medium">
+                          Hiển thị <strong className="text-stone-900 font-bold">{from}–{to}</strong> trên <strong className="text-stone-900 font-bold">{total}</strong> khóa học
+                        </span>
+
+                        {/* Desktop Numeric Pagination (≥ 640px) */}
+                        <div className="hidden sm:flex items-center gap-1.5">
+                          <button 
+                            onClick={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage <= 1}
+                            className="w-9 h-9 flex items-center justify-center border border-slate-200 rounded-lg hover:bg-white bg-slate-50 text-stone-700 disabled:opacity-40 disabled:hover:bg-slate-50 cursor-pointer disabled:cursor-not-allowed transition-colors text-xs font-bold"
+                            title="Trang trước"
+                            aria-label="Trang trước"
+                          >
+                            &larr;
+                          </button>
+
+                          {pageNumbers.map((p, idx) => {
+                            if (p === '...') {
+                              return (
+                                <span key={`dots-${idx}`} className="w-8 text-center text-stone-400 font-bold select-none">
+                                  ...
+                                </span>
+                              );
+                            }
+                            const isCurrent = p === currentPage;
+                            return (
+                              <button
+                                key={`page-${p}`}
+                                onClick={() => handlePageChange(p as number)}
+                                className={`w-9 h-9 flex items-center justify-center border rounded-lg font-bold text-xs transition-colors cursor-pointer ${
+                                  isCurrent 
+                                    ? 'bg-slate-900 text-white border-slate-900 shadow-3xs' 
+                                    : 'bg-white border-slate-200 text-stone-700 hover:bg-slate-100'
+                                }`}
+                              >
+                                {p}
+                              </button>
+                            );
+                          })}
+
+                          <button 
+                            onClick={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage >= lastPage}
+                            className="w-9 h-9 flex items-center justify-center border border-slate-200 rounded-lg hover:bg-white bg-slate-50 text-stone-700 disabled:opacity-40 disabled:hover:bg-slate-50 cursor-pointer disabled:cursor-not-allowed transition-colors text-xs font-bold"
+                            title="Trang sau"
+                            aria-label="Trang sau"
+                          >
+                            &rarr;
+                          </button>
+                        </div>
+
+                        {/* Mobile Compact Pagination (< 640px) */}
+                        <div className="flex sm:hidden items-center gap-2">
+                          <button 
+                            onClick={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage <= 1}
+                            className="px-3 h-9 flex items-center justify-center border border-slate-200 rounded-lg hover:bg-white bg-slate-50 text-stone-700 disabled:opacity-40 disabled:hover:bg-slate-50 cursor-pointer disabled:cursor-not-allowed transition-colors text-xs font-bold"
+                          >
+                            Trước
+                          </button>
+                          <span className="px-3 py-1.5 border border-slate-200 rounded-lg bg-white font-bold text-xs text-stone-800">
+                            {currentPage} / {lastPage}
+                          </span>
+                          <button 
+                            onClick={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage >= lastPage}
+                            className="px-3 h-9 flex items-center justify-center border border-slate-200 rounded-lg hover:bg-white bg-slate-50 text-stone-700 disabled:opacity-40 disabled:hover:bg-slate-50 cursor-pointer disabled:cursor-not-allowed transition-colors text-xs font-bold"
+                          >
+                            Sau
+                          </button>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
+                )}
               </div>
+
               {/* Sidebar side (span 1) */}
-              <div className="space-y-4">
+              <div className="space-y-4 w-full">
                 
                 {/* Performance Card */}
-                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-3xs text-left space-y-4">
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <h4 className="font-extrabold text-xs text-stone-850">Hiệu suất khóa học</h4>
-                    <span className="text-[8.5px] text-stone-400 font-bold">7 ngày qua</span>
+                <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-3xs text-left space-y-3.5">
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-2.5">
+                    <h4 className="font-extrabold text-xs text-stone-900">Hiệu suất khóa học</h4>
+                    <span className="text-[9px] text-stone-400 font-bold bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">7 ngày qua</span>
                   </div>
-                  <div className="space-y-3 text-[11px]">
-                    <div className="flex justify-between items-center bg-slate-50/50 p-2.5 rounded-xl border border-slate-100/50">
-                      <div>
-                        <span className="text-stone-450 text-[9px] uppercase font-bold block leading-none">Lượt xem</span>
-                        <span className="font-black text-stone-800 text-sm mt-1 block">12.345</span>
+
+                  {(() => {
+                    const enrollmentsCount = isApiMode && dashboardOverview?.enrollment_summary
+                      ? (dashboardOverview.enrollment_summary.new_this_month ?? dashboardOverview.enrollment_summary.total_enrollments ?? 0)
+                      : 0;
+                    
+                    const revenueAmount = isApiMode && dashboardOverview?.revenue_summary
+                      ? parseFloat(dashboardOverview.revenue_summary.instructor_amount_this_month || '0')
+                      : 0;
+
+                    const unansweredCount = isApiMode && dashboardOverview?.interaction_summary
+                      ? (dashboardOverview.interaction_summary.unanswered_questions || 0)
+                      : 0;
+
+                    const enrollChange = dashboardOverview?.enrollment_summary?.change_percentage;
+                    const prevEnroll = dashboardOverview?.enrollment_summary?.previous_period_enrollments || 0;
+                    
+                    const revChange = dashboardOverview?.revenue_summary?.change_percentage;
+                    const prevRev = parseFloat(dashboardOverview?.revenue_summary?.previous_period_instructor_amount || '0');
+
+                    const isAllZero = enrollmentsCount === 0 && revenueAmount === 0 && unansweredCount === 0;
+
+                    return (
+                      <div className="space-y-2.5 text-[11px]">
+                        {isAllZero && (
+                          <p className="text-[10.5px] text-stone-400 font-medium italic text-center py-1">
+                            Chưa có dữ liệu hiệu suất trong 7 ngày qua.
+                          </p>
+                        )}
+
+                        <div className="flex justify-between items-center bg-slate-50/60 p-2.5 rounded-xl border border-slate-100">
+                          <div>
+                            <span className="text-stone-450 text-[9px] uppercase font-extrabold block leading-none">Lượt xem</span>
+                            <span className="font-extrabold text-stone-800 text-sm mt-1 block">0</span>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center bg-slate-50/60 p-2.5 rounded-xl border border-slate-100">
+                          <div>
+                            <span className="text-stone-450 text-[9px] uppercase font-extrabold block leading-none">Lượt đăng ký</span>
+                            <span className="font-black text-stone-800 text-sm mt-1 block">
+                              {formatNumber(enrollmentsCount)}
+                            </span>
+                          </div>
+                          {isApiMode && enrollChange !== undefined && enrollChange !== null && (enrollmentsCount > 0 || prevEnroll > 0) && (
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                              enrollChange >= 0
+                                ? 'text-emerald-700 bg-emerald-50 border border-emerald-200/50'
+                                : 'text-rose-700 bg-rose-50 border border-rose-200/50'
+                            }`}>
+                              {enrollChange >= 0 ? '↑' : '↓'} {Math.abs(enrollChange)}%
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex justify-between items-center bg-slate-50/60 p-2.5 rounded-xl border border-slate-100">
+                          <div>
+                            <span className="text-stone-450 text-[9px] uppercase font-extrabold block leading-none">Doanh thu</span>
+                            <span className="font-black text-stone-800 text-sm mt-1 block">
+                              {formatVND(revenueAmount)}
+                            </span>
+                          </div>
+                          {isApiMode && revChange !== undefined && revChange !== null && (revenueAmount > 0 || prevRev > 0) && (
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                              revChange >= 0
+                                ? 'text-emerald-700 bg-emerald-50 border border-emerald-200/50'
+                                : 'text-rose-700 bg-rose-50 border border-rose-200/50'
+                            }`}>
+                              {revChange >= 0 ? '↑' : '↓'} {Math.abs(revChange)}%
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex justify-between items-center bg-slate-50/60 p-2.5 rounded-xl border border-slate-100">
+                          <div>
+                            <span className="text-stone-450 text-[9px] uppercase font-extrabold block leading-none">Thắc mắc chưa trả lời</span>
+                            <span className="font-black text-stone-800 text-sm mt-1 block">
+                              {formatNumber(unansweredCount)}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded text-[9px] font-bold">↑ 15.2%</span>
-                    </div>
-                    <div className="flex justify-between items-center bg-slate-50/50 p-2.5 rounded-xl border border-slate-100/50">
-                      <div>
-                        <span className="text-stone-450 text-[9px] uppercase font-bold block leading-none">Lượt đăng ký</span>
-                        <span className="font-black text-stone-800 text-sm mt-1 block">432</span>
-                      </div>
-                      <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded text-[9px] font-bold">↑ 12.8%</span>
-                    </div>
-                    <div className="flex justify-between items-center bg-slate-50/50 p-2.5 rounded-xl border border-slate-100/50">
-                      <div>
-                        <span className="text-stone-450 text-[9px] uppercase font-bold block leading-none">Doanh thu</span>
-                        <span className="font-black text-stone-800 text-sm mt-1 block">28.750.000đ</span>
-                      </div>
-                      <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded text-[9px] font-bold">↑ 18.6%</span>
-                    </div>
-                    <div className="flex justify-between items-center bg-slate-50/50 p-2.5 rounded-xl border border-slate-100/50">
-                      <div>
-                        <span className="text-stone-450 text-[9px] uppercase font-bold block leading-none">Đánh giá mới</span>
-                        <span className="font-black text-stone-800 text-sm mt-1 block">56</span>
-                      </div>
-                      <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded text-[9px] font-bold">↑ 7.5%</span>
-                    </div>
-                  </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Mẹo Giảng Viên */}
-                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-3xs text-left space-y-3 relative overflow-hidden">
+                <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-3xs text-left space-y-2.5 relative overflow-hidden">
                   <div className="absolute -right-6 -bottom-6 w-16 h-16 bg-emerald-100/30 rounded-full shrink-0 flex items-center justify-center text-emerald-600 text-3xl">🎓</div>
-                  <h4 className="font-extrabold text-xs text-stone-850 flex items-center gap-1.5">
+                  <h4 className="font-extrabold text-xs text-stone-900 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-emerald-600 fill-emerald-100" />
                     <span>Mẹo giảng viên</span>
                   </h4>
@@ -1915,7 +3370,7 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                   </p>
                   <button 
                     onClick={() => alert("Xem tài liệu hướng dẫn")}
-                    className="text-[10px] text-emerald-700 hover:underline font-extrabold flex items-center gap-0.5"
+                    className="text-[10px] text-emerald-700 hover:underline font-extrabold flex items-center gap-0.5 cursor-pointer pt-0.5"
                   >
                     Xem hướng dẫn &rarr;
                   </button>
@@ -1930,19 +3385,22 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
 
         {/* --- DEDICATED STEPS COURSE BUILDER PAGE - MATCHES MOCKUP 3 --- */}
         {activeTab === 'builder' && (() => {
-          // Calculate checklist progress dynamically
+          // Calculate checklist progress dynamically aligned with Backend requirements
           const hasTitle = !!title.trim();
           const hasSlug = !!slug.trim();
-          const hasShortDesc = !!subtitle.trim();
-          const hasDesc = !!description.trim();
+          const parsedCatInt = parseInt(String(category), 10);
+          const hasCategory = Number.isInteger(parsedCatInt) && parsedCatInt > 0;
           const hasLevel = !!level;
           const hasLanguage = !!language;
+          const hasShortDesc = !!subtitle.trim();
+          const hasDesc = !!description.trim();
           
           let totalChapters = chapters.length;
           let totalLessons = 0;
           let totalDurationSeconds = 0;
           let freePreviewsCount = 0;
           let totalAssetsCount = 0;
+          let hasInvalidVideoLesson = false;
           
           chapters.forEach(ch => {
             if (ch.lessons) {
@@ -1951,92 +3409,159 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                 totalDurationSeconds += l.video_duration_seconds || 0;
                 if (l.is_preview) freePreviewsCount++;
                 if (l.resources) totalAssetsCount += l.resources.length;
+                if ((l.lesson_type === 'video' || l.type === 'video') && (!l.video_url || !l.video_url.trim() || l.video_url.startsWith('blob:'))) {
+                  hasInvalidVideoLesson = true;
+                }
+                if ((l.lesson_type === 'video' || l.type === 'video') && (!l.video_duration_seconds || l.video_duration_seconds <= 0)) {
+                  hasInvalidVideoLesson = true;
+                }
               });
             }
           });
 
           const hasThumbnail = !!image;
           const hasIntroVideo = !!introVideoUrl;
-          const hasOutcomes = willLearn.length > 0 && willLearn.every(x => x.trim().length > 0);
-          const hasRequirements = requirements.length > 0 && requirements.every(x => x.trim().length > 0);
-          const hasPrice = price > 0 || (salePrice !== null && salePrice > 0);
+          const hasOutcomes = willLearn.length > 0 && willLearn.some(x => x.trim().length > 0);
+          const hasRequirements = requirements.length > 0 && requirements.some(x => x.trim().length > 0);
+          const hasPrice = price >= 0;
 
           // Missing Items list
           const missingItems: string[] = [];
-          if (!hasOutcomes) missingItems.push('Mục tiêu học tập');
-          if (!hasRequirements) missingItems.push('Yêu cầu đầu vào');
+          if (!hasTitle) missingItems.push('Tiêu đề khóa học');
+          if (!hasCategory) missingItems.push('Danh mục khóa học');
+          if (!hasShortDesc) missingItems.push('Mô tả ngắn khóa học');
+          if (!hasDesc) missingItems.push('Mô tả chi tiết khóa học');
           if (!hasThumbnail) missingItems.push('Thumbnail khóa học');
-          if (!hasIntroVideo) missingItems.push('Video giới thiệu');
-          if (!hasPrice) missingItems.push('Giá khuyến mãi hoặc giá gốc');
           if (totalChapters === 0) missingItems.push('Ít nhất 1 chương học');
           if (totalLessons === 0) missingItems.push('Ít nhất 1 bài giảng');
+          if (hasInvalidVideoLesson) missingItems.push('Bài học chưa có video được tải lên hợp lệ');
 
           // Completed Items list
           const completedItems: string[] = [];
           if (hasTitle) completedItems.push('Tiêu đề khóa học');
           if (hasSlug) completedItems.push('Slug (đường dẫn)');
-          if (category) completedItems.push('Danh mục');
-          if (level) completedItems.push('Cấp độ');
+          if (hasCategory) completedItems.push('Danh mục');
+          if (hasLevel) completedItems.push('Cấp độ');
           if (hasShortDesc) completedItems.push('Mô tả ngắn');
           if (hasDesc) completedItems.push('Mô tả chi tiết');
+          if (hasThumbnail) completedItems.push('Thumbnail khóa học');
+          if (totalChapters > 0) completedItems.push('Chương học');
+          if (totalLessons > 0 && !hasInvalidVideoLesson) completedItems.push('Bài giảng hoàn chỉnh');
 
-          const totalChecks = 11;
-          const passedChecks = totalChecks - missingItems.length;
-          const checklistProgress = Math.round((passedChecks / totalChecks) * 100);
+          const totalChecks = 8;
+          const passedChecks = Math.max(0, totalChecks - missingItems.length);
+          const checklistProgress = missingItems.length === 0 ? 100 : Math.min(95, Math.round((passedChecks / totalChecks) * 100));
 
           const handleSaveDraft = async () => {
+            if (!title.trim()) {
+              alert('Vui lòng nhập Tiêu đề khóa học trước khi lưu nháp.');
+              return;
+            }
+            setIsSavingDraft(true);
+            setAutosaveError(null);
             try {
-              const payload: Course = {
-                id: editingCourseId || 'course-' + Date.now(),
-                title,
-                subtitle: subtitle || 'Nhãn phụ chi tiết khóa học mới',
-                description,
-                category,
-                subcategory: subcategory || 'Chuyên gia nâng cao',
-                price,
-                salePrice,
-                rating: editingCourseId ? (courses.find(c => c.id === editingCourseId)?.rating || 4.8) : 5.0,
-                reviewCount: editingCourseId ? (courses.find(c => c.id === editingCourseId)?.reviewCount || 1) : 0,
-                enrolledCount: editingCourseId ? (courses.find(c => c.id === editingCourseId)?.enrolledCount || 10) : 0,
-                completionRate: editingCourseId ? (courses.find(c => c.id === editingCourseId)?.completionRate || 92) : 0,
+              const selectedCatInt = parseInt(String(category), 10);
+              const validCategoryInt = (Number.isInteger(selectedCatInt) && selectedCatInt > 0)
+                ? selectedCatInt
+                : (dbCategories.length > 0 ? (parseInt(String(dbCategories[0].id), 10) || 1) : 1);
+
+              const payload = {
+                title: title.trim(),
+                slug: slug.trim() || undefined,
+                category_id: validCategoryInt,
+                category_ids: [validCategoryInt],
+                level: level || 'beginner',
+                language: language || 'vi',
+                short_description: subtitle || title.trim(),
+                subtitle: subtitle || title.trim(),
+                description: description.trim(),
+                price: Number(price) || 0,
+                sale_price: salePrice !== null ? Number(salePrice) : undefined,
+                salePrice: salePrice !== null ? Number(salePrice) : undefined,
                 image,
-                instructorId: currentUser.id,
-                instructorName: currentUser.name,
-                instructorTitle: 'Giảng viên chuyên môn tại MindHub',
-                instructorAvatar: currentUser.avatar,
-                instructorBio: currentUser.bio || 'Chuyên gia giảng dạy công nghệ thực tiễn.',
-                chapters,
-                requirements,
-                willLearn,
-                status: 'draft',
-                allowSkip: true,
-                allowDownload: false,
-                allowDiscussion: true,
-                giveCertificate: false,
-                allowFreeDoc: false,
-                allowFreeVideo: false,
-                freeVideoDuration: 30,
-                reviews: editingCourseId ? (courses.find(c => c.id === editingCourseId)?.reviews || []) : [],
-                faqs: [],
-                isHidden: false,
-                slug,
-                level,
-                language,
-                introVideoUrl
+                thumbnail_url: image || undefined,
+                introVideoUrl,
+                intro_video_url: introVideoUrl || undefined,
+                requirements: Array.isArray(requirements) ? requirements.filter(Boolean).join('\n') : (requirements || ''),
+                willLearn: Array.isArray(willLearn) ? willLearn.filter(Boolean).join('\n') : (willLearn || ''),
+                outcomes: Array.isArray(willLearn) ? willLearn.filter(Boolean).join('\n') : (willLearn || ''),
               };
-              if (editingCourseId) {
-                onUpdateCourse(payload);
+
+              if (ApiService.getConfig().mode === 'api') {
+                if (editingCourseId) {
+                  await ApiService.updateCourseDraft(editingCourseId, payload);
+                } else {
+                  const res = await ApiService.createCourseDraft(payload);
+                  const newId = String(res.data?.id || res.id);
+                  if (newId) {
+                    setEditingCourseId(newId);
+                  }
+                }
+                loadInstructorCoursesList();
               } else {
-                onCreateCourseDraft(payload);
+                const mockPayload: Course = {
+                  id: editingCourseId || 'course-' + Date.now(),
+                  title,
+                  subtitle: subtitle || 'Nhãn phụ chi tiết khóa học mới',
+                  description,
+                  category,
+                  subcategory: subcategory || 'Chuyên gia nâng cao',
+                  price,
+                  salePrice,
+                  rating: 5.0,
+                  reviewCount: 0,
+                  enrolledCount: 0,
+                  completionRate: 0,
+                  image,
+                  instructorId: currentUser.id,
+                  instructorName: currentUser.name,
+                  instructorTitle: 'Giảng viên chuyên môn tại MindHub',
+                  instructorAvatar: currentUser.avatar,
+                  instructorBio: currentUser.bio || '',
+                  chapters,
+                  requirements,
+                  willLearn,
+                  status: 'draft',
+                  allowSkip: true,
+                  allowDownload: false,
+                  allowDiscussion: true,
+                  giveCertificate: false,
+                  allowFreeDoc: false,
+                  allowFreeVideo: false,
+                  freeVideoDuration: 30,
+                  reviews: [],
+                  faqs: [],
+                  isHidden: false,
+                  slug,
+                  level,
+                  language,
+                  introVideoUrl
+                };
+                if (editingCourseId) {
+                  onUpdateCourse(mockPayload);
+                } else {
+                  onCreateCourseDraft(mockPayload);
+                }
               }
+
+              const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+              setLastSavedTime(timeStr);
               alert('Lưu bản nháp khóa học thành công!');
-            } catch (err) {
-              alert('Có lỗi xảy ra khi lưu nháp.');
+            } catch (err: any) {
+              console.error('Error saving draft:', err);
+              setAutosaveError(err.message || 'Có lỗi xảy ra khi lưu nháp.');
+              alert('Có lỗi xảy ra khi lưu nháp: ' + (err.message || 'Vui lòng thử lại.'));
+            } finally {
+              setIsSavingDraft(false);
             }
           };
 
           const handleNext = () => {
-            if (builderStep < 5) setBuilderStep(builderStep + 1);
+            if (builderStep === 1 && !title.trim()) {
+              alert('Vui lòng điền Tiêu đề khóa học trước khi sang bước tiếp theo.');
+              return;
+            }
+            if (builderStep < 4) setBuilderStep(builderStep + 1);
           };
           const handlePrev = () => {
             if (builderStep > 1) setBuilderStep(builderStep - 1);
@@ -2044,10 +3569,9 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
 
           const steps = [
             { id: 1, label: 'Thông tin cơ bản' },
-            { id: 2, label: 'Mục tiêu & yêu cầu' },
-            { id: 3, label: 'Giá bán' },
-            { id: 4, label: 'Hình ảnh & video giới thiệu' },
-            { id: 5, label: 'Nội dung & gửi duyệt' }
+            { id: 2, label: 'Giá bán' },
+            { id: 3, label: 'Hình ảnh & video giới thiệu' },
+            { id: 4, label: 'Nội dung & gửi duyệt' }
           ];
 
           return (
@@ -2065,14 +3589,17 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                 </button>
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-100 rounded-full shadow-3xs">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-stone-550 font-bold text-[9.5px]">Đã tự động lưu nháp</span>
+                    <div className={`w-1.5 h-1.5 rounded-full ${isSavingDraft ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'}`} />
+                    <span className="text-stone-550 font-bold text-[9.5px]">
+                      {isSavingDraft ? 'Đang tự động lưu nháp...' : lastSavedTime ? `Đã tự động lưu nháp lúc ${lastSavedTime}` : 'Đã tự động lưu nháp'}
+                    </span>
                   </div>
                   <button 
                     onClick={handleSaveDraft}
-                    className="border border-[#10b981] text-[#10b981] hover:bg-emerald-50 px-4 py-1.5 rounded-xl font-bold text-[10.5px] cursor-pointer shadow-3xs transition-all"
+                    disabled={isSavingDraft}
+                    className="border border-[#10b981] text-[#10b981] hover:bg-emerald-50 disabled:opacity-50 px-4 py-1.5 rounded-xl font-bold text-[10.5px] cursor-pointer shadow-3xs transition-all"
                   >
-                    Lưu nháp
+                    {isSavingDraft ? 'Đang lưu...' : 'Lưu nháp'}
                   </button>
                 </div>
               </div>
@@ -2131,7 +3658,18 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                         <input 
                           type="text" 
                           value={title}
-                          onChange={(e) => setTitle(e.target.value.slice(0, 100))}
+                          onChange={(e) => {
+                            const val = e.target.value.slice(0, 100);
+                            setTitle(val);
+                            if (!isManualSlug) {
+                              const slugified = val.toLowerCase()
+                                .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                                .replace(/đ/g, "d").replace(/Đ/g, "d")
+                                .replace(/[^a-z0-9\s-]/g, "")
+                                .trim().replace(/\s+/g, "-");
+                              setSlug(slugified);
+                            }
+                          }}
                           placeholder="Lập trình Python cơ bản cho người mới bắt đầu"
                           className="w-full text-[11px] font-bold text-stone-700 border border-slate-200 rounded-xl px-3 py-2.5 bg-slate-50/20 focus:outline-none focus:border-emerald-500"
                         />
@@ -2141,7 +3679,10 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                         <input 
                           type="text" 
                           value={slug}
-                          onChange={(e) => setSlug(e.target.value)}
+                          onChange={(e) => {
+                            setSlug(e.target.value);
+                            setIsManualSlug(true);
+                          }}
                           placeholder="lap-trinh-python-co-ban-cho-nguoi-moi-bat-dau"
                           className="w-full text-[11px] font-bold text-stone-700 border border-slate-200 rounded-xl px-3 py-2.5 bg-slate-50/20 focus:outline-none focus:border-emerald-500"
                         />
@@ -2156,8 +3697,16 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                           onChange={(e) => setCategory(e.target.value)}
                           className="w-full text-[11px] font-bold text-stone-700 border border-slate-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:border-emerald-500 cursor-pointer"
                         >
-                          <option value="Development">Lập trình & Công nghệ</option>
-                          <option value="Artificial Intelligence">Trí tuệ nhân tạo (AI)</option>
+                          {dbCategories.length > 0 ? (
+                            dbCategories.map((cat: any) => (
+                              <option key={cat.id} value={String(cat.id)}>{cat.name}</option>
+                            ))
+                          ) : (
+                            <>
+                              <option value="1">Lập trình & Công nghệ</option>
+                              <option value="2">Trí tuệ nhân tạo (AI)</option>
+                            </>
+                          )}
                         </select>
                       </div>
                       <div>
@@ -2209,118 +3758,8 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                   </div>
                 )}
 
-                {/* Step 2: Outcomes and requirements */}
+                {/* Step 2: Pricing */}
                 {builderStep === 2 && (
-                  <div className="space-y-4">
-                    <div className="border-b pb-2 mb-2">
-                      <h2 className="text-sm font-black text-stone-850">Mục tiêu & yêu cầu</h2>
-                      <p className="text-[10.5px] text-stone-400 font-medium mt-1">Xác định mục tiêu đầu ra và các yêu cầu chuẩn bị.</p>
-                    </div>
-
-                    <div className="space-y-4">
-                      {/* outcomes */}
-                      <div className="space-y-2">
-                        <label className="block text-[10.5px] font-bold text-stone-600">Mục tiêu học tập *</label>
-                        <div className="space-y-2">
-                          {willLearn.map((goal, idx) => (
-                            <div key={idx} className="flex gap-2 items-center">
-                              <input 
-                                type="text"
-                                value={goal}
-                                onChange={(e) => {
-                                  const updated = [...willLearn];
-                                  updated[idx] = e.target.value;
-                                  setWillLearn(updated);
-                                }}
-                                className="flex-1 text-[11px] font-bold text-stone-700 border border-slate-200 rounded-xl px-3 py-2 bg-slate-50/10 focus:outline-none"
-                              />
-                              <button 
-                                type="button"
-                                onClick={() => setWillLearn(prev => prev.filter((_, i) => i !== idx))}
-                                className="p-2 text-rose-500 hover:bg-rose-50 border border-transparent rounded-lg cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                          <div className="flex gap-2 mt-2">
-                            <input 
-                              type="text" 
-                              placeholder="Thêm mục tiêu học tập..."
-                              value={newWillLearn}
-                              onChange={(e) => setNewWillLearn(e.target.value)}
-                              className="flex-1 text-[11px] font-semibold text-stone-700 border border-slate-200 rounded-xl px-3 py-2 bg-slate-50/20 focus:outline-none"
-                            />
-                            <button 
-                              type="button"
-                              onClick={() => {
-                                if (newWillLearn.trim()) {
-                                  setWillLearn(prev => [...prev, newWillLearn.trim()]);
-                                  setNewWillLearn('');
-                                }
-                              }}
-                              className="bg-[#e6f4ea] border border-emerald-100 hover:bg-[#cbeed4] text-[#10b981] text-[11.5px] font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
-                            >
-                              Thêm
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* requirements */}
-                      <div className="space-y-2 pt-2 border-t border-slate-100">
-                        <label className="block text-[10.5px] font-bold text-stone-600">Yêu cầu chuẩn bị đầu vào *</label>
-                        <div className="space-y-2">
-                          {requirements.map((req, idx) => (
-                            <div key={idx} className="flex gap-2 items-center">
-                              <input 
-                                type="text"
-                                value={req}
-                                onChange={(e) => {
-                                  const updated = [...requirements];
-                                  updated[idx] = e.target.value;
-                                  setRequirements(updated);
-                                }}
-                                className="flex-1 text-[11px] font-bold text-stone-700 border border-slate-200 rounded-xl px-3 py-2 bg-slate-50/10 focus:outline-none"
-                              />
-                              <button 
-                                type="button"
-                                onClick={() => setRequirements(prev => prev.filter((_, i) => i !== idx))}
-                                className="p-2 text-rose-500 hover:bg-rose-50 border border-transparent rounded-lg cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                          <div className="flex gap-2 mt-2">
-                            <input 
-                              type="text" 
-                              placeholder="Thêm yêu cầu chuẩn bị..."
-                              value={newRequirement}
-                              onChange={(e) => setNewRequirement(e.target.value)}
-                              className="flex-1 text-[11px] font-semibold text-stone-700 border border-slate-200 rounded-xl px-3 py-2 bg-slate-50/20 focus:outline-none"
-                            />
-                            <button 
-                              type="button"
-                              onClick={() => {
-                                if (newRequirement.trim()) {
-                                  setRequirements(prev => [...prev, newRequirement.trim()]);
-                                  setNewRequirement('');
-                                }
-                              }}
-                              className="bg-[#e6f4ea] border border-emerald-100 hover:bg-[#cbeed4] text-[#10b981] text-[11.5px] font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
-                            >
-                              Thêm
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 3: Pricing */}
-                {builderStep === 3 && (
                   <div className="space-y-4">
                     <div className="border-b pb-2 mb-2">
                       <h2 className="text-sm font-black text-stone-850">Giá bán</h2>
@@ -2365,8 +3804,8 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                   </div>
                 )}
 
-                {/* Step 4: Images & Intro Video */}
-                {builderStep === 4 && (
+                {/* Step 3: Images & Intro Video */}
+                {builderStep === 3 && (
                   <CourseMediaStep 
                     image={image}
                     setImage={setImage}
@@ -2375,8 +3814,8 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                   />
                 )}
 
-                {/* Step 5: Syllabus & Submit */}
-                {builderStep === 5 && (
+                {/* Step 4: Syllabus & Submit */}
+                {builderStep === 4 && (
                   <CourseCurriculumStep 
                     chapters={chapters}
                     setChapters={setChapters}
@@ -2390,7 +3829,7 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
               </div>
 
               {/* Navigation buttons */}
-              {builderStep < 5 && (
+              {builderStep < 4 && (
                 <div className="flex justify-between pt-4 border-t select-none">
                   <button
                     type="button"
@@ -2495,12 +3934,12 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
 
         {/* STUDENTS MANAGEMENT DASHBOARD */}
         {activeTab === 'students' && (
-          <StudentManagement instructorCourses={instructorCourses} />
+          <StudentManagement instructorCourses={displayedCourses} />
         )}
 
         {/* TAB 7: SECURITY */}
         {activeTab === 'security' && (
-          <InstructorProfilePage currentUser={currentUser} />
+          <InstructorProfilePage currentUser={currentUser} onUpdateUser={onUpdateUser} />
         )}
 
         
@@ -2514,6 +3953,21 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
         {activeTab === 'qa' && (
           <InstructorQAModule />
         )}
+
+        {/* SUBMIT ERROR & VALIDATION MODAL */}
+        <SubmitErrorModal
+          isOpen={submitErrorModalState.isOpen}
+          onClose={() => setSubmitErrorModalState(prev => ({ ...prev, isOpen: false }))}
+          title={submitErrorModalState.title}
+          message={submitErrorModalState.message}
+          status={submitErrorModalState.status}
+          errors={submitErrorModalState.errors}
+          missingItems={submitErrorModalState.missingItems}
+          onNavigateToStep={(step) => {
+            setActiveTab('builder');
+            setBuilderStep(step);
+          }}
+        />
 
       </div>
     </main>

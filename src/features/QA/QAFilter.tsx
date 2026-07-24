@@ -5,9 +5,11 @@ import { QAFilterState } from './types';
 interface QAFilterProps {
   filter: QAFilterState;
   setFilter: React.Dispatch<React.SetStateAction<QAFilterState>>;
+  courseOptions?: Array<{ id: string | number; title: string }>;
+  lessonOptions?: Array<{ id: string | number; title: string }>;
 }
 
-export const QAFilter: React.FC<QAFilterProps> = ({ filter, setFilter }) => {
+export const QAFilter: React.FC<QAFilterProps> = ({ filter, setFilter, courseOptions = [], lessonOptions = [] }) => {
   const [localKeyword, setLocalKeyword] = useState(filter.keyword);
   const [localStatus, setLocalStatus] = useState(filter.status);
   const [localCourse, setLocalCourse] = useState(filter.course);
@@ -32,11 +34,16 @@ export const QAFilter: React.FC<QAFilterProps> = ({ filter, setFilter }) => {
           <select
             className="w-full text-xs font-semibold px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-normal bg-white cursor-pointer"
             value={localCourse}
-            onChange={(e) => setLocalCourse(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setLocalCourse(val);
+              setLocalLesson('all');
+            }}
           >
             <option value="all">Tất cả khóa học</option>
-            <option value="course1">React.js Cơ bản</option>
-            <option value="course2">Next.js Thực chiến</option>
+            {courseOptions.map(c => (
+              <option key={`c-${c.id}`} value={String(c.id)}>{c.title}</option>
+            ))}
           </select>
         </div>
 
@@ -49,14 +56,9 @@ export const QAFilter: React.FC<QAFilterProps> = ({ filter, setFilter }) => {
             onChange={(e) => setLocalLesson(e.target.value)}
           >
             <option value="all">Tất cả bài học</option>
-            <option value="lesson1">Bài 1: Giới thiệu</option>
-            <option value="lesson2">Bài 2: Hooks</option>
-            <option value="lesson12">Bài 12: React useEffect Hook</option>
-            <option value="lesson8">Bài 8: State và Props trong React</option>
-            <option value="lesson10">Bài 10: Conditional Rendering</option>
-            <option value="lesson6">Bài 6: Event Handling</option>
-            <option value="lesson9">Bài 9: Lists & Keys</option>
-            <option value="lesson7">Bài 7: Forms trong React</option>
+            {lessonOptions.map(l => (
+              <option key={`l-${l.id}`} value={String(l.id)}>{l.title}</option>
+            ))}
           </select>
         </div>
 

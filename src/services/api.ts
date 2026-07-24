@@ -63,6 +63,17 @@ const devLog = (category: string, action: string, payload?: any) => {
   }
 };
 
+export class ApiError extends Error {
+  status: number;
+  errors?: any;
+  constructor(message: string, status: number, errors?: any) {
+    super(message);
+    this.status = status;
+    this.errors = errors;
+    this.name = 'ApiError';
+  }
+}
+
 /**
  * Universal Unified HTTP Client Utility with Automatic Authorization header injection
  */
@@ -83,10 +94,17 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
     headers.set('Authorization', `Bearer ${config.authToken}`);
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      credentials: 'include',
+      ...options,
+      headers,
+    });
+  } catch (netErr) {
+    devLog('Network Error', String(netErr), { url });
+    throw new Error('Không thể kết nối đến máy chủ Backend.');
+  }
 
   if (!response.ok) {
     const errText = await response.text();
@@ -98,7 +116,7 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
     }
     const errMsg = errJson?.message || errJson?.error || `HTTP error! status: ${response.status}`;
     devLog('Error Response', errMsg, { status: response.status, url });
-    throw new Error(errMsg);
+    throw new ApiError(errMsg, response.status, errJson?.errors);
   }
 
   // Handle No Content / Empty HTTP 204 response safely
@@ -109,9 +127,73 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
   const json = await response.json();
   // Unwrap Laravel ApiResponse envelope: { success, data, message }
   if (json && typeof json === 'object' && 'data' in json && 'success' in json) {
+    if (json.data && typeof json.data === 'object') {
+      if (json.pagination && !(json.data as any).pagination) {
+        (json.data as any).pagination = json.pagination;
+      }
+      if (json.meta && !(json.data as any).meta) {
+        (json.data as any).meta = json.meta;
+      }
+    }
     return json.data as T;
   }
   return json as T;
+}
+
+async function apiFetchEnvelope<T>(endpoint: string, options: RequestInit = {}): Promise<{ data: T; meta?: any }> {
+  if (config.mode === 'mock') {
+    throw new Error('apiFetchEnvelope called while in mock mode.');
+  }
+
+  const url = `${config.baseUrl}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;
+  const headers = new Headers(options.headers || {});
+  
+  if (!(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+  headers.set('Accept', 'application/json');
+  
+  if (config.authToken) {
+    headers.set('Authorization', `Bearer ${config.authToken}`);
+  }
+
+  let response;
+  try {
+    response = await fetch(url, {
+      credentials: 'include',
+      ...options,
+      headers,
+    });
+  } catch (netErr) {
+    devLog('Network Error', String(netErr), { url });
+    throw new Error('Không thể kết nối đến máy chủ Backend.');
+  }
+
+  if (!response.ok) {
+    const errText = await response.text();
+    let errJson;
+    try {
+      errJson = JSON.parse(errText);
+    } catch {
+      /* ignore */
+    }
+    const errMsg = errJson?.message || errJson?.error || `HTTP error! status: ${response.status}`;
+    devLog('Error Response', errMsg, { status: response.status, url });
+    throw new ApiError(errMsg, response.status, errJson?.errors);
+  }
+
+  if (response.status === 204) {
+    return { data: [] as unknown as T };
+  }
+
+  const json = await response.json();
+  if (json && typeof json === 'object' && 'data' in json) {
+    return {
+      data: json.data as T,
+      meta: json.meta,
+    };
+  }
+  return { data: json as T };
 }
 
 export const ApiService = {
@@ -213,81 +295,54 @@ export const ApiService = {
   /** POST /auth/register */
   async register(payload: any): Promise<{ user: User; token: string }> {
     devLog('Auth', 'Register new user', { email: payload.email, role: payload.role });
-    if (config.mode === 'mock') {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const dbUsers = MockDB.getState().users;
-      if (dbUsers.some(u => u.email.toLowerCase() === payload.email.toLowerCase())) {
-        throw new Error('Email đã tồn tại trong hệ thống.');
-      }
-      const newUser: User = {
-        id: 'u-' + Date.now(),
-        name: payload.name || payload.full_name || 'Người dùng mới',
-        email: payload.email,
-        role: payload.role || 'learner',
-        status: 'active',
-        avatar: 'https://ui-avatars.com/api/?name=' + encodeURIComponent(payload.name || 'User') + '&background=random',
-        bio: '',
-        expertise: '',
-        experienceYears: '0',
-        title: '',
-        isEmailVerified: true,
-        streak: 0,
-        lastActiveDate: '',
-        interestedTopics: [],
-        notificationSettings: { email: true, push: false, app: false, scheduleReminders: false }
-      };
-      MockDB.commit({ users: [...dbUsers, newUser] });
-      this.setAuthToken('mock-auth-token-' + newUser.id);
-      return {
-        user: newUser,
-        token: 'mock-auth-token-' + newUser.id
-      };
-    }
     const endpoint = payload.role === 'instructor' ? '/auth/register/instructor' : '/auth/register/learner';
-    const res = await apiFetch<{ user: User; token: string }>(endpoint, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-    this.setAuthToken(res.token);
-    return res;
+    const res = await apiFetch<any>(endpoint, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return {
+      user: res.user,
+      token: res.token || ''
+    };
   },
 
   /** POST /auth/login */
   async login(payload: any): Promise<{ user: User; token: string }> {
     devLog('Auth', 'Login credentials authentication', { email: payload.email });
-    if (config.mode === 'mock') {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const dbUsers = MockDB.getState().users;
-      const matched = dbUsers.find(u => u.email.toLowerCase() === payload.email.toLowerCase());
-      if (!matched) {
-        throw new Error('Tài khoản không tồn tại trong cơ sở dữ liệu giả lập.');
-      }
-      this.setAuthToken('mock-auth-token-' + matched.id);
-      return {
-        user: matched,
-        token: 'mock-auth-token-' + matched.id
-      };
-    }
-    const res = await apiFetch<{ user: User; token: string }>('/auth/login', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-    this.setAuthToken(res.token);
-    return res;
+    const res = await apiFetch<any>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: payload.email,
+        password: payload.password,
+      }),
+    });
+    const token = res.access_token || '';
+    this.setAuthToken(token);
+    return {
+      user: res.user,
+      token: token,
+    };
   },
 
   /** POST /auth/logout */
   async logout(): Promise<{ success: boolean }> {
     devLog('Auth', 'Logout active session requests');
-    if (config.mode === 'mock') {
-      this.setAuthToken(null);
-      return { success: true };
+    try {
+      await apiFetch<any>('/auth/logout', {
+        method: 'POST',
+      });
+    } catch (e) {
+      console.error('Backend logout failed, clearing locally', e);
     }
-    const res = await apiFetch<{ success: boolean }>('/auth/logout', {
-          method: 'POST',
-        });
     this.setAuthToken(null);
-    return res;
+    return { success: true };
+  },
+
+  /** GET /auth/me */
+  async getCurrentUser(): Promise<User> {
+    devLog('Auth', 'Get currently authenticated user via session token');
+    const res = await apiFetch<{ user: User }>('/auth/me');
+    return res.user;
   },
 
   /** POST /auth/logout-all */
@@ -433,10 +488,16 @@ export const ApiService = {
 
   // Get category counts
   async getCategoriesWithCount(): Promise<{name: string, count: number}[]> {
-      // BACKEND_MISSING
     if (config.mode === 'api') {
       try {
-        return await apiFetch<{name: string, count: number}[]>('/courses/categories');
+        const categories = await apiFetch<any[]>('/categories');
+        if (Array.isArray(categories)) {
+          return categories.map((cat: any) => ({
+            name: cat.name || '',
+            count: cat.courses_count ?? cat.count ?? 0,
+          }));
+        }
+        return [];
       } catch (e) {
         console.warn('Failed to fetch categories', e);
         return [];
@@ -453,10 +514,12 @@ export const ApiService = {
   },
 
   async getUserEnrollments(userId: string): Promise<any[]> {
-      // BACKEND_MISSING
+    if (!userId || userId === 'u-guest') {
+      return [];
+    }
     if (config.mode === 'api') {
       try {
-        return await apiFetch<any[]>(`/users/${userId}/enrollments`);
+        return await apiFetch<any[]>('/me/courses');
       } catch(e) {
         return [];
       }
@@ -465,10 +528,12 @@ export const ApiService = {
   },
 
   async getUserActivities(userId: string): Promise<any[]> {
-      // BACKEND_MISSING
+    if (!userId || userId === 'u-guest') {
+      return [];
+    }
     if (config.mode === 'api') {
       try {
-        return await apiFetch<any[]>(`/users/${userId}/activities`);
+        return await apiFetch<any[]>('/learning-logs/my');
       } catch(e) {
         return [];
       }
@@ -478,13 +543,10 @@ export const ApiService = {
 
   /** GET /courses (search and filters) */
   async getPublicCoursesByInstructor(instructorId: string): Promise<Course[]> {
-      // BACKEND_MISSING
     const start = Date.now();
     try {
       if (config.mode === 'api') {
-        const response = await fetch(`${config.baseUrl}/courses/instructor/${instructorId}`);
-        if (!response.ok) throw new Error('API fetch failed');
-        return await response.json();
+        return await apiFetch<Course[]>(`/courses?instructor_id=${instructorId}`);
       }
       // Mock logic
       const allCourses = await MockDB.getCourses();
@@ -527,11 +589,21 @@ export const ApiService = {
   return apiFetch<Course[]>('/courses/featured');
   },
 
-  /** GET /courses/bestsellers */
+  /** GET /courses (sorted by popularity as bestseller fallback) */
   async getBestsellerCourses(): Promise<Course[]> {
-      // BACKEND_MISSING
     devLog('Catalog', 'Fetch best-selling courses');
-    if (config.mode === 'api') return apiFetch<Course[]>('/courses/bestsellers');
+    if (config.mode === 'api') {
+      try {
+        const allCourses = await apiFetch<Course[]>('/courses');
+        if (Array.isArray(allCourses)) {
+          return allCourses.slice().sort((a: any, b: any) => ((b.enrollments_count || b.students || 0) - (a.enrollments_count || a.students || 0)));
+        }
+        return [];
+      } catch (e) {
+        console.warn('Failed to fetch bestseller courses', e);
+        return [];
+      }
+    }
     return (await MockDB.getCourses()).filter(c => c.isBestseller);
   },
 
@@ -649,7 +721,7 @@ export const ApiService = {
   },
 
   /** GET /instructors/{id}/courses */
-  async getInstructorCourses(instructorId: string, filters?: any): Promise<Course[]> {
+  async getPublicInstructorCourses(instructorId: string, filters?: any): Promise<Course[]> {
       // BACKEND_MISSING
     devLog('Catalog', `Fetch courses for instructor ID: ${instructorId}`, filters);
     if (config.mode === 'api') {
@@ -1022,43 +1094,169 @@ export const ApiService = {
 
   /** GET /instructor/profile or /users/:id */
   async getInstructorProfile(instructorId?: string): Promise<any> {
-  devLog('Instructor', 'Fetch professional trainer profile details', { instructorId });
-  if (instructorId) {
-          return apiFetch<any>(`/users/${instructorId}`);
-        }
-  return apiFetch<any>('/instructor/profile');
+    devLog('Instructor', 'Fetch professional trainer profile details', { instructorId });
+    if (instructorId) {
+      return apiFetch<any>(`/users/${instructorId}`);
+    }
+    return apiFetch<any>('/instructor/profile');
   },
 
   /** PATCH /instructor/profile */
   async updateInstructorProfile(payload: any): Promise<any> {
-  devLog('Instructor', 'Sync public teacher bio credentials', payload);
-  return apiFetch<any>('/instructor/profile', {
-          method: 'PATCH',
-          body: JSON.stringify(payload),
-        });
+    devLog('Instructor', 'Sync public teacher bio credentials', payload);
+    return apiFetch<any>('/instructor/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** POST /instructor/profile/avatar */
+  async uploadInstructorAvatar(file: File): Promise<any> {
+    devLog('Instructor', 'Upload instructor profile avatar', { fileName: file.name, size: file.size });
+    const formData = new FormData();
+    formData.append('avatar', file);
+    return apiFetch<any>('/instructor/profile/avatar', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  /** GET /instructor/profile/notification-preferences */
+  async getInstructorNotificationPreferences(): Promise<any> {
+    devLog('Instructor', 'Fetch notification preferences');
+    return apiFetch<any>('/instructor/profile/notification-preferences');
+  },
+
+  /** PATCH /instructor/profile/notification-preferences */
+  async updateInstructorNotificationPreferences(payload: { email_notifications?: boolean; sms_alerts?: boolean }): Promise<any> {
+    devLog('Instructor', 'Update notification preferences', payload);
+    return apiFetch<any>('/instructor/profile/notification-preferences', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** POST /instructor/profile/password/send-otp */
+  async sendChangePasswordOtp(payload: { currentPassword?: string; current_password?: string; password?: string; passwordConfirmation?: string; password_confirmation?: string }): Promise<{ success: boolean; message: string; data?: { expires_in: number; resend_after: number; masked_email: string } }> {
+    devLog('Instructor', 'Send password change OTP', payload);
+    return apiFetch<any>('/instructor/profile/password/send-otp', {
+      method: 'POST',
+      body: JSON.stringify({
+        current_password: payload.currentPassword || payload.current_password,
+        password: payload.password,
+        password_confirmation: payload.passwordConfirmation || payload.password_confirmation,
+      }),
+    });
+  },
+
+  /** PATCH /instructor/profile/password */
+  async changeInstructorPassword(payload: { currentPassword?: string; current_password?: string; password?: string; passwordConfirmation?: string; password_confirmation?: string; otp: string }): Promise<any> {
+    devLog('Instructor', 'Change account password with OTP', payload);
+    return apiFetch<any>('/instructor/profile/password', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        current_password: payload.currentPassword || payload.current_password,
+        password: payload.password,
+        password_confirmation: payload.passwordConfirmation || payload.password_confirmation,
+        otp: payload.otp,
+      }),
+    });
+  },
+
+  /** GET /instructor/profile/sessions */
+  async getInstructorSessions(): Promise<any> {
+    devLog('Instructor', 'Fetch active sessions list');
+    return apiFetch<any>('/instructor/profile/sessions');
+  },
+
+  /** DELETE /instructor/profile/sessions/others */
+  async revokeOtherInstructorSessions(): Promise<any> {
+    devLog('Instructor', 'Revoke other active sessions');
+    return apiFetch<any>('/instructor/profile/sessions/others', {
+      method: 'DELETE',
+    });
+  },
+
+  /** DELETE /instructor/profile/sessions/:id */
+  async revokeInstructorSession(sessionId: string): Promise<any> {
+    devLog('Instructor', `Revoke session ${sessionId}`);
+    return apiFetch<any>(`/instructor/profile/sessions/${sessionId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  /** GET /instructor/profile/privacy */
+  async getInstructorPrivacySettings(): Promise<any> {
+    devLog('Instructor', 'Fetch privacy settings');
+    return apiFetch<any>('/instructor/profile/privacy');
+  },
+
+  /** GET /instructor/profile/account-status */
+  async getInstructorAccountStatus(): Promise<any> {
+    devLog('Instructor', 'Fetch account status details');
+    return apiFetch<any>('/instructor/profile/account-status');
+  },
+
+  /** PATCH /instructor/profile/privacy */
+  async updateInstructorPrivacySettings(payload: any): Promise<any> {
+    devLog('Instructor', 'Update privacy settings', payload);
+    return apiFetch<any>('/instructor/profile/privacy', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** GET /instructor/notifications */
+  async getInstructorNotifications(): Promise<any> {
+    devLog('Instructor', 'Fetch instructor system notifications');
+    return apiFetch<any>('/instructor/notifications');
+  },
+
+  /** GET /instructor/notifications/unread-count */
+  async getInstructorUnreadNotificationCount(): Promise<{ unread_count: number }> {
+    devLog('Instructor', 'Fetch unread notification count');
+    try {
+      const res = await apiFetch<any>('/instructor/notifications/unread-count');
+      const count = res?.data?.unread_count ?? res?.unread_count ?? (typeof res === 'number' ? res : 0);
+      return { unread_count: Math.max(0, Number(count) || 0) };
+    } catch {
+      return { unread_count: 0 };
+    }
+  },
+
+  /** PATCH /instructor/notifications/{id}/read */
+  async markInstructorNotificationAsRead(id: number | string): Promise<any> {
+    devLog('Instructor', `Mark notification ${id} as read`);
+    return apiFetch<any>(`/instructor/notifications/${id}/read`, { method: 'PATCH' });
+  },
+
+  /** PATCH /instructor/notifications/read-all */
+  async markAllInstructorNotificationsAsRead(): Promise<any> {
+    devLog('Instructor', 'Mark all notifications as read');
+    return apiFetch<any>('/instructor/notifications/read-all', { method: 'PATCH' });
   },
 
   /** POST /instructor/courses */
-  async createCourseDraft(course: Course): Promise<Course> {
-  devLog('Instructor', 'Create course draft workspace container', { id: course.id, title: course.title });
-  return apiFetch<Course>('/instructor/courses', {
-          method: 'POST',
-          body: JSON.stringify(course),
-        });
+  async createCourseDraftLegacy(course: Course): Promise<Course> {
+    devLog('Instructor', 'Create course draft workspace container', { id: course.id, title: course.title });
+    return apiFetch<Course>('/instructor/courses', {
+      method: 'POST',
+      body: JSON.stringify(course),
+    });
   },
 
   /** PATCH /instructor/courses/{id} */
   async updateCourse(courseId: string, courseData: Partial<Course>): Promise<Course> {
-  devLog('Instructor', `Update syllabus fields: ${courseId}`, courseData);
-  return apiFetch<Course>(`/instructor/courses/${courseId}`, {
-          method: 'PATCH',
-          body: JSON.stringify(courseData),
-        });
+    devLog('Instructor', `Update syllabus fields: ${courseId}`, courseData);
+    return apiFetch<Course>(`/instructor/courses/${courseId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(courseData),
+    });
   },
 
   /** DELETE /instructor/courses/{id} -> Mapping backward compatibility with standard deleteCourse */
   async deleteCourse(courseId: string): Promise<{ success: boolean }> {
-      // BACKEND_MISSING
+    // BACKEND_MISSING
     devLog('Instructor', `Delete draft course: ${courseId}`);
     if (config.mode === 'api') {
       return apiFetch<{ success: boolean }>(`/instructor/courses/${courseId}`, {
@@ -1070,19 +1268,19 @@ export const ApiService = {
 
   /** GET /instructor/courses/{courseId}/checklist */
   async getCoursePublishChecklist(courseId: string): Promise<{ valid: boolean; warnings: string[] }> {
-  devLog('Instructor', `Retrieve sanity check audit report before publishing Course ID: ${courseId}`);
-  return apiFetch<any>(`/instructor/courses/${courseId}/checklist`);
+    devLog('Instructor', `Retrieve sanity check audit report before publishing Course ID: ${courseId}`);
+    return apiFetch<any>(`/instructor/courses/${courseId}/checklist`);
   },
 
   /** GET /instructor/courses/{id}/review-notes */
   async getAdminSubmissionReviewNotes(courseId: string): Promise<any[]> {
-  devLog('Instructor', `Read audit feedback and issues left by Administrator on: ${courseId}`);
-  return apiFetch<any[]>(`/instructor/courses/${courseId}/review-notes`);
+    devLog('Instructor', `Read audit feedback and issues left by Administrator on: ${courseId}`);
+    return apiFetch<any[]>(`/instructor/courses/${courseId}/review-notes`);
   },
 
-  async submitCourseToAdminVerification(courseId: string): Promise<{ success: boolean }> {
-  devLog('Instructor', `Lock blueprint of workspace ${courseId} and submit to moderators`);
-  return apiFetch<any>(`/instructor/courses/${courseId}/submit`, { method: 'POST' });
+  async submitCourseToAdminVerificationLegacy(courseId: string): Promise<{ success: boolean }> {
+    devLog('Instructor', `Lock blueprint of workspace ${courseId} and submit to moderators`);
+    return apiFetch<any>(`/instructor/courses/${courseId}/submit`, { method: 'POST' });
   },
 
   /** GET /instructor/{id}/enrollment-stats */
@@ -1099,46 +1297,158 @@ export const ApiService = {
     return { totalEnrollments: total };
   },
 
-  /** GET /instructor/{id}/revenue-chart */
-  async getInstructorRevenueChart(instructorId: string, params: { timeUnit: string, startDate?: string, endDate?: string, courseId?: string }): Promise<any[]> {
-      // BACKEND_MISSING
-    devLog('Instructor', `Get revenue chart for instructor ${instructorId}`, params);
+  /** GET /instructor/courses - Paginated list of courses owned by logged-in instructor */
+  async getInstructorCourses(params?: {
+    page?: number;
+    per_page?: number;
+    status?: string;
+    search?: string;
+    sort?: string;
+  }): Promise<{ data: any[]; meta?: any }> {
+    devLog('Instructor', 'Get instructor courses list with params', params);
     if (config.mode === 'api') {
       const query = new URLSearchParams();
-      query.append('timeUnit', params.timeUnit);
-      if (params.startDate) query.append('startDate', params.startDate);
-      if (params.endDate) query.append('endDate', params.endDate);
-      if (params.courseId) query.append('courseId', params.courseId);
-      return apiFetch<any[]>(`/instructor/${instructorId}/revenue-chart?${query.toString()}`);
+      if (params) {
+        if (params.page && params.page > 0) query.append('page', params.page.toString());
+        if (params.per_page && params.per_page > 0) query.append('per_page', params.per_page.toString());
+        if (params.status && params.status !== 'all') {
+          let statusVal = params.status;
+          if (statusVal === 'active') statusVal = 'published';
+          if (statusVal === 'pending') statusVal = 'pending_review';
+          query.append('status', statusVal);
+        }
+        if (params.search && params.search.trim()) query.append('search', params.search.trim());
+        if (params.sort && params.sort !== 'all') {
+          let sortVal = params.sort;
+          if (sortVal === 'updated_desc') sortVal = 'newest';
+          if (sortVal === 'updated_asc') sortVal = 'oldest';
+          query.append('sort', sortVal);
+        }
+      }
+      return apiFetchEnvelope<any[]>(`/instructor/courses?${query.toString()}`);
+    }
+    return { data: [], meta: { current_page: 1, last_page: 1, per_page: 10, total: 0 } };
+  },
+
+  /** GET /instructor/dashboard */
+  async getInstructorDashboard(params?: any): Promise<any> {
+    devLog('Instructor', 'Get dashboard overview stats', params);
+    const query = new URLSearchParams();
+    if (params) {
+      if (params.month) query.append('month', params.month.toString());
+      if (params.year) query.append('year', params.year.toString());
+      if (params.date_from) query.append('date_from', params.date_from);
+      if (params.date_to) query.append('date_to', params.date_to);
+    }
+    return apiFetch<any>(`/instructor/dashboard?${query.toString()}`);
+  },
+
+  /** GET /instructor/revenues/chart */
+  async getInstructorRevenueChart(paramsOrId?: any, params?: any): Promise<any> {
+    let actualParams = params;
+    if (paramsOrId && typeof paramsOrId === 'object') {
+      actualParams = paramsOrId;
+    }
+    devLog('Instructor', 'Get revenue chart', actualParams);
+    if (config.mode === 'api') {
+      const query = new URLSearchParams();
+      if (actualParams) {
+        if (actualParams.preset) query.append('preset', actualParams.preset);
+        if (actualParams.period) query.append('period', actualParams.period);
+        if (actualParams.startDate) query.append('date_from', actualParams.startDate);
+        if (actualParams.endDate) query.append('date_to', actualParams.endDate);
+        if (actualParams.date_from) query.append('date_from', actualParams.date_from);
+        if (actualParams.date_to) query.append('date_to', actualParams.date_to);
+        if (actualParams.courseId || actualParams.course_id) query.append('course_id', (actualParams.courseId || actualParams.course_id).toString());
+      }
+      return apiFetch<any>(`/instructor/revenues/chart?${query.toString()}`);
     }
     return [];
   },
 
-
-  /** GET /instructor/{id}/enrollment-chart */
-  async getInstructorEnrollmentChart(instructorId: string, params: { timeUnit: string, startDate?: string, endDate?: string, courseId?: string }): Promise<any[]> {
-  devLog('Instructor', `Get enrollment chart for instructor ${instructorId}`, params);
-  const query = new URLSearchParams();
-  query.append('timeUnit', params.timeUnit);
-  if (params.startDate) query.append('startDate', params.startDate);
-  if (params.endDate) query.append('endDate', params.endDate);
-  if (params.courseId) query.append('courseId', params.courseId);
-  return apiFetch<any[]>(`/instructor/${instructorId}/enrollment-chart?${query.toString()}`);
-  },
-
-  /** GET /instructor/{id}/top-courses-enrollment */
-  async getInstructorTopCourses(instructorId: string, params: { limit?: number, startDate?: string, endDate?: string, status?: string }): Promise<any[]> {
-      // BACKEND_MISSING
-    devLog('Instructor', `Get top courses for instructor ${instructorId}`);
+  /** GET /instructor/revenues/enrollment-chart */
+  async getInstructorEnrollmentChart(paramsOrId?: any, params?: any): Promise<any> {
+    let actualParams = params;
+    if (paramsOrId && typeof paramsOrId === 'object') {
+      actualParams = paramsOrId;
+    }
+    devLog('Instructor', 'Get enrollment chart', actualParams);
     if (config.mode === 'api') {
       const query = new URLSearchParams();
-      if (params.limit) query.append('limit', params.limit.toString());
-      if (params.startDate) query.append('startDate', params.startDate);
-      if (params.endDate) query.append('endDate', params.endDate);
-      if (params.status) query.append('status', params.status);
-      return apiFetch<any[]>(`/instructor/${instructorId}/top-courses?${query.toString()}`);
+      if (actualParams) {
+        if (actualParams.preset) query.append('preset', actualParams.preset);
+        if (actualParams.period) query.append('period', actualParams.period);
+        if (actualParams.startDate) query.append('date_from', actualParams.startDate);
+        if (actualParams.endDate) query.append('date_to', actualParams.endDate);
+        if (actualParams.date_from) query.append('date_from', actualParams.date_from);
+        if (actualParams.date_to) query.append('date_to', actualParams.date_to);
+        if (actualParams.courseId || actualParams.course_id) query.append('course_id', (actualParams.courseId || actualParams.course_id).toString());
+      }
+      return apiFetch<any>(`/instructor/revenues/enrollment-chart?${query.toString()}`);
     }
     return [];
+  },
+
+  /** GET /instructor/revenues/top-courses */
+  async getInstructorTopCourses(instructorIdOrParams?: any, params?: any): Promise<any> {
+    let actualParams = params;
+    if (instructorIdOrParams && typeof instructorIdOrParams === 'object') {
+      actualParams = instructorIdOrParams;
+    }
+    devLog('Instructor', 'Get top courses', actualParams);
+    if (config.mode === 'api') {
+      const query = new URLSearchParams();
+      if (actualParams) {
+        if (actualParams.limit) query.append('limit', actualParams.limit.toString());
+        if (actualParams.preset) query.append('preset', actualParams.preset);
+        if (actualParams.startDate) query.append('date_from', actualParams.startDate);
+        if (actualParams.endDate) query.append('date_to', actualParams.endDate);
+        if (actualParams.date_from) query.append('date_from', actualParams.date_from);
+        if (actualParams.date_to) query.append('date_to', actualParams.date_to);
+      }
+      return apiFetch<any>(`/instructor/dashboard/top-courses?${query.toString()}`);
+    }
+    return [];
+  },
+
+  /** GET /instructor/dashboard/incomplete-courses */
+  async getInstructorIncompleteCourses(params?: any): Promise<any[]> {
+    devLog('Instructor', 'Get dashboard incomplete courses', params);
+    if (config.mode === 'api') {
+      return apiFetch<any[]>(`/instructor/dashboard/incomplete-courses`);
+    }
+    return [];
+  },
+
+  /** GET /instructor/dashboard/alerts */
+  async getInstructorDashboardAlerts(params?: any): Promise<any[]> {
+    devLog('Instructor', 'Get dashboard alerts/notifications', params);
+    if (config.mode === 'api') {
+      const query = new URLSearchParams();
+      if (params && params.limit) {
+        query.append('limit', params.limit.toString());
+      }
+      return apiFetch<any[]>(`/instructor/dashboard/alerts?${query.toString()}`);
+    }
+    return [];
+  },
+
+  /** GET /instructor/questions?status=unanswered */
+  async getInstructorUnansweredQuestions(params?: any): Promise<any> {
+    devLog('Instructor', 'Get dashboard unanswered questions', params);
+    if (config.mode === 'api') {
+      const query = new URLSearchParams();
+      query.append('status', 'unanswered');
+      if (params) {
+        if (params.course_id) query.append('course_id', params.course_id.toString());
+        if (params.lesson_id) query.append('lesson_id', params.lesson_id.toString());
+        if (params.page) query.append('page', params.page.toString());
+        if (params.per_page) query.append('per_page', params.per_page.toString());
+        if (params.search) query.append('search', params.search);
+      }
+      return apiFetch<any>(`/instructor/questions?${query.toString()}`);
+    }
+    return { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 0 } };
   },
 
   /** GET /instructor/{id}/revenue-stats */
@@ -1213,26 +1523,318 @@ export const ApiService = {
   },
 
   /** GET /instructor/learners */
-  async getInstructorLearners(params: any): Promise<any> {
-      // BACKEND_MISSING
+  async getInstructorLearners(params?: any): Promise<any> {
     devLog('Instructor', `Query all learners for instructor`);
-    const queryStr = new URLSearchParams(params).toString();
-    if (config.mode === 'api') return apiFetch<any>(`/instructor/learners?${queryStr}`);
-    return { data: { stats: { total_enrollments: 0, learning_count: 0, completed_count: 0 }, list: { data: [], totalPages: 1 } } };
+    const q = new URLSearchParams();
+    if (params) {
+      if (params.course_id && params.course_id !== 'all') q.set('course_id', String(params.course_id));
+      if (params.status && params.status !== 'all') q.set('status', String(params.status));
+      if (params.search) q.set('search', String(params.search));
+      if (params.preset && params.preset !== '30d') q.set('preset', String(params.preset));
+      if (params.date_from) q.set('date_from', String(params.date_from));
+      if (params.date_to) q.set('date_to', String(params.date_to));
+      if (params.page) q.set('page', String(params.page));
+      if (params.per_page) q.set('per_page', String(params.per_page));
+    }
+    const queryStr = q.toString() ? `?${q.toString()}` : '';
+    if (config.mode === 'api') return apiFetch<any>(`/instructor/learners${queryStr}`);
+    return { data: [], meta: { total: 0, current_page: 1, last_page: 1 } };
   },
 
-  /** GET /instructor/learners/{id}/details */
-  async getInstructorLearnerDetails(enrollmentId: number): Promise<any> {
-      // BACKEND_MISSING
+  /** GET /instructor/learners/{id} */
+  async getInstructorLearnerDetails(enrollmentId: number | string): Promise<any> {
     devLog('Instructor', `Query learner details for enrollment ${enrollmentId}`);
-    if (config.mode === 'api') return apiFetch<any>(`/instructor/learners/${enrollmentId}/details`);
+    if (config.mode === 'api') return apiFetch<any>(`/instructor/learners/${enrollmentId}`);
     return { data: null };
   },
 
   /** GET /instructor/courses/{courseId}/analytics */
   async getCourseEngagementAnalytics(courseId: string): Promise<any> {
-  devLog('Instructor', `Calculate drop-offs, daily watchtime frequency graphs: ${courseId}`);
-  return apiFetch<any>(`/instructor/courses/${courseId}/analytics`);
+    devLog('Instructor', `Calculate drop-offs, daily watchtime frequency graphs: ${courseId}`);
+    return apiFetch<any>(`/instructor/courses/${courseId}/analytics`);
+  },
+
+  // ==========================================
+  // MODULE: INSTRUCTOR COURSE BUILDER & MEDIA
+  // ==========================================
+
+  /** POST /instructor/media/upload */
+  async uploadInstructorFile(file: File, type: string = 'course_media'): Promise<{ url: string; path?: string }> {
+    devLog('Instructor', 'Upload media file', { fileName: file.name, type });
+    if (config.mode === 'api') {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', type);
+      const res = await apiFetch<any>('/instructor/media/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      return { 
+        url: res?.url || res?.data?.url || res?.file_url || '',
+        path: res?.path || res?.data?.path || ''
+      };
+    }
+    return { url: URL.createObjectURL(file) };
+  },
+
+  /** POST /instructor/courses/draft */
+  async createCourseDraft(payload: any): Promise<any> {
+    devLog('Instructor', 'Create course draft', payload);
+    if (config.mode === 'api') {
+      const backendPayload: any = {
+        title: payload.title || 'Khóa học chưa đặt tên',
+      };
+      if (payload.slug) backendPayload.slug = payload.slug;
+      if (payload.category_id || payload.categoryId) {
+        backendPayload.category_ids = [Number(payload.category_id || payload.categoryId)];
+      }
+      if (payload.level) backendPayload.level = payload.level;
+      if (payload.language) backendPayload.language = payload.language;
+      if (payload.subtitle || payload.short_description) {
+        backendPayload.short_description = payload.subtitle ?? payload.short_description;
+      }
+      if (payload.description) backendPayload.description = payload.description;
+      if (payload.price !== undefined) {
+        backendPayload.price = typeof payload.price === 'number' ? payload.price : parseFloat(payload.price || 0);
+      }
+      if (payload.salePrice !== undefined || payload.sale_price !== undefined) {
+        const sp = payload.salePrice ?? payload.sale_price;
+        backendPayload.sale_price = sp !== null && sp !== undefined ? parseFloat(sp) : null;
+      }
+      if (payload.image || payload.thumbnail_url) {
+        backendPayload.thumbnail_url = payload.image ?? payload.thumbnail_url;
+      }
+      if (payload.introVideoUrl || payload.intro_video_url) {
+        backendPayload.intro_video_url = payload.introVideoUrl ?? payload.intro_video_url;
+      }
+      if (payload.requirements) {
+        backendPayload.requirements = Array.isArray(payload.requirements) ? JSON.stringify(payload.requirements) : payload.requirements;
+      }
+      if (payload.willLearn || payload.outcomes) {
+        const out = payload.willLearn ?? payload.outcomes;
+        backendPayload.outcomes = Array.isArray(out) ? JSON.stringify(out) : out;
+      }
+
+      return apiFetch<any>('/instructor/courses/draft', {
+        method: 'POST',
+        body: JSON.stringify(backendPayload),
+      });
+    }
+    return { id: 'course-' + Date.now(), ...payload };
+  },
+
+  /** PATCH /instructor/courses/{id}/draft */
+  async updateCourseDraft(id: string | number, payload: any): Promise<any> {
+    devLog('Instructor', `Update course draft ID ${id}`, payload);
+    if (config.mode === 'api') {
+      const backendPayload: any = {};
+      if (payload.title !== undefined) backendPayload.title = payload.title;
+      if (payload.slug !== undefined) backendPayload.slug = payload.slug || undefined;
+      if (payload.category_id !== undefined || payload.categoryId !== undefined) {
+        const catId = payload.category_id || payload.categoryId;
+        if (catId) backendPayload.category_ids = [Number(catId)];
+      }
+      if (payload.level !== undefined) backendPayload.level = payload.level;
+      if (payload.language !== undefined) backendPayload.language = payload.language;
+      if (payload.subtitle !== undefined || payload.short_description !== undefined) {
+        backendPayload.short_description = payload.subtitle ?? payload.short_description;
+      }
+      if (payload.description !== undefined) backendPayload.description = payload.description;
+      if (payload.price !== undefined) {
+        backendPayload.price = typeof payload.price === 'number' ? payload.price : parseFloat(payload.price || 0);
+      }
+      if (payload.salePrice !== undefined || payload.sale_price !== undefined) {
+        const sp = payload.salePrice ?? payload.sale_price;
+        backendPayload.sale_price = sp !== null && sp !== undefined ? parseFloat(sp) : null;
+      }
+      if (payload.image !== undefined || payload.thumbnail_url !== undefined) {
+        backendPayload.thumbnail_url = payload.image ?? payload.thumbnail_url;
+      }
+      if (payload.introVideoUrl !== undefined || payload.intro_video_url !== undefined) {
+        backendPayload.intro_video_url = payload.introVideoUrl ?? payload.intro_video_url;
+      }
+      if (payload.requirements !== undefined) {
+        backendPayload.requirements = Array.isArray(payload.requirements) ? JSON.stringify(payload.requirements) : payload.requirements;
+      }
+      if (payload.willLearn !== undefined || payload.outcomes !== undefined) {
+        const out = payload.willLearn ?? payload.outcomes;
+        backendPayload.outcomes = Array.isArray(out) ? JSON.stringify(out) : out;
+      }
+
+      return apiFetch<any>(`/instructor/courses/${id}/draft`, {
+        method: 'PATCH',
+        body: JSON.stringify(backendPayload),
+      });
+    }
+    return { id, ...payload };
+  },
+
+  /** GET /instructor/courses/{id} */
+  async getCourseDetail(id: string | number): Promise<any> {
+    devLog('Instructor', `Get course detail ID ${id}`);
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/courses/${id}`);
+    }
+    return null;
+  },
+
+  /** GET /instructor/courses/{id}/content */
+  async getCourseContent(id: string | number): Promise<any> {
+    devLog('Instructor', `Get course content ID ${id}`);
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/courses/${id}/content`);
+    }
+    return null;
+  },
+
+  /** GET /instructor/courses/{courseId}/checklist */
+  async getCourseChecklist(courseId: string | number): Promise<any> {
+    devLog('Instructor', `Get course checklist ID ${courseId}`);
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/courses/${courseId}/checklist`);
+    }
+    return {
+      checklist_progress: 100,
+      missing_items: [],
+      completed_items: ['Thông tin cơ bản', 'Mục tiêu & yêu cầu', 'Giá bán', 'Nội dung & bài học'],
+      is_ready_for_review: true,
+    };
+  },
+
+  /** POST /instructor/courses/{id}/submit */
+  async submitCourseToAdminVerification(id: string | number): Promise<any> {
+    devLog('Instructor', `Submit course ID ${id} for admin review`);
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/courses/${id}/submit`, {
+        method: 'POST',
+      });
+    }
+    return { success: true };
+  },
+
+  /** POST /instructor/sections */
+  async createSection(payload: any): Promise<any> {
+    devLog('Instructor', 'Create section', payload);
+    if (config.mode === 'api') {
+      return apiFetch<any>('/instructor/sections', {
+        method: 'POST',
+        body: JSON.stringify({
+          course_id: Number(payload.course_id || payload.courseId),
+          title: payload.title,
+          sort_order: payload.sort_order || payload.orderIndex || 1,
+        }),
+      });
+    }
+    return { id: 'sec-' + Date.now(), ...payload };
+  },
+
+  /** PATCH /instructor/sections/{id} */
+  async updateSection(id: string | number, payload: any): Promise<any> {
+    devLog('Instructor', `Update section ID ${id}`, payload);
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/sections/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          title: payload.title,
+          sort_order: payload.sort_order || payload.orderIndex,
+        }),
+      });
+    }
+    return { id, ...payload };
+  },
+
+  /** DELETE /instructor/sections/{id} */
+  async deleteSection(id: string | number): Promise<any> {
+    devLog('Instructor', `Delete section ID ${id}`);
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/sections/${id}`, {
+        method: 'DELETE',
+      });
+    }
+    return { success: true };
+  },
+
+  /** POST /instructor/lessons */
+  async createLesson(payload: any): Promise<any> {
+    devLog('Instructor', 'Create lesson', payload);
+    if (config.mode === 'api') {
+      return apiFetch<any>('/instructor/lessons', {
+        method: 'POST',
+        body: JSON.stringify({
+          course_id: Number(payload.course_id || payload.courseId),
+          course_section_id: Number(payload.course_section_id || payload.sectionId),
+          title: payload.title,
+          lesson_type: payload.lesson_type || payload.type || 'video',
+          sort_order: payload.sort_order || payload.orderIndex || 1,
+          is_preview: payload.is_preview ?? payload.isPreview ?? false,
+          video_url: payload.video_url || payload.videoUrl || undefined,
+          video_duration_seconds: payload.video_duration_seconds ?? payload.duration_seconds ?? undefined,
+          content: payload.content || payload.docContent || undefined,
+        }),
+      });
+    }
+    return { id: 'les-' + Date.now(), ...payload };
+  },
+
+  /** PATCH /instructor/lessons/{id} */
+  async updateLesson(id: string | number, payload: any): Promise<any> {
+    devLog('Instructor', `Update lesson ID ${id}`, payload);
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/lessons/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          title: payload.title,
+          lesson_type: payload.lesson_type || payload.type,
+          sort_order: payload.sort_order || payload.orderIndex,
+          is_preview: payload.is_preview ?? payload.isPreview,
+          video_url: payload.video_url ?? payload.videoUrl,
+          video_duration_seconds: payload.video_duration_seconds ?? payload.duration_seconds,
+          content: payload.content ?? payload.docContent,
+        }),
+      });
+    }
+    return { id, ...payload };
+  },
+
+  /** DELETE /instructor/lessons/{id} */
+  async deleteLesson(id: string | number): Promise<any> {
+    devLog('Instructor', `Delete lesson ID ${id}`);
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/lessons/${id}`, {
+        method: 'DELETE',
+      });
+    }
+    return { success: true };
+  },
+
+  /** POST /instructor/lessons/{id}/video */
+  async uploadLessonVideo(id: string | number, videoFile: File, durationSeconds?: number): Promise<any> {
+    devLog('Instructor', `Upload video for lesson ID ${id}`);
+    if (config.mode === 'api') {
+      const formData = new FormData();
+      formData.append('video', videoFile);
+      if (durationSeconds) formData.append('video_duration_seconds', durationSeconds.toString());
+      return apiFetch<any>(`/instructor/lessons/${id}/video`, {
+        method: 'POST',
+        body: formData,
+      });
+    }
+    return { video_url: URL.createObjectURL(videoFile) };
+  },
+
+  /** POST /instructor/lessons/{id}/assets */
+  async uploadLessonAsset(id: string | number, assetFile: File, title?: string): Promise<any> {
+    devLog('Instructor', `Upload asset for lesson ID ${id}`);
+    if (config.mode === 'api') {
+      const formData = new FormData();
+      formData.append('file', assetFile);
+      if (title) formData.append('title', title);
+      return apiFetch<any>(`/instructor/lessons/${id}/assets`, {
+        method: 'POST',
+        body: formData,
+      });
+    }
+    return { file_url: URL.createObjectURL(assetFile), file_name: assetFile.name };
   },
 
   /** GET /instructor/courses/{courseId}/learner-risk */
@@ -1348,54 +1950,113 @@ export const ApiService = {
   },
 
   /** PUT / PATCH /instructor/sections/{id} */
-  async updateSection(id: string, payload: any): Promise<any> {
-  devLog('Instructor', `Modifying structure of section: ${id}`, payload);
-  return apiFetch<any>(`/instructor/sections/${id}`, {
-          method: 'PATCH',
-          body: JSON.stringify(payload),
-        });
+  async updateInstructorSectionDetails(id: string, payload: any): Promise<any> {
+    devLog('Instructor', `Modifying structure of section: ${id}`, payload);
+    return apiFetch<any>(`/instructor/sections/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
   },
 
   /** DELETE /instructor/sections/{id} */
-  async deleteSection(id: string): Promise<{ success: boolean }> {
-  devLog('Instructor', `Remove section folder block entirely: ${id}`);
-  return apiFetch<{ success: boolean }>(`/instructor/sections/${id}`, { method: 'DELETE' });
+  async deleteInstructorSectionDetails(id: string): Promise<{ success: boolean }> {
+    devLog('Instructor', `Remove section folder block entirely: ${id}`);
+    return apiFetch<{ success: boolean }>(`/instructor/sections/${id}`, { method: 'DELETE' });
   },
 
-  /** GET /instructor/coupons */
+  /** GET /instructor/discount-codes/summary */
+  async getInstructorCouponSummary(params?: { course_id?: number | string }): Promise<any> {
+    const query = new URLSearchParams();
+    if (params?.course_id && params.course_id !== 'all') query.append('course_id', String(params.course_id));
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return apiFetch<any>(`/instructor/discount-codes/summary${qs}`);
+  },
+
+  /** GET /instructor/discount-codes/course-options */
+  async getInstructorCouponCourseOptions(): Promise<any[]> {
+    return apiFetch<any[]>('/instructor/discount-codes/course-options');
+  },
+
+  /** GET /instructor/discount-codes */
+  async getInstructorCoupons(params?: {
+    page?: number;
+    per_page?: number;
+    status?: string;
+    type?: string;
+    course_id?: number | string;
+    search?: string;
+  }): Promise<any> {
+    const query = new URLSearchParams();
+    if (params?.page) query.append('page', String(params.page));
+    if (params?.per_page) query.append('per_page', String(params.per_page));
+    if (params?.status && params.status !== 'all') query.append('status', params.status);
+    if (params?.type && params.type !== 'all') query.append('type', params.type);
+    if (params?.course_id && params.course_id !== 'all') query.append('course_id', String(params.course_id));
+    if (params?.search) query.append('search', params.search);
+    
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return apiFetch<any>(`/instructor/discount-codes${qs}`);
+  },
+
+  /** GET /instructor/discount-codes/{id} */
+  async getInstructorCouponDetail(id: number | string): Promise<any> {
+    return apiFetch<any>(`/instructor/discount-codes/${id}`);
+  },
+
+  /** POST /instructor/discount-codes */
+  async createInstructorCoupon(payload: any): Promise<any> {
+    return apiFetch<any>('/instructor/discount-codes', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** PATCH /instructor/discount-codes/{id} */
+  async updateInstructorCoupon(id: number | string, payload: any): Promise<any> {
+    return apiFetch<any>(`/instructor/discount-codes/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** PATCH /instructor/discount-codes/{id}/enable */
+  async enableInstructorCoupon(id: number | string): Promise<any> {
+    return apiFetch<any>(`/instructor/discount-codes/${id}/enable`, {
+      method: 'PATCH',
+    });
+  },
+
+  /** PATCH /instructor/discount-codes/{id}/disable */
+  async disableInstructorCoupon(id: number | string): Promise<any> {
+    return apiFetch<any>(`/instructor/discount-codes/${id}/disable`, {
+      method: 'PATCH',
+    });
+  },
+
+  /** DELETE /instructor/discount-codes/{id} */
+  async deleteInstructorCoupon(id: number | string): Promise<{ success: boolean }> {
+    return apiFetch<{ success: boolean }>(`/instructor/discount-codes/${id}`, { method: 'DELETE' });
+  },
+
+  /** Legacy helper methods mapping */
   async getInstructorPromoCoupons(): Promise<any[]> {
-  devLog('Instructor', 'Fetch all discount campaigns under teacher authorship');
-  return apiFetch<any[]>('/instructor/coupons');
+    return this.getInstructorCoupons();
   },
 
-  /** POST /instructor/coupons */
   async createPromoCoupon(payload: any): Promise<any> {
-  devLog('Instructor', 'Inject new coupon discount rule properties', payload);
-  return apiFetch<any>('/instructor/coupons', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
+    return this.createInstructorCoupon(payload);
   },
 
-  /** GET /instructor/coupons/{id} */
   async getCouponDetails(id: string): Promise<any> {
-  devLog('Instructor', `Retrieve stats for coupon campaign ID: ${id}`);
-  return apiFetch<any>(`/instructor/coupons/${id}`);
+    return this.getInstructorCouponDetail(id);
   },
 
-  /** PATCH /instructor/coupons/{id} */
   async updatePromoCouponDetails(id: string, payload: any): Promise<any> {
-  devLog('Instructor', `Altering active properties / limits of coupon Node: ${id}`, payload);
-  return apiFetch<any>(`/instructor/coupons/${id}`, {
-          method: 'PATCH',
-          body: JSON.stringify(payload),
-        });
+    return this.updateInstructorCoupon(id, payload);
   },
 
-  /** DELETE /instructor/coupons/{id} */
   async deletePromoCoupon(id: string): Promise<{ success: boolean }> {
-  devLog('Instructor', `Evoking coupon system code cancel: ${id}`);
-  return apiFetch<{ success: boolean }>(`/instructor/coupons/${id}`, { method: 'DELETE' });
+    return this.deleteInstructorCoupon(id);
   },
 
   /** POST /instructor/course-announcements */
@@ -1527,7 +2188,7 @@ export const ApiService = {
         });
   },
 
-  async uploadLessonVideo(
+  async uploadLessonVideoWithProgress(
     file: File, 
     onProgress: (progress: number, status: string) => void,
     lessonId: string = 'new'
@@ -1753,46 +2414,126 @@ export const ApiService = {
 
   
   // ================= PAYOUT & BALANCE API =================
-  async getInstructorBalance(instructorId: string): Promise<any> {
-  devLog('Instructor', 'Get balance');
-  return apiFetch<any>(`/instructor/course-credits`);
+  async getInstructorWithdrawalSummary(): Promise<any> {
+    devLog('Instructor', 'Get withdrawal summary');
+    return apiFetch<any>('/instructor/withdrawals/summary');
   },
 
-  async getInstructorPayoutAccount(instructorId: string): Promise<any> {
-  devLog('Instructor', 'Get payout account');
-  return apiFetch<any>(`/instructor/payout-account`);
+  async getInstructorBalance(instructorId?: string): Promise<any> {
+    devLog('Instructor', 'Get withdrawal summary for balance');
+    return apiFetch<any>('/instructor/withdrawals/summary');
   },
 
-  async updateInstructorPayoutAccount(instructorId: string, payload: any): Promise<any> {
-  devLog('Instructor', 'Update payout account', payload);
-  return apiFetch<any>(`/instructor/payout-account`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
-  },
-
-  async getInstructorWithdrawals(instructorId: string, params?: any): Promise<{ data: any[], meta: any }> {
-      // BACKEND_MISSING
-    devLog('Instructor', 'Get withdrawals');
+  async getInstructorPayoutAccounts(params?: any): Promise<any> {
+    devLog('Instructor', 'Get payout accounts');
     const query = new URLSearchParams(params).toString();
-    if (config.mode === 'api') {
-      return apiFetch<{ data: any[], meta: any }>(`/instructor/withdrawals?${query}`);
-    }
-    return {
-      data: [
-        { id: 'w1', instructorId, amount: 5000000, status: 'completed', requestedAt: new Date(Date.now() - 86400000 * 5).toISOString(), processedAt: new Date(Date.now() - 86400000 * 4).toISOString(), notes: 'Thanh toán tuần 1', payoutMethod: { type: 'bank_transfer', bankName: 'VCB' } },
-        { id: 'w2', instructorId, amount: 2000000, status: 'pending', requestedAt: new Date().toISOString(), payoutMethod: { type: 'bank_transfer', bankName: 'VCB' } }
-      ],
-      meta: { current_page: 1, last_page: 1, total: 2 }
-    };
+    const queryString = query ? `?${query}` : '';
+    return apiFetch<any>(`/instructor/payout-accounts${queryString}`);
   },
 
-  async createInstructorWithdrawal(instructorId: string, payload: any): Promise<any> {
-  devLog('Instructor', 'Create withdrawal', payload);
-  return apiFetch<any>(`/instructor/withdrawals`, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
+  async getDefaultInstructorPayoutAccount(): Promise<any> {
+    devLog('Instructor', 'Get default payout account');
+    return apiFetch<any>('/instructor/payout-accounts/default');
+  },
+
+  async getInstructorPayoutAccount(instructorId?: string): Promise<any> {
+    devLog('Instructor', 'Get default payout account');
+    return apiFetch<any>('/instructor/payout-accounts/default');
+  },
+
+  async setDefaultInstructorPayoutAccount(accountId: string | number): Promise<any> {
+    devLog('Instructor', 'Set default payout account', { accountId });
+    return apiFetch<any>(`/instructor/payout-accounts/${accountId}/set-default`, {
+      method: 'PATCH',
+    });
+  },
+
+  async createInstructorPayoutAccount(payload: any): Promise<any> {
+    devLog('Instructor', 'Create payout account', payload);
+    return apiFetch<any>('/instructor/payout-accounts', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async sendInstructorPayoutAccountOtp(accountId: string | number, payload: any): Promise<any> {
+    devLog('Instructor', 'Send payout account OTP', payload);
+    const id = accountId ? accountId : 0;
+    return apiFetch<any>(`/instructor/payout-accounts/${id}/send-change-otp`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async verifyInstructorPayoutAccountChange(accountId: string | number, otp: string): Promise<any> {
+    devLog('Instructor', 'Verify payout account change OTP', { accountId, otp });
+    const id = accountId ? accountId : 0;
+    return apiFetch<any>(`/instructor/payout-accounts/${id}/verify-change`, {
+      method: 'POST',
+      body: JSON.stringify({ otp }),
+    });
+  },
+
+  async updateInstructorPayoutAccount(idOrInstructorId: string | number, payload: any): Promise<any> {
+    devLog('Instructor', 'Update payout account', payload);
+    // If first argument is numeric ID, route to PATCH /instructor/payout-accounts/:id
+    // Otherwise if it's instructorId string or payload has id, handle gracefully
+    const accountId = typeof payload?.id === 'number' || typeof payload?.id === 'string' 
+      ? payload.id 
+      : idOrInstructorId;
+    
+    if (accountId && (typeof accountId === 'number' || !isNaN(Number(accountId)))) {
+      return apiFetch<any>(`/instructor/payout-accounts/${accountId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+    }
+
+    return apiFetch<any>('/instructor/payout-accounts', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getInstructorWithdrawals(arg1?: any, arg2?: any): Promise<any> {
+    devLog('Instructor', 'Get withdrawals list');
+    let params: any = {};
+    if (typeof arg1 === 'object' && arg1 !== null) {
+      params = arg1;
+    } else if (typeof arg2 === 'object' && arg2 !== null) {
+      params = arg2;
+    }
+    const query = new URLSearchParams();
+    if (params.page) query.set('page', String(params.page));
+    if (params.limit) query.set('per_page', String(params.limit));
+    if (params.per_page) query.set('per_page', String(params.per_page));
+    if (params.status && params.status !== 'all') query.set('status', String(params.status));
+    if (params.date_from) query.set('date_from', String(params.date_from));
+    if (params.date_to) query.set('date_to', String(params.date_to));
+
+    const queryString = query.toString() ? `?${query.toString()}` : '';
+    return apiFetch<any>(`/instructor/withdrawals${queryString}`);
+  },
+
+  async getInstructorWithdrawal(withdrawalId: string | number): Promise<any> {
+    devLog('Instructor', 'Get withdrawal detail', { withdrawalId });
+    return apiFetch<any>(`/instructor/withdrawals/${withdrawalId}`);
+  },
+
+  async createInstructorWithdrawal(arg1: any, arg2?: any): Promise<any> {
+    const payload = typeof arg1 === 'object' ? arg1 : arg2;
+    devLog('Instructor', 'Create withdrawal', payload);
+    return apiFetch<any>('/instructor/withdrawals', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async cancelInstructorWithdrawal(withdrawalId: string | number): Promise<any> {
+    devLog('Instructor', 'Cancel withdrawal request', { withdrawalId });
+    return apiFetch<any>(`/instructor/withdrawals/${withdrawalId}/cancel`, {
+      method: 'PATCH',
+    });
   },
 
   // ================= TRANSACTIONS API =================
@@ -1816,18 +2557,22 @@ export const ApiService = {
     return { unansweredCount: 0 };
   },
 
-  async getInstructorQuestions(instructorId: string, params: any): Promise<any> {
-      // BACKEND_MISSING
+  async getInstructorQuestions(arg1?: any, arg2?: any): Promise<any> {
     if (config.mode === 'api') {
-      const query = new URLSearchParams();
-      if (params.filter) query.append('filter', params.filter);
-      if (params.courseId) query.append('courseId', params.courseId);
-      if (params.lessonId) query.append('lessonId', params.lessonId);
-      if (params.timeRange) query.append('timeRange', params.timeRange);
-      if (params.search) query.append('search', params.search);
-      if (params.page) query.append('page', params.page);
-      if (params.limit) query.append('limit', params.limit);
-      return apiFetch<any>(`/instructor/${instructorId}/questions?${query.toString()}`);
+      const params = typeof arg1 === 'object' ? (arg1 || {}) : (arg2 || {});
+      const q = new URLSearchParams();
+      if (params.course_id && params.course_id !== 'all') q.set('course_id', String(params.course_id));
+      if (params.courseId && params.courseId !== 'all') q.set('course_id', String(params.courseId));
+      if (params.lesson_id && params.lesson_id !== 'all') q.set('lesson_id', String(params.lesson_id));
+      if (params.lessonId && params.lessonId !== 'all') q.set('lesson_id', String(params.lessonId));
+      if (params.status && params.status !== 'all') q.set('status', String(params.status));
+      if (params.filter && params.filter !== 'all') q.set('status', String(params.filter));
+      if (params.search && params.search.trim()) q.set('search', params.search.trim());
+      if (params.sort) q.set('sort', params.sort);
+      if (params.page) q.set('page', String(params.page));
+      if (params.per_page || params.limit) q.set('per_page', String(params.per_page || params.limit));
+      const queryString = q.toString() ? `?${q.toString()}` : '';
+      return apiFetch<any>(`/instructor/questions${queryString}`);
     }
     return { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 0 } };
   },
@@ -2051,94 +2796,6 @@ export const ApiService = {
     return list;
   },
 
-  async createLesson(payload: any): Promise<any> {
-    if (config.mode === 'api') {
-      return apiFetch<any>('/instructor/lessons', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
-    }
-    const current = MockDB.getState().courses;
-    const courseId = payload.course_id;
-    const sectionId = payload.course_section_id;
-    const newLes = {
-      id: 'les-' + Date.now(),
-      title: payload.title,
-      type: payload.lesson_type === 'doc' ? 'doc' as const : 'video' as const,
-      duration: '10:00',
-      videoUrl: payload.video_url || '',
-      isPreview: payload.is_preview || false,
-      content: payload.content || '',
-      resources: []
-    };
-    const updatedCourses = current.map(c => {
-      if (c.id === courseId) {
-        return {
-          ...c,
-          chapters: (c.chapters || []).map(ch => ch.id === sectionId ? { ...ch, lessons: [...(ch.lessons || []), newLes] } : ch)
-        };
-      }
-      return c;
-    });
-    MockDB.commit({ courses: updatedCourses });
-    return {
-      id: newLes.id,
-      ...payload,
-      sort_order: 1
-    };
-  },
-
-  async updateLesson(lessonId: string, payload: any): Promise<any> {
-    if (config.mode === 'api') {
-      return apiFetch<any>(`/instructor/lessons/${lessonId}`, {
-        method: 'PATCH',
-        body: JSON.stringify(payload)
-      });
-    }
-    const current = MockDB.getState().courses;
-    const updatedCourses = current.map(c => {
-      return {
-        ...c,
-        chapters: (c.chapters || []).map(ch => ({
-          ...ch,
-          lessons: (ch.lessons || []).map(l => {
-            if (l.id === lessonId) {
-              return {
-                ...l,
-                title: payload.title !== undefined ? payload.title : l.title,
-                type: payload.lesson_type !== undefined ? (payload.lesson_type === 'doc' ? 'doc' : 'video') : l.type,
-                videoUrl: payload.video_url !== undefined ? payload.video_url : l.videoUrl,
-                isPreview: payload.is_preview !== undefined ? payload.is_preview : l.isPreview,
-                content: payload.content !== undefined ? payload.content : l.content
-              };
-            }
-            return l;
-          })
-        }))
-      };
-    });
-    MockDB.commit({ courses: updatedCourses });
-    return { id: lessonId, ...payload };
-  },
-
-  async deleteLesson(lessonId: string): Promise<any> {
-    if (config.mode === 'api') {
-      return apiFetch<any>(`/instructor/lessons/${lessonId}`, {
-        method: 'DELETE'
-      });
-    }
-    const current = MockDB.getState().courses;
-    const updatedCourses = current.map(c => ({
-      ...c,
-      chapters: (c.chapters || []).map(ch => ({
-        ...ch,
-        lessons: (ch.lessons || []).filter(l => l.id !== lessonId)
-      }))
-    }));
-    MockDB.commit({ courses: updatedCourses });
-    return { success: true };
-  },
-
   async getLessonAssets(lessonId: string): Promise<any[]> {
     if (config.mode === 'api') {
       return apiFetch<any[]>(`/instructor/lessons/${lessonId}/assets`);
@@ -2166,8 +2823,18 @@ export const ApiService = {
     return res;
   },
 
-  async createLessonAsset(lessonId: string, payload: any): Promise<any> {
+  async createLessonAsset(lessonId: string | number, payload: any): Promise<any> {
     if (config.mode === 'api') {
+      if (payload.file instanceof File) {
+        const formData = new FormData();
+        formData.append('file', payload.file);
+        if (payload.title) formData.append('title', payload.title);
+        if (payload.note) formData.append('note', payload.note);
+        return apiFetch<any>(`/instructor/lessons/${lessonId}/assets`, {
+          method: 'POST',
+          body: formData,
+        });
+      }
       return apiFetch<any>(`/instructor/lessons/${lessonId}/assets`, {
         method: 'POST',
         body: JSON.stringify(payload)
@@ -2224,23 +2891,217 @@ export const ApiService = {
     return { success: true };
   },
 
-  async uploadInstructorFile(file: File, type: string): Promise<any> {
+  // --- INSTRUCTOR QUESTIONS & DISCUSSIONS API ---
+  async getInstructorQuestionSummary(params?: { course_id?: string | number; lesson_id?: string | number }): Promise<any> {
     if (config.mode === 'api') {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', type);
-      return apiFetch<any>('/instructor/upload', {
+      const q = new URLSearchParams();
+      if (params?.course_id) q.set('course_id', String(params.course_id));
+      if (params?.lesson_id) q.set('lesson_id', String(params.lesson_id));
+      const queryString = q.toString() ? `?${q.toString()}` : '';
+      return apiFetch<any>(`/instructor/questions/summary${queryString}`);
+    }
+    return {
+      success: true,
+      data: { total_questions: 174, unanswered_questions: 18, answered_questions: 156, comments_today: 32, starred: 12 }
+    };
+  },
+
+  async getInstructorQuestionCourseOptions(): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/questions/course-options`);
+    }
+    return { success: true, data: [] };
+  },
+
+  async getInstructorQuestionLessonOptions(course_id?: string | number): Promise<any> {
+    if (config.mode === 'api') {
+      const q = course_id && course_id !== 'all' ? `?course_id=${course_id}` : '';
+      return apiFetch<any>(`/instructor/questions/lesson-options${q}`);
+    }
+    return { success: true, data: [] };
+  },
+
+  async getInstructorQuestion(id: string | number): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/questions/${id}`);
+    }
+    return { success: true, data: null };
+  },
+
+  async replyInstructorQuestion(id: string | number, payload: { content: string; is_official?: boolean; notify_learner?: boolean } | string): Promise<any> {
+    if (config.mode === 'api') {
+      const bodyData = typeof payload === 'string' 
+        ? { content: payload, is_official: true, notify_learner: true } 
+        : payload;
+      return apiFetch<any>(`/instructor/questions/${id}/reply`, {
         method: 'POST',
-        body: formData
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyData)
       });
     }
-    const objectUrl = URL.createObjectURL(file);
-    return {
-      url: objectUrl,
-      file_name: file.name,
-      file_type: file.type,
-      file_size: file.size
-    };
+    return { success: true };
+  },
+
+  async starInstructorQuestion(id: string | number): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/questions/${id}/star`, { method: 'POST' });
+    }
+    return { success: true };
+  },
+
+  async unstarInstructorQuestion(id: string | number): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/questions/${id}/star`, { method: 'DELETE' });
+    }
+    return { success: true };
+  },
+
+  async updateInstructorQuestionStatus(id: string | number, status: string): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/questions/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+    }
+    return { success: true };
+  },
+
+  async updateInstructorQuestionReply(questionId: string | number, replyId: string | number, payload: { content: string; is_official?: boolean }): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/questions/${questionId}/replies/${replyId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }
+    return { success: true };
+  },
+
+  async deleteInstructorQuestionReply(questionId: string | number, replyId: string | number): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/questions/${questionId}/replies/${replyId}`, {
+        method: 'DELETE'
+      });
+    }
+    return { success: true };
+  },
+
+  async deleteInstructorQuestion(id: string | number): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/questions/${id}`, {
+        method: 'DELETE'
+      });
+    }
+    return { success: true };
+  },
+
+  async hideInstructorQuestion(id: string | number): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/questions/${id}/hide`, {
+        method: 'PATCH'
+      });
+    }
+    return { success: true };
+  },
+
+  async getInstructorLearnersSummary(params?: { course_id?: string | number; status?: string; preset?: string; date_from?: string; date_to?: string }): Promise<any> {
+    if (config.mode === 'api') {
+      const q = new URLSearchParams();
+      if (params?.course_id && params.course_id !== 'all') q.set('course_id', String(params.course_id));
+      if (params?.status && params.status !== 'all') q.set('status', String(params.status));
+      if (params?.preset && params.preset !== '30d') q.set('preset', String(params.preset));
+      if (params?.date_from) q.set('date_from', String(params.date_from));
+      if (params?.date_to) q.set('date_to', String(params.date_to));
+      const queryString = q.toString() ? `?${q.toString()}` : '';
+      return apiFetch<any>(`/instructor/learners/summary${queryString}`);
+    }
+    return { success: true, data: null };
+  },
+
+  async getInstructorLearnersChart(params?: { course_id?: string | number; status?: string; days?: number; preset?: string; date_from?: string; date_to?: string }): Promise<any> {
+    if (config.mode === 'api') {
+      const q = new URLSearchParams();
+      if (params?.course_id && params.course_id !== 'all') q.set('course_id', String(params.course_id));
+      if (params?.status && params.status !== 'all') q.set('status', String(params.status));
+      if (params?.preset && params.preset !== '30d') q.set('preset', String(params.preset));
+      if (params?.date_from) q.set('date_from', String(params.date_from));
+      if (params?.date_to) q.set('date_to', String(params.date_to));
+      if (params?.days) q.set('days', String(params.days));
+      const queryString = q.toString() ? `?${q.toString()}` : '';
+      return apiFetch<any>(`/instructor/learners/chart${queryString}`);
+    }
+    return { success: true, data: null };
+  },
+
+  async exportInstructorLearners(params?: { course_id?: string | number; status?: string; search?: string; preset?: string; date_from?: string; date_to?: string }): Promise<any> {
+    if (config.mode === 'api') {
+      const q = new URLSearchParams();
+      if (params?.course_id && params.course_id !== 'all') q.set('course_id', String(params.course_id));
+      if (params?.status && params.status !== 'all') q.set('status', String(params.status));
+      if (params?.search) q.set('search', String(params.search));
+      if (params?.preset && params.preset !== '30d') q.set('preset', String(params.preset));
+      if (params?.date_from) q.set('date_from', String(params.date_from));
+      if (params?.date_to) q.set('date_to', String(params.date_to));
+      const queryString = q.toString() ? `?${q.toString()}` : '';
+      return apiFetch<any>(`/instructor/learners/export${queryString}`);
+    }
+    return { success: true };
+  },
+
+  async getInstructorRevenueSummary(params?: { preset?: string; date_from?: string; date_to?: string; course_id?: string | number }): Promise<any> {
+    if (config.mode === 'api') {
+      const q = new URLSearchParams();
+      if (params?.preset) q.set('preset', String(params.preset));
+      if (params?.date_from) q.set('date_from', String(params.date_from));
+      if (params?.date_to) q.set('date_to', String(params.date_to));
+      if (params?.course_id && params.course_id !== 'all') q.set('course_id', String(params.course_id));
+      const queryString = q.toString() ? `?${q.toString()}` : '';
+      return apiFetch<any>(`/instructor/revenues/summary${queryString}`);
+    }
+    return { success: true, data: null };
+  },
+
+  async getInstructorRevenueCourseBreakdown(params?: { preset?: string; date_from?: string; date_to?: string }): Promise<any> {
+    if (config.mode === 'api') {
+      const q = new URLSearchParams();
+      if (params?.preset) q.set('preset', String(params.preset));
+      if (params?.date_from) q.set('date_from', String(params.date_from));
+      if (params?.date_to) q.set('date_to', String(params.date_to));
+      const queryString = q.toString() ? `?${q.toString()}` : '';
+      return apiFetch<any>(`/instructor/revenues/course-breakdown${queryString}`);
+    }
+    return { success: true, data: null };
+  },
+
+  async getInstructorRevenueDetails(params?: { page?: number; per_page?: number; preset?: string; date_from?: string; date_to?: string; course_id?: string | number; status?: string; search?: string }): Promise<any> {
+    if (config.mode === 'api') {
+      const q = new URLSearchParams();
+      if (params?.page) q.set('page', String(params.page));
+      if (params?.per_page) q.set('per_page', String(params.per_page));
+      if (params?.preset) q.set('preset', String(params.preset));
+      if (params?.date_from) q.set('date_from', String(params.date_from));
+      if (params?.date_to) q.set('date_to', String(params.date_to));
+      if (params?.course_id && params.course_id !== 'all') q.set('course_id', String(params.course_id));
+      if (params?.status && params.status !== 'all') q.set('status', String(params.status));
+      if (params?.search) q.set('search', String(params.search));
+      const queryString = q.toString() ? `?${q.toString()}` : '';
+      return apiFetch<any>(`/instructor/revenues/details${queryString}`);
+    }
+    return { success: true, data: null };
+  },
+
+  async exportInstructorRevenues(params?: { preset?: string; date_from?: string; date_to?: string; course_id?: string | number }): Promise<any> {
+    if (config.mode === 'api') {
+      const q = new URLSearchParams();
+      if (params?.preset) q.set('preset', String(params.preset));
+      if (params?.date_from) q.set('date_from', String(params.date_from));
+      if (params?.date_to) q.set('date_to', String(params.date_to));
+      if (params?.course_id && params.course_id !== 'all') q.set('course_id', String(params.course_id));
+      const queryString = q.toString() ? `?${q.toString()}` : '';
+      return apiFetch<any>(`/instructor/revenues/export${queryString}`);
+    }
+    return { success: true };
   }
 };
 

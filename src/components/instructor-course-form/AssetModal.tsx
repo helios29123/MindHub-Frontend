@@ -12,6 +12,7 @@ interface AssetModalProps {
     file_type: string;
     file_size: number;
     note: string;
+    file?: File;
   }) => void;
   initialData?: {
     title: string;
@@ -30,6 +31,7 @@ export default function AssetModal({ isOpen, onClose, onSave, initialData }: Ass
   const [fileType, setFileType] = useState('');
   const [fileSize, setFileSize] = useState(0);
   const [note, setNote] = useState('');
+  const [rawFile, setRawFile] = useState<File | undefined>(undefined);
 
   useEffect(() => {
     if (initialData) {
@@ -39,6 +41,7 @@ export default function AssetModal({ isOpen, onClose, onSave, initialData }: Ass
       setFileType(initialData.file_type || '');
       setFileSize(initialData.file_size || 0);
       setNote(initialData.note || '');
+      setRawFile(undefined);
     } else {
       setTitle('');
       setFileUrl('');
@@ -46,16 +49,20 @@ export default function AssetModal({ isOpen, onClose, onSave, initialData }: Ass
       setFileType('');
       setFileSize(0);
       setNote('');
+      setRawFile(undefined);
     }
   }, [initialData, isOpen]);
 
   if (!isOpen) return null;
 
-  const handleAssetUploaded = (meta: { file_url: string; file_name: string; file_type: string; file_size: number }) => {
+  const handleAssetUploaded = (meta: { file_url: string; file_name: string; file_type: string; file_size: number; file?: File }) => {
     setFileUrl(meta.file_url);
     setFileName(meta.file_name);
     setFileType(meta.file_type);
     setFileSize(meta.file_size);
+    if (meta.file) {
+      setRawFile(meta.file);
+    }
     if (!title.trim()) {
       setTitle(meta.file_name.split('.')[0] || 'Tài liệu đính kèm');
     }
@@ -63,14 +70,17 @@ export default function AssetModal({ isOpen, onClose, onSave, initialData }: Ass
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !fileUrl.trim()) return;
+    if (!title.trim()) return;
+    if (!fileUrl.trim() && !rawFile) return;
+
     onSave({
       title: title.trim(),
       file_url: fileUrl.trim(),
       file_name: fileName || 'file-resource',
       file_type: fileType || 'unknown',
       file_size: fileSize,
-      note: note.trim()
+      note: note.trim(),
+      file: rawFile
     });
   };
 
@@ -144,8 +154,8 @@ export default function AssetModal({ isOpen, onClose, onSave, initialData }: Ass
           </div>
 
           <div className="flex justify-end gap-2 border-t pt-3">
-            <button type="button" onClick={onClose} className="px-4 py-2 border rounded-xl hover:bg-slate-50 font-bold text-stone-600">Hủy</button>
-            <button type="submit" disabled={!fileUrl} className="px-5 py-2 bg-[#10b981] hover:bg-emerald-600 text-white font-black rounded-xl disabled:opacity-50">Lưu lại</button>
+            <button type="button" onClick={onClose} className="px-4 py-2 border rounded-xl hover:bg-slate-50 font-bold text-stone-600 cursor-pointer">Hủy</button>
+            <button type="submit" disabled={(!fileUrl || !fileUrl.trim()) && !rawFile} className="px-5 py-2 bg-[#10b981] hover:bg-emerald-600 text-white font-black rounded-xl cursor-pointer disabled:opacity-50">Lưu lại</button>
           </div>
         </form>
       </div>
