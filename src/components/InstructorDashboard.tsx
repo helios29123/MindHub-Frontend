@@ -667,9 +667,11 @@ export default function InstructorDashboard({
   const [isEnrollmentChartLoading, setIsEnrollmentChartLoading] = useState(false);
   const [isSupportingLoading, setIsSupportingLoading] = useState(false);
 
-  // Time filters for charts
-  const [revenueTimeFilter, setRevenueTimeFilter] = useState<'month' | 'week' | 'year'>('month');
-  const [enrollmentTimeFilter, setEnrollmentTimeFilter] = useState<'month' | 'week' | 'year'>('month');
+  // Time filters for charts (Default to 'year' as required)
+  const [revenueTimeFilter, setRevenueTimeFilter] = useState<'month' | 'week' | 'year'>('year');
+  const [enrollmentTimeFilter, setEnrollmentTimeFilter] = useState<'month' | 'week' | 'year'>('year');
+  const [revenueChartError, setRevenueChartError] = useState<string | null>(null);
+  const [enrollmentChartError, setEnrollmentChartError] = useState<string | null>(null);
 
   // Helper date resolver
   const resolveDateFilter = (filterType: 'month' | 'week' | 'year') => {
@@ -706,15 +708,20 @@ export default function InstructorDashboard({
 
   const loadRevenueChart = async (filterType: 'month' | 'week' | 'year') => {
     setIsRevenueChartLoading(true);
+    setRevenueChartError(null);
     try {
       const dates = resolveDateFilter(filterType);
       const res = await ApiService.getInstructorRevenueChart({
         ...dates,
+        preset: filterType,
+        period: filterType,
         group_by: filterType === 'week' ? 'day' : 'month'
       });
-      setRevenueChartData(res || []);
+      const dataArr = Array.isArray(res) ? res : (res?.data || []);
+      setRevenueChartData(dataArr);
     } catch (err: any) {
       console.error("Error loading revenue chart data:", err);
+      setRevenueChartError(err.message || "Không thể tải biểu đồ doanh thu.");
     } finally {
       setIsRevenueChartLoading(false);
     }
@@ -722,15 +729,20 @@ export default function InstructorDashboard({
 
   const loadEnrollmentChart = async (filterType: 'month' | 'week' | 'year') => {
     setIsEnrollmentChartLoading(true);
+    setEnrollmentChartError(null);
     try {
       const dates = resolveDateFilter(filterType);
       const res = await ApiService.getInstructorEnrollmentChart({
         ...dates,
+        preset: filterType,
+        period: filterType,
         group_by: filterType === 'week' ? 'day' : 'month'
       });
-      setEnrollmentChartData(res || []);
+      const dataArr = Array.isArray(res) ? res : (res?.data || []);
+      setEnrollmentChartData(dataArr);
     } catch (err: any) {
       console.error("Error loading enrollment chart data:", err);
+      setEnrollmentChartError(err.message || "Không thể tải biểu đồ lượt ghi danh.");
     } finally {
       setIsEnrollmentChartLoading(false);
     }
@@ -938,13 +950,81 @@ export default function InstructorDashboard({
       }
     : baseOverviewStats;
 
-  const displayTotalEnrollments = isApiMode && dashboardOverview
-    ? (dashboardOverview.enrollment_summary?.unique_learners ?? dashboardOverview.enrollment_summary?.total_students ?? dashboardOverview.enrollment_summary?.total_enrollments ?? 0)
-    : totalEnrollments;
+  const resolveMediaUrl = (path?: string | null): string => {
+    if (!path) return 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=800';
+    return formatResolveMediaUrl(path);
+  };
 
-  const displayTotalRevenue = isApiMode && dashboardOverview
-    ? parseFloat(dashboardOverview.revenue_summary?.instructor_amount_this_month || '0')
-    : revenueStats.totalRevenue;
+  const resolveAvatarUrl = (avatarUrl?: string | null, userName?: string) => {
+    if (avatarUrl) {
+      return resolveMediaUrl(avatarUrl);
+    }
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(userName || 'HV')}&background=007A64&color=fff&bold=true`;
+  };
+
+  const formatChartPeriod = (period: string, filterType: string) => {
+    if (!period) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(period)) {
+      const parts = period.split('-');
+      return `${parts[2]}/${parts[1]}`;
+    }
+    if (/^\d{4}-\d{2}$/.test(period)) {
+      const parts = period.split('-');
+      return `T${parts[1]}`;
+    }
+    return period;
+  };
+
+  // --- API DATA MAPPINGS ---
+  const activeRevenueChartData = useMemo(() => {
+    if (isApiMode && revenueChartData.length > 0) {
+      return revenueChartData.map(pt => ({
+        name: pt.name || formatChartPeriod(pt.date || pt.period, revenueTimeFilter),
+        value: Number(pt.value ?? pt.instructor_amount ?? 0)
+      }));
+    }
+    return [];
+  }, [isApiMode, revenueChartData, revenueTimeFilter]);
+
+  const activeEnrollmentChartData = useMemo(() => {
+    if (isApiMode && enrollmentChartData.length > 0) {
+      return enrollmentChartData.map(pt => ({
+        name: pt.name || formatChartPeriod(pt.date || pt.period, enrollmentTimeFilter),
+        value: Number(pt.value ?? pt.enrollment_count ?? 0)
+      }));
+    }
+    return [];
+  }, [isApiMode, enrollmentChartData, enrollmentTimeFilter]);
+
+  const displayTotalEnrollments = useMemo(() => {
+    if (!isApiMode || !dashboardOverview) return totalEnrollments;
+    if (enrollmentTimeFilter === 'year') {
+      const yearCount = dashboardOverview.enrollment_summary?.new_this_year;
+      return typeof yearCount === 'number' && yearCount > 0
+        ? yearCount
+        : activeEnrollmentChartData.reduce((sum, item) => sum + item.value, 0);
+    }
+    if (enrollmentTimeFilter === 'week') {
+      return activeEnrollmentChartData.reduce((sum, item) => sum + item.value, 0);
+    }
+    const monthCount = dashboardOverview.enrollment_summary?.new_this_month;
+    return typeof monthCount === 'number' && monthCount > 0
+      ? monthCount
+      : activeEnrollmentChartData.reduce((sum, item) => sum + item.value, 0);
+  }, [isApiMode, dashboardOverview, enrollmentTimeFilter, activeEnrollmentChartData, totalEnrollments]);
+
+  const displayTotalRevenue = useMemo(() => {
+    if (!isApiMode || !dashboardOverview) return revenueStats.totalRevenue;
+    if (revenueTimeFilter === 'year') {
+      const yearAmt = parseFloat(dashboardOverview.revenue_summary?.instructor_amount_this_year || '0');
+      return yearAmt > 0 ? yearAmt : activeRevenueChartData.reduce((sum, item) => sum + item.value, 0);
+    }
+    if (revenueTimeFilter === 'week') {
+      return activeRevenueChartData.reduce((sum, item) => sum + item.value, 0);
+    }
+    const monthAmt = parseFloat(dashboardOverview.revenue_summary?.instructor_amount_this_month || '0');
+    return monthAmt > 0 ? monthAmt : activeRevenueChartData.reduce((sum, item) => sum + item.value, 0);
+  }, [isApiMode, dashboardOverview, revenueTimeFilter, activeRevenueChartData, revenueStats.totalRevenue]);
 
   const displayOverviewBalance = isApiMode && dashboardOverview
     ? parseFloat(dashboardOverview.withdraw_summary?.available_balance || '0')
@@ -980,6 +1060,86 @@ export default function InstructorDashboard({
   const [courseSortBy, setCourseSortBy] = useState<string>('newest');
   const [coursePage, setCoursePage] = useState<number>(1);
   const [categoriesList, setCategoriesList] = useState<any[]>([]);
+
+  // Course actions state & Modals
+  const [toastNotification, setToastNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [courseActionLoadingId, setCourseActionLoadingId] = useState<string | null>(null);
+  const [courseActionType, setCourseActionType] = useState<'hiding' | 'unhiding' | 'deleting' | null>(null);
+
+  const [hideModalCourse, setHideModalCourse] = useState<Course | null>(null);
+  const [deleteModalCourse, setDeleteModalCourse] = useState<Course | null>(null);
+  const [deleteErrorSuggestHideCourse, setDeleteErrorSuggestHideCourse] = useState<{ course: Course; message: string } | null>(null);
+
+  const showDashboardToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToastNotification({ message, type });
+    setTimeout(() => {
+      setToastNotification(null);
+    }, 4000);
+  };
+
+  const handleConfirmHide = (courseId: string | number) => {
+    setCourseActionLoadingId(String(courseId));
+    setCourseActionType('hiding');
+    setHideModalCourse(null);
+    setDeleteErrorSuggestHideCourse(null);
+
+    ApiService.hideInstructorCourse(courseId)
+      .then(() => {
+        showDashboardToast('Đã ẩn khóa học.');
+        loadInstructorCoursesList();
+      })
+      .catch(err => {
+        showDashboardToast(err.message || 'Lỗi ẩn khóa học.', 'error');
+      })
+      .finally(() => {
+        setCourseActionLoadingId(null);
+        setCourseActionType(null);
+      });
+  };
+
+  const handleConfirmUnhide = (courseId: string | number) => {
+    setCourseActionLoadingId(String(courseId));
+    setCourseActionType('unhiding');
+
+    ApiService.unhideInstructorCourse(courseId)
+      .then(() => {
+        showDashboardToast('Đã hiện lại khóa học.');
+        loadInstructorCoursesList();
+      })
+      .catch(err => {
+        showDashboardToast(err.message || 'Lỗi hiện lại khóa học.', 'error');
+      })
+      .finally(() => {
+        setCourseActionLoadingId(null);
+        setCourseActionType(null);
+      });
+  };
+
+  const handleConfirmDelete = (courseId: string | number, targetCourse: Course) => {
+    setCourseActionLoadingId(String(courseId));
+    setCourseActionType('deleting');
+    setDeleteModalCourse(null);
+
+    ApiService.deleteInstructorCourse(courseId)
+      .then(() => {
+        showDashboardToast('Đã xóa khóa học.');
+        loadInstructorCoursesList();
+      })
+      .catch(err => {
+        if (err.status === 409 || err.code === 'COURSE_HAS_DEPENDENCIES') {
+          setDeleteErrorSuggestHideCourse({
+            course: targetCourse,
+            message: err.message || 'Khóa học đã phát sinh học viên hoặc giao dịch nên không thể xóa. Bạn có thể ẩn khóa học thay thế.'
+          });
+        } else {
+          showDashboardToast(err.message || 'Lỗi xóa khóa học.', 'error');
+        }
+      })
+      .finally(() => {
+        setCourseActionLoadingId(null);
+        setCourseActionType(null);
+      });
+  };
 
   // Debounce search query
   useEffect(() => {
@@ -1853,53 +2013,6 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
     alert(`Đã chấm điểm thành công: ${points}/100!`);
   };
 
-  // Helper functions for media and period formatting
-  const resolveMediaUrl = (path?: string | null): string => {
-    if (!path) return 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=800';
-    return formatResolveMediaUrl(path);
-  };
-
-  const resolveAvatarUrl = (avatarUrl?: string | null, userName?: string) => {
-    if (avatarUrl) {
-      return resolveMediaUrl(avatarUrl);
-    }
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(userName || 'HV')}&background=007A64&color=fff&bold=true`;
-  };
-
-  const formatChartPeriod = (period: string, filterType: string) => {
-    if (!period) return '';
-    if (/^\d{4}-\d{2}-\d{2}$/.test(period)) {
-      const parts = period.split('-');
-      return `${parts[2]}/${parts[1]}`;
-    }
-    if (/^\d{4}-\d{2}$/.test(period)) {
-      const parts = period.split('-');
-      return `T${parts[1]}`;
-    }
-    return period;
-  };
-
-  // --- API DATA MAPPINGS ---
-  const activeRevenueChartData = useMemo(() => {
-    if (isApiMode && revenueChartData.length > 0) {
-      return revenueChartData.map(pt => ({
-        name: pt.name || formatChartPeriod(pt.date || pt.period, revenueTimeFilter),
-        value: Number(pt.value ?? pt.instructor_amount ?? 0)
-      }));
-    }
-    return [];
-  }, [isApiMode, revenueChartData, revenueTimeFilter]);
-
-  const activeEnrollmentChartData = useMemo(() => {
-    if (isApiMode && enrollmentChartData.length > 0) {
-      return enrollmentChartData.map(pt => ({
-        name: pt.name || formatChartPeriod(pt.date || pt.period, enrollmentTimeFilter),
-        value: Number(pt.value ?? pt.enrollment_count ?? 0)
-      }));
-    }
-    return [];
-  }, [isApiMode, enrollmentChartData, enrollmentTimeFilter]);
-
   const activeTopCourses = useMemo(() => {
     if (isApiMode && topCoursesData.length > 0) {
       return topCoursesData.map((c, idx) => {
@@ -2221,7 +2334,7 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                       </p>
                       <div className="flex items-baseline gap-2 mt-1">
                         <span className="text-xl font-black text-stone-850">{formatVND(displayTotalRevenue)}</span>
-                        {revenueChangePercentage !== undefined && revenueChangePercentage !== null && (
+                        {!isRevenueChartLoading && !revenueChartError && revenueChangePercentage !== undefined && revenueChangePercentage !== null && (
                           <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded border ${
                             revenueChangePercentage >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'
                           }`}>
@@ -2235,9 +2348,9 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                       onChange={(e) => setRevenueTimeFilter(e.target.value as any)}
                       className="border border-slate-150 rounded-lg p-1 text-[9.5px] font-bold bg-white focus:outline-none cursor-pointer"
                     >
+                      <option value="year">Năm nay</option>
                       <option value="month">Tháng này</option>
                       <option value="week">Tuần này</option>
-                      <option value="year">Năm nay</option>
                     </select>
                   </div>
                   <div className="h-44 w-full">
@@ -2245,10 +2358,22 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                       <div className="h-full w-full flex items-center justify-center text-stone-400 text-[11px] animate-pulse">
                         Đang tải dữ liệu biểu đồ...
                       </div>
+                    ) : revenueChartError ? (
+                      <div className="h-full w-full flex flex-col items-center justify-center text-stone-400 border border-dashed border-rose-200 rounded-xl bg-rose-50/30 p-4 text-center">
+                        <AlertCircle className="w-6 h-6 text-rose-500 mb-1" />
+                        <p className="text-[11px] font-bold text-rose-700">Không thể tải biểu đồ doanh thu.</p>
+                        <button 
+                          type="button"
+                          onClick={() => loadRevenueChart(revenueTimeFilter)} 
+                          className="mt-2 text-[10px] font-bold text-rose-600 bg-white border border-rose-200 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                        >
+                          Thử lại
+                        </button>
+                      </div>
                     ) : activeRevenueChartData.length === 0 ? (
                       <div className="h-full w-full flex flex-col items-center justify-center text-stone-400 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
                         <BarChart2 className="w-7 h-7 text-stone-300 mb-1" />
-                        <p className="text-[11px] font-bold text-stone-500">Chưa có dữ liệu doanh thu</p>
+                        <p className="text-[11px] font-bold text-stone-500">Chưa có dữ liệu doanh thu trong khoảng thời gian này.</p>
                         <p className="text-[9.5px] text-stone-400 mt-0.5">Không có giao dịch doanh thu trong khoảng thời gian này.</p>
                       </div>
                     ) : (
@@ -2273,12 +2398,9 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                       </p>
                       <div className="flex items-baseline gap-2 mt-1">
                         <span className="text-xl font-black text-stone-850">
-                          {isApiMode 
-                            ? (dashboardOverview?.enrollment_summary?.new_this_month ?? activeEnrollmentChartData.reduce((sum, item) => sum + item.value, 0))
-                            : totalEnrollments
-                          }
+                          {formatNumber(displayTotalEnrollments)}
                         </span>
-                        {enrollmentChangePercentage !== undefined && enrollmentChangePercentage !== null && (
+                        {!isEnrollmentChartLoading && !enrollmentChartError && enrollmentChangePercentage !== undefined && enrollmentChangePercentage !== null && (
                           <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded border ${
                             enrollmentChangePercentage >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'
                           }`}>
@@ -2292,9 +2414,9 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                       onChange={(e) => setEnrollmentTimeFilter(e.target.value as any)}
                       className="border border-slate-150 rounded-lg p-1 text-[9.5px] font-bold bg-white focus:outline-none cursor-pointer"
                     >
+                      <option value="year">Năm nay</option>
                       <option value="month">Tháng này</option>
                       <option value="week">Tuần này</option>
-                      <option value="year">Năm nay</option>
                     </select>
                   </div>
                   <div className="h-44 w-full">
@@ -2302,10 +2424,22 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                       <div className="h-full w-full flex items-center justify-center text-stone-400 text-[11px] animate-pulse">
                         Đang tải dữ liệu biểu đồ...
                       </div>
+                    ) : enrollmentChartError ? (
+                      <div className="h-full w-full flex flex-col items-center justify-center text-stone-400 border border-dashed border-rose-200 rounded-xl bg-rose-50/30 p-4 text-center">
+                        <AlertCircle className="w-6 h-6 text-rose-500 mb-1" />
+                        <p className="text-[11px] font-bold text-rose-700">Không thể tải biểu đồ lượt ghi danh.</p>
+                        <button 
+                          type="button"
+                          onClick={() => loadEnrollmentChart(enrollmentTimeFilter)} 
+                          className="mt-2 text-[10px] font-bold text-rose-600 bg-white border border-rose-200 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                        >
+                          Thử lại
+                        </button>
+                      </div>
                     ) : activeEnrollmentChartData.length === 0 ? (
                       <div className="h-full w-full flex flex-col items-center justify-center text-stone-400 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
                         <Users className="w-7 h-7 text-stone-300 mb-1" />
-                        <p className="text-[11px] font-bold text-stone-500">Chưa có lượt ghi danh mới</p>
+                        <p className="text-[11px] font-bold text-stone-500">Chưa có lượt ghi danh trong khoảng thời gian này.</p>
                         <p className="text-[9.5px] text-stone-400 mt-0.5">Không có lượt học viên đăng ký trong khoảng thời gian này.</p>
                       </div>
                     ) : (
@@ -2540,7 +2674,7 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
             </div>
 
             {/* Overview cards row */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 md:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 md:gap-4">
               {/* Card 1: Tất cả khóa học */}
               <button
                 type="button"
@@ -2693,7 +2827,7 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                   setCoursePage(1);
                 }}
                 aria-pressed={courseStatusFilter === 'rejected'}
-                className={`relative overflow-hidden rounded-xl border p-3.5 md:p-4 text-left transition-all duration-200 cursor-pointer flex flex-col justify-between min-h-[116px] md:min-h-[128px] col-span-2 sm:col-span-1 ${
+                className={`relative overflow-hidden rounded-xl border p-3.5 md:p-4 text-left transition-all duration-200 cursor-pointer flex flex-col justify-between min-h-[116px] md:min-h-[128px] ${
                   courseStatusFilter === 'rejected'
                     ? 'bg-rose-50/60 border-rose-400 shadow-xs ring-2 ring-rose-500/20'
                     : 'bg-white border-slate-200/80 shadow-3xs hover:-translate-y-0.5 hover:shadow-xs hover:border-slate-300'
@@ -2718,6 +2852,42 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
 
                 <p className="mt-2 text-[10.5px] text-stone-500 font-medium leading-tight pl-1">
                   Cần chỉnh sửa và gửi lại
+                </p>
+              </button>
+
+              {/* Card 6: Hidden */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCourseStatusFilter('hidden');
+                  setCoursePage(1);
+                }}
+                aria-pressed={courseStatusFilter === 'hidden'}
+                className={`relative overflow-hidden rounded-xl border p-3.5 md:p-4 text-left transition-all duration-200 cursor-pointer flex flex-col justify-between min-h-[116px] md:min-h-[128px] ${
+                  courseStatusFilter === 'hidden'
+                    ? 'bg-slate-100/90 border-slate-400 shadow-xs ring-2 ring-slate-400/20'
+                    : 'bg-white border-slate-200/80 shadow-3xs hover:-translate-y-0.5 hover:shadow-xs hover:border-slate-300'
+                }`}
+              >
+                <div className="absolute inset-y-0 left-0 w-1 bg-slate-400 rounded-l-xl" />
+                
+                <div className="flex items-start justify-between gap-3 pl-1">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] md:text-[11px] uppercase font-extrabold tracking-wider text-stone-500">
+                      Hidden
+                    </p>
+                    <p className="mt-2 text-2xl md:text-3xl font-black text-slate-600 tabular-nums tracking-tight">
+                      {isApiMode && dashboardOverview?.course_summary ? (dashboardOverview.course_summary.hidden || 0) : rawInstructorCourses.filter(c => c.status === 'hidden').length}
+                    </p>
+                  </div>
+
+                  <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-slate-100 border border-slate-200/80 flex items-center justify-center shrink-0 text-slate-600 shadow-3xs">
+                    <EyeOff className="w-5 h-5" aria-hidden="true" />
+                  </div>
+                </div>
+
+                <p className="mt-2 text-[10.5px] text-stone-500 font-medium leading-tight pl-1">
+                  Đang tạm ẩn với học viên mới
                 </p>
               </button>
             </div>
@@ -2972,7 +3142,7 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                                   {formattedDate}
                                 </td>
 
-                                <td className="py-3 px-4 w-[140px] min-w-[140px] text-center">
+                                <td className="py-3 px-4 w-[240px] min-w-[240px] text-center">
                                   <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                                     {(displayStatus === 'rejected' || course.status === 'rejected') && (
                                       <button 
@@ -3003,22 +3173,54 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
 
                                     <button 
                                       onClick={() => startBuilderForEdit(course)}
-                                      className="h-9 min-w-[80px] px-3 inline-flex items-center justify-center whitespace-nowrap bg-white hover:bg-slate-50 text-stone-700 border border-slate-200 rounded-lg text-xs font-bold cursor-pointer shadow-3xs transition-colors shrink-0"
+                                      disabled={courseActionLoadingId === String(course.id)}
+                                      className="h-9 min-w-[80px] px-3 inline-flex items-center justify-center whitespace-nowrap bg-white hover:bg-slate-50 text-stone-700 border border-slate-200 rounded-lg text-xs font-bold cursor-pointer shadow-3xs transition-colors shrink-0 disabled:opacity-50"
                                     >
                                       Chỉnh sửa
                                     </button>
 
+                                    {displayStatus === 'hidden' ? (
+                                      <button 
+                                        onClick={() => handleConfirmUnhide(course.id)}
+                                        disabled={courseActionLoadingId === String(course.id)}
+                                        className="h-9 px-3 inline-flex items-center justify-center gap-1.5 whitespace-nowrap bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                                        title="Hiện lại khóa học"
+                                      >
+                                        {courseActionLoadingId === String(course.id) && courseActionType === 'unhiding' ? (
+                                          <div className="w-3.5 h-3.5 border-2 border-slate-700 border-t-transparent rounded-full animate-spin"></div>
+                                        ) : (
+                                          <Eye className="w-3.5 h-3.5" />
+                                        )}
+                                        Hiện lại
+                                      </button>
+                                    ) : (
+                                      <button 
+                                        onClick={() => setHideModalCourse(course)}
+                                        disabled={courseActionLoadingId === String(course.id)}
+                                        className="h-9 px-3 inline-flex items-center justify-center gap-1.5 whitespace-nowrap bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                                        title="Ẩn khóa học"
+                                      >
+                                        {courseActionLoadingId === String(course.id) && courseActionType === 'hiding' ? (
+                                          <div className="w-3.5 h-3.5 border-2 border-amber-700 border-t-transparent rounded-full animate-spin"></div>
+                                        ) : (
+                                          <EyeOff className="w-3.5 h-3.5" />
+                                        )}
+                                        Ẩn khóa học
+                                      </button>
+                                    )}
+
                                     <button 
-                                      onClick={() => {
-                                        if (window.confirm('Bạn có chắc chắn muốn xóa vĩnh viễn khóa học này? Thao tác này không thể thu hồi.')) {
-                                          onDeleteCourse(course.id);
-                                        }
-                                      }}
-                                      className="w-9 h-9 inline-flex items-center justify-center text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 rounded-lg transition-colors cursor-pointer shrink-0"
+                                      onClick={() => setDeleteModalCourse(course)}
+                                      disabled={courseActionLoadingId === String(course.id)}
+                                      className="w-9 h-9 inline-flex items-center justify-center text-rose-600 hover:bg-rose-50 border border-slate-200 rounded-lg transition-colors cursor-pointer shrink-0 disabled:opacity-50"
                                       title="Xóa khóa học"
                                       aria-label="Xóa khóa học"
                                     >
-                                      <Trash2 className="w-4 h-4" />
+                                      {courseActionLoadingId === String(course.id) && courseActionType === 'deleting' ? (
+                                        <div className="w-3.5 h-3.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
+                                      ) : (
+                                        <Trash2 className="w-4 h-4" />
+                                      )}
                                     </button>
                                   </div>
                                 </td>
@@ -3104,7 +3306,7 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
                                     if (window.confirm('Bạn có muốn gửi khóa học này cho Admin duyệt không?')) {
                                       try {
                                         await ApiService.submitCourseToAdminVerification(course.id);
-                                        alert('Đã gửi yêu cầu duyệt khóa học thành công!');
+                                        showDashboardToast('Đã gửi yêu cầu duyệt khóa học thành công!');
                                         loadInstructorCoursesList();
                                       } catch (err: any) {
                                         console.error("Error submitting course for review:", err);
@@ -3126,22 +3328,54 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
 
                               <button 
                                 onClick={() => startBuilderForEdit(course)}
-                                className="h-9 min-w-[80px] px-3 inline-flex items-center justify-center whitespace-nowrap bg-white text-stone-700 border border-slate-200 rounded-lg text-xs font-bold cursor-pointer shadow-3xs shrink-0"
+                                disabled={courseActionLoadingId === String(course.id)}
+                                className="h-9 min-w-[80px] px-3 inline-flex items-center justify-center whitespace-nowrap bg-white hover:bg-slate-50 text-stone-700 border border-slate-200 rounded-lg text-xs font-bold cursor-pointer shadow-3xs shrink-0 disabled:opacity-50"
                               >
                                 Chỉnh sửa
                               </button>
 
+                              {displayStatus === 'hidden' ? (
+                                <button 
+                                  onClick={() => handleConfirmUnhide(course.id)}
+                                  disabled={courseActionLoadingId === String(course.id)}
+                                  className="h-9 px-3 inline-flex items-center justify-center gap-1.5 whitespace-nowrap bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                                  title="Hiện lại khóa học"
+                                >
+                                  {courseActionLoadingId === String(course.id) && courseActionType === 'unhiding' ? (
+                                    <div className="w-3.5 h-3.5 border-2 border-slate-700 border-t-transparent rounded-full animate-spin"></div>
+                                  ) : (
+                                    <Eye className="w-3.5 h-3.5" />
+                                  )}
+                                  Hiện lại
+                                </button>
+                              ) : (
+                                <button 
+                                  onClick={() => setHideModalCourse(course)}
+                                  disabled={courseActionLoadingId === String(course.id)}
+                                  className="h-9 px-3 inline-flex items-center justify-center gap-1.5 whitespace-nowrap bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                                  title="Ẩn khóa học"
+                                >
+                                  {courseActionLoadingId === String(course.id) && courseActionType === 'hiding' ? (
+                                    <div className="w-3.5 h-3.5 border-2 border-amber-700 border-t-transparent rounded-full animate-spin"></div>
+                                  ) : (
+                                    <EyeOff className="w-3.5 h-3.5" />
+                                  )}
+                                  Ẩn khóa học
+                                </button>
+                              )}
+
                               <button 
-                                onClick={() => {
-                                  if (window.confirm('Bạn có chắc chắn muốn xóa vĩnh viễn khóa học này? Thao tác này không thể thu hồi.')) {
-                                    onDeleteCourse(course.id);
-                                  }
-                                }}
-                                className="w-9 h-9 inline-flex items-center justify-center text-rose-600 hover:bg-rose-50 border border-slate-200 rounded-lg transition-colors cursor-pointer shrink-0"
+                                onClick={() => setDeleteModalCourse(course)}
+                                disabled={courseActionLoadingId === String(course.id)}
+                                className="w-9 h-9 inline-flex items-center justify-center text-rose-600 hover:bg-rose-50 border border-slate-200 rounded-lg transition-colors cursor-pointer shrink-0 disabled:opacity-50"
                                 title="Xóa khóa học"
                                 aria-label="Xóa khóa học"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                {courseActionLoadingId === String(course.id) && courseActionType === 'deleting' ? (
+                                  <div className="w-3.5 h-3.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
                               </button>
                             </div>
                           </div>
@@ -3968,6 +4202,117 @@ Hãy viết một hàm đệ quy để giải quyết bài toán lồng thư m�
             setBuilderStep(step);
           }}
         />
+
+        {/* Toast Overlay */}
+        {toastNotification && (
+          <div className="fixed bottom-6 right-6 z-[9999] animate-bounce-in">
+            <div className={`px-5 py-3.5 rounded-xl shadow-xl border font-bold text-xs flex items-center gap-2.5 ${
+              toastNotification.type === 'success' ? 'bg-emerald-800 text-white border-emerald-700' : 'bg-rose-800 text-white border-rose-700'
+            }`}>
+              <span>{toastNotification.type === 'success' ? '✓' : '⚠️'}</span>
+              <span>{toastNotification.message}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Modal 1: Confirm Hide Course */}
+        {hideModalCourse && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-4 animate-fade-in text-left">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-2xl">
+              <div className="w-12 h-12 bg-amber-50 text-amber-700 rounded-full flex items-center justify-center mx-auto text-xl">
+                <EyeOff className="w-6 h-6" />
+              </div>
+              <div className="text-center">
+                <h3 className="font-bold text-stone-900 text-base">Ẩn khóa học?</h3>
+                <p className="text-xs text-stone-600 mt-2 leading-relaxed">
+                  Khóa học <strong className="text-stone-900">"{hideModalCourse.title}"</strong> sẽ không còn hiển thị cho học viên mới. Dữ liệu học viên, doanh thu và bài học hiện tại vẫn được giữ nguyên.
+                </p>
+              </div>
+              <div className="flex gap-3 justify-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => setHideModalCourse(null)}
+                  className="px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 hover:bg-slate-100 text-stone-700 font-bold text-xs cursor-pointer transition-all flex-1"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConfirmHide(hideModalCourse.id)}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs cursor-pointer transition-all shadow-md flex-1"
+                >
+                  Ẩn khóa học
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal 2: Confirm Delete Course */}
+        {deleteModalCourse && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-4 animate-fade-in text-left">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-2xl">
+              <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto text-xl">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="text-center">
+                <h3 className="font-bold text-stone-900 text-base">Xóa khóa học?</h3>
+                <p className="text-xs text-stone-600 mt-2 leading-relaxed">
+                  Hành động này chỉ áp dụng cho khóa học chưa phát sinh học viên hoặc giao dịch. Dữ liệu của <strong className="text-stone-900">"{deleteModalCourse.title}"</strong> sẽ được chuyển vào trạng thái đã xóa.
+                </p>
+              </div>
+              <div className="flex gap-3 justify-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteModalCourse(null)}
+                  className="px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 hover:bg-slate-100 text-stone-700 font-bold text-xs cursor-pointer transition-all flex-1"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConfirmDelete(deleteModalCourse.id, deleteModalCourse)}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs cursor-pointer transition-all shadow-md flex-1"
+                >
+                  Xóa khóa học
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal 3: Suggest Hide when Delete Conflict */}
+        {deleteErrorSuggestHideCourse && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-4 animate-fade-in text-left">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-rose-100 shadow-2xl">
+              <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto text-xl">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div className="text-center">
+                <h3 className="font-bold text-stone-900 text-base">Không thể xóa khóa học</h3>
+                <p className="text-xs text-rose-700 mt-2 leading-relaxed bg-rose-50 p-3 rounded-xl border border-rose-100">
+                  {deleteErrorSuggestHideCourse.message}
+                </p>
+              </div>
+              <div className="flex gap-3 justify-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteErrorSuggestHideCourse(null)}
+                  className="px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 hover:bg-slate-100 text-stone-700 font-bold text-xs cursor-pointer transition-all flex-1"
+                >
+                  Bỏ qua
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConfirmHide(deleteErrorSuggestHideCourse.course.id)}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs cursor-pointer transition-all shadow-md flex-1"
+                >
+                  Ẩn khóa học thay thế
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </main>

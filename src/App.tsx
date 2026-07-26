@@ -91,7 +91,7 @@ import {
   normalizeUser,
 } from "./types";
 import { safeLocalStorage as localStorage } from "./utils/safeStorage";
-import { AppRoutes, RoleLabels } from "./utils/routes";
+import { AppRoutes, RoleLabels, getDashboardRouteByRole } from "./utils/routes";
 
 // Import subcomponents
 import AuthScreens from "./components/AuthScreens";
@@ -153,6 +153,90 @@ function ScrollReveal({ children, delayMs = 0 }: ScrollRevealProps) {
       className={`transition-all duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}
     >
       {children}
+    </div>
+  );
+}
+
+function GoogleCallbackComponent({
+  onLoginSuccess,
+  navigateTo,
+}: {
+  onLoginSuccess: (user: UserType) => void;
+  navigateTo: (path: string) => void;
+}) {
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("status");
+    const code = params.get("code");
+
+    if (status === "success") {
+      ApiService.getCurrentUser()
+        .then((user) => {
+          if (user) {
+            const normalized = normalizeUser({ ...user, isEmailVerified: true });
+            onLoginSuccess(normalized);
+            navigateTo(getDashboardRouteByRole(normalized.role));
+          } else {
+            setErrorMsg("Đăng nhập thành công nhưng không thể tải thông tin tài khoản.");
+          }
+        })
+        .catch(() => {
+          setErrorMsg("Đăng nhập thành công nhưng không thể tải thông tin tài khoản.");
+        });
+    } else {
+      switch (code) {
+        case "google_oauth_not_configured":
+          setErrorMsg("Đăng nhập Google chưa được cấu hình trên máy chủ.");
+          break;
+        case "google_auth_cancelled":
+          setErrorMsg("Bạn đã hủy đăng nhập Google.");
+          break;
+        case "google_email_missing":
+          setErrorMsg("Tài khoản Google không cung cấp địa chỉ email.");
+          break;
+        case "google_email_not_verified":
+          setErrorMsg("Email Google chưa được xác minh.");
+          break;
+        case "account_inactive":
+          setErrorMsg("Tài khoản MindHub đang bị vô hiệu hóa.");
+          break;
+        case "account_blocked":
+          setErrorMsg("Tài khoản MindHub đang bị khóa.");
+          break;
+        case "account_disabled":
+          setErrorMsg("Tài khoản của bạn đang bị khóa, vô hiệu hóa hoặc chưa được kích hoạt.");
+          break;
+        case "google_auth_failed":
+        default:
+          setErrorMsg("Không thể đăng nhập bằng Google. Vui lòng thử lại.");
+          break;
+      }
+    }
+  }, []);
+
+  return (
+    <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center">
+      {!errorMsg ? (
+        <div className="space-y-4 animate-fade-in">
+          <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <h2 className="text-xl font-bold text-slate-800">Đang hoàn tất đăng nhập Google...</h2>
+          <p className="text-sm text-slate-500">Vui lòng chờ trong giây lát.</p>
+        </div>
+      ) : (
+        <div className="max-w-md space-y-4 bg-white p-8 rounded-2xl shadow-lg border border-red-100 animate-slide-up">
+          <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto text-xl font-bold">!</div>
+          <h2 className="text-lg font-bold text-slate-800">Đăng nhập Google thất bại</h2>
+          <p className="text-sm text-red-600">{errorMsg}</p>
+          <button
+            onClick={() => navigateTo("/login")}
+            className="px-6 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors text-sm cursor-pointer"
+          >
+            Quay lại trang Đăng nhập
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -225,6 +309,7 @@ export default function App() {
       return "vnpay-return";
     if (path.startsWith("/vnpay-return")) return "vnpay-return";
 
+    if (path.startsWith("/auth/google/callback")) return "google-callback";
     if (path.startsWith("/login")) return "login";
     if (path.startsWith("/register")) return "register";
     if (path.startsWith("/forgot-password")) return "forgot-password";
@@ -512,6 +597,32 @@ export default function App() {
   const [apiConfigMode, setApiConfigMode] = useState<"mock" | "api">(
     () => ApiService.getConfig().mode,
   );
+
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+
+  // Restore authenticated session from Backend on mount / refresh (F5)
+  useEffect(() => {
+    ApiService.getCurrentUser()
+      .then((user) => {
+        if (user) {
+          const apiUser = normalizeUser({ ...user, isEmailVerified: true });
+          setCurrentUser(apiUser);
+          setIsLoggedIn(true);
+          try {
+            localStorage.setItem("mindhub_current_user", JSON.stringify(apiUser));
+            localStorage.setItem("mindhub_is_logged_in", "true");
+          } catch (e) {}
+        } else {
+          setIsLoggedIn(false);
+        }
+      })
+      .catch(() => {
+        setIsLoggedIn(false);
+      })
+      .finally(() => {
+        setAuthLoading(false);
+      });
+  }, []);
 
   // Sync state and reload data on events
   useEffect(() => {
@@ -1586,10 +1697,11 @@ export default function App() {
 
   const handleDeleteCourse = async (courseId: string) => {
     try {
-      await ApiService.deleteCourse(courseId);
+      await ApiService.deleteInstructorCourse(courseId);
       await fetchAllCourses();
     } catch (e: any) {
-      alert("Lỗi xóa khóa học: " + e.message);
+      console.error("Error deleting course:", e);
+      throw e;
     }
   };
 
@@ -7324,8 +7436,16 @@ export default function App() {
                 />
               )}
 
-              {/* --- 5. AUTH SCREENS --- */}
-              {/* AuthScreens moved outside of main layout */}
+              {/* --- 5. GOOGLE OAUTH CALLBACK --- */}
+              {activeTab === "google-callback" && (
+                <GoogleCallbackComponent
+                  onLoginSuccess={(u) => {
+                    setCurrentUser(u);
+                    setIsLoggedIn(true);
+                  }}
+                  navigateTo={navigateTo}
+                />
+              )}
 
               {/* --- 5. CART AND CHECKOUT --- */}
               {(activeTab === "cart" || activeTab === "checkout") && (

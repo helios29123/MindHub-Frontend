@@ -171,7 +171,7 @@ export interface Course {
   faqs?: FAQItem[];
   requirements?: string[];
   willLearn?: string[];
-  status: 'draft' | 'pending' | 'active' | 'rejected' | 'hidden' | 'archived' | 'suspended';
+  status: 'draft' | 'pending' | 'active' | 'rejected' | 'hidden' | 'archived' | 'suspended' | 'published' | 'approved';
   rawStatus?: string;
   statusLabel?: string;
   category_id?: number | string;

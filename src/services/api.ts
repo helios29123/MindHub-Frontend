@@ -317,11 +317,38 @@ export const ApiService = {
       }),
     });
     const token = res.access_token || '';
-    this.setAuthToken(token);
+    if (token) {
+      this.setAuthToken(token);
+    }
     return {
       user: res.user,
       token: token,
     };
+  },
+
+  /** GET /auth/google/redirect */
+  async getGoogleRedirectUrl(): Promise<string> {
+    devLog('Auth', 'Get Google OAuth redirect authorization URL');
+    const res = await apiFetch<{ url: string }>('/auth/google/redirect');
+    return res.url;
+  },
+
+  /** POST /auth/forgot-password */
+  async requestPasswordReset(email: string): Promise<any> {
+    devLog('Auth', 'Request password reset', { email });
+    return apiFetch<any>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  /** POST /auth/reset-password */
+  async resetPassword(payload: any): Promise<any> {
+    devLog('Auth', 'Reset password', { email: payload.email });
+    return apiFetch<any>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   /** POST /auth/logout */
@@ -392,25 +419,7 @@ export const ApiService = {
   /** POST /auth/forgot-password */
   async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
     devLog('Auth', 'Send password reset link to', { email });
-    if (config.mode === 'mock') {
-      return { success: true, message: 'Đã gửi liên kết đặt lại mật khẩu giả lập.' };
-    }
-    return apiFetch<{ success: boolean; message: string }>('/auth/forgot-password', {
-          method: 'POST',
-          body: JSON.stringify({ email }),
-        });
-  },
-
-  /** POST /auth/reset-password */
-  async resetPassword(payload: any): Promise<{ success: boolean; message: string }> {
-    devLog('Auth', 'Submit password reset request');
-    if (config.mode === 'mock') {
-      return { success: true, message: 'Đặt lại mật khẩu thành công.' };
-    }
-    return apiFetch<{ success: boolean; message: string }>('/auth/reset-password', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
+    return this.requestPasswordReset(email);
   },
 
   /** POST /auth/verify-email/resend */
@@ -1343,7 +1352,7 @@ export const ApiService = {
     return apiFetch<any>(`/instructor/dashboard?${query.toString()}`);
   },
 
-  /** GET /instructor/revenues/chart */
+  /** GET /instructor/dashboard/revenue-chart */
   async getInstructorRevenueChart(paramsOrId?: any, params?: any): Promise<any> {
     let actualParams = params;
     if (paramsOrId && typeof paramsOrId === 'object') {
@@ -1359,14 +1368,15 @@ export const ApiService = {
         if (actualParams.endDate) query.append('date_to', actualParams.endDate);
         if (actualParams.date_from) query.append('date_from', actualParams.date_from);
         if (actualParams.date_to) query.append('date_to', actualParams.date_to);
+        if (actualParams.group_by) query.append('group_by', actualParams.group_by);
         if (actualParams.courseId || actualParams.course_id) query.append('course_id', (actualParams.courseId || actualParams.course_id).toString());
       }
-      return apiFetch<any>(`/instructor/revenues/chart?${query.toString()}`);
+      return apiFetch<any>(`/instructor/dashboard/revenue-chart?${query.toString()}`);
     }
     return [];
   },
 
-  /** GET /instructor/revenues/enrollment-chart */
+  /** GET /instructor/dashboard/enrollment-chart */
   async getInstructorEnrollmentChart(paramsOrId?: any, params?: any): Promise<any> {
     let actualParams = params;
     if (paramsOrId && typeof paramsOrId === 'object') {
@@ -1382,9 +1392,10 @@ export const ApiService = {
         if (actualParams.endDate) query.append('date_to', actualParams.endDate);
         if (actualParams.date_from) query.append('date_from', actualParams.date_from);
         if (actualParams.date_to) query.append('date_to', actualParams.date_to);
+        if (actualParams.group_by) query.append('group_by', actualParams.group_by);
         if (actualParams.courseId || actualParams.course_id) query.append('course_id', (actualParams.courseId || actualParams.course_id).toString());
       }
-      return apiFetch<any>(`/instructor/revenues/enrollment-chart?${query.toString()}`);
+      return apiFetch<any>(`/instructor/dashboard/enrollment-chart?${query.toString()}`);
     }
     return [];
   },
@@ -2474,6 +2485,14 @@ export const ApiService = {
     });
   },
 
+  async revealInstructorPayoutAccount(accountId: string | number, payload: { password?: string }): Promise<any> {
+    devLog('Instructor', 'Reveal payout account number', { accountId });
+    return apiFetch<any>(`/instructor/payout-accounts/${accountId}/reveal`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   async updateInstructorPayoutAccount(idOrInstructorId: string | number, payload: any): Promise<any> {
     devLog('Instructor', 'Update payout account', payload);
     // If first argument is numeric ID, route to PATCH /instructor/payout-accounts/:id
@@ -2520,6 +2539,22 @@ export const ApiService = {
     return apiFetch<any>(`/instructor/withdrawals/${withdrawalId}`);
   },
 
+  async requestInstructorEarlyWithdrawalOtp(payload: { amount: number; payout_account_id?: number | string }): Promise<any> {
+    devLog('Instructor', 'Request early withdrawal OTP', payload);
+    return apiFetch<any>('/instructor/early-withdrawals/request-otp', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async createInstructorEarlyWithdrawal(payload: { amount: number; payout_account_id?: number | string; otp: string }): Promise<any> {
+    devLog('Instructor', 'Create early withdrawal', payload);
+    return apiFetch<any>('/instructor/early-withdrawals', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   async createInstructorWithdrawal(arg1: any, arg2?: any): Promise<any> {
     const payload = typeof arg1 === 'object' ? arg1 : arg2;
     devLog('Instructor', 'Create withdrawal', payload);
@@ -2531,7 +2566,7 @@ export const ApiService = {
 
   async cancelInstructorWithdrawal(withdrawalId: string | number): Promise<any> {
     devLog('Instructor', 'Cancel withdrawal request', { withdrawalId });
-    return apiFetch<any>(`/instructor/withdrawals/${withdrawalId}/cancel`, {
+    return apiFetch<any>(`/instructor/early-withdrawals/${withdrawalId}/cancel`, {
       method: 'PATCH',
     });
   },
@@ -2673,6 +2708,39 @@ export const ApiService = {
     }
     const current = MockDB.getState().courses;
     MockDB.commit({ courses: current.map(c => c.id === id ? { ...c, status: 'pending' as const } : c) });
+    return { success: true };
+  },
+
+  async deleteInstructorCourse(id: string | number): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/courses/${id}`, {
+        method: 'DELETE'
+      });
+    }
+    const current = MockDB.getState().courses;
+    MockDB.commit({ courses: current.filter(c => c.id !== id) });
+    return { success: true };
+  },
+
+  async hideInstructorCourse(id: string | number): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/courses/${id}/hide`, {
+        method: 'PATCH'
+      });
+    }
+    const current = MockDB.getState().courses;
+    MockDB.commit({ courses: current.map(c => c.id === id ? { ...c, status: 'hidden' as const } : c) });
+    return { success: true };
+  },
+
+  async unhideInstructorCourse(id: string | number): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>(`/instructor/courses/${id}/unhide`, {
+        method: 'PATCH'
+      });
+    }
+    const current = MockDB.getState().courses;
+    MockDB.commit({ courses: current.map(c => c.id === id ? { ...c, status: 'published' as const } : c) });
     return { success: true };
   },
 
@@ -3100,6 +3168,39 @@ export const ApiService = {
       if (params?.course_id && params.course_id !== 'all') q.set('course_id', String(params.course_id));
       const queryString = q.toString() ? `?${q.toString()}` : '';
       return apiFetch<any>(`/instructor/revenues/export${queryString}`);
+    }
+    return { success: true };
+  },
+
+  // --- ACCOUNT ALIASES & AVATAR PRESET MANAGEMENT ---
+  async getAccountProfile(): Promise<any> {
+    return this.getInstructorProfile();
+  },
+
+  async updateAccountProfile(payload: any): Promise<any> {
+    return this.updateInstructorProfile(payload);
+  },
+
+  async uploadAccountAvatar(file: File): Promise<any> {
+    return this.uploadInstructorAvatar(file);
+  },
+
+  async selectAccountAvatarPreset(presetId: string): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>('/account/avatar/preset', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preset_id: presetId })
+      });
+    }
+    return { success: true };
+  },
+
+  async deleteAccountAvatar(): Promise<any> {
+    if (config.mode === 'api') {
+      return apiFetch<any>('/account/avatar', {
+        method: 'DELETE'
+      });
     }
     return { success: true };
   }

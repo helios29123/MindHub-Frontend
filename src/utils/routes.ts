@@ -46,6 +46,36 @@ export const AppRoutes = {
   instructorProfile: (tab?: string) => `/instructor/profile${tab ? `?tab=${tab}` : ''}`,
 };
 
+export const ROUTES = {
+  home: '/',
+  profile: '/account/profile',
+  instructor: {
+    dashboard: '/instructor/dashboard',
+    profile: '/instructor/profile',
+    courses: '/instructor/courses',
+    payouts: '/instructor/withdrawals',
+  },
+  admin: {
+    dashboard: '/admin/dashboard',
+  }
+};
+
+/**
+ * Helper to resolve the correct dashboard URL according to user role
+ */
+export function getDashboardRouteByRole(role?: string): string {
+  switch (role) {
+    case 'admin':
+      return '/admin/dashboard';
+    case 'instructor':
+      return '/instructor/dashboard';
+    case 'student':
+    case 'learner':
+    default:
+      return '/dashboard';
+  }
+}
+
 /**
  * Common Role Labels mapping
  */
