@@ -1,6 +1,6 @@
 import React from 'react';
 import { User as UserType } from '@/shared/types';
-import { StudentProfilePage } from './student-profile/StudentProfilePage';
+import { StudentProfilePage } from '@/components/student-profile/StudentProfilePage';
 
 interface ProfilePageProps {
   currentUser: UserType;

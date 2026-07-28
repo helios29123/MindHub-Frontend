@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { ApiService } from '@/shared/services/api';
+import { ApiService } from '@/services/api';
 import { 
   Search, Activity, DollarSign, ChevronLeft, ChevronRight, X, 
   TrendingUp, Calendar, BookOpen, Clock, AlertCircle, Sparkles, Loader2, ArrowRight,

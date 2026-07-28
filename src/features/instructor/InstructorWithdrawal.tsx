@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ApiService } from '@/shared/services/api';
+import { ApiService } from '@/services/api';
 import { 
   Wallet, Clock, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, 
   Sparkles, X, Loader2, ShieldCheck, Eye, EyeOff, Lock,
