@@ -5,7 +5,7 @@ import { QAList } from './QAList';
 import { QADetailView } from './QADetailView';
 import { Question, QAFilterState, Reply } from './types';
 import { HelpCircle, Sparkles, Loader2, AlertCircle } from 'lucide-react';
-import { ApiService } from '../../services/api';
+import { instructorApi } from '@/features/instructor/api';
 
 const mapBackendQuestion = (q: any): Question => {
   const isAns = q.is_answered ?? (q.question_status === 'answered' || q.status === 'answered');
@@ -124,7 +124,7 @@ export const InstructorQAModule: React.FC = () => {
   // Fetch summary
   const loadSummary = useCallback(async () => {
     try {
-      const res = await ApiService.getInstructorQuestionSummary({
+      const res = await instructorApi.getInstructorQuestionSummary({
         course_id: filter.course !== 'all' ? filter.course : undefined,
         lesson_id: filter.lesson !== 'all' ? filter.lesson : undefined,
       });
@@ -141,7 +141,7 @@ export const InstructorQAModule: React.FC = () => {
 
   // Fetch course options
   useEffect(() => {
-    ApiService.getInstructorQuestionCourseOptions().then((res: any) => {
+    instructorApi.getInstructorQuestionCourseOptions().then((res: any) => {
       const list = res.data || res;
       if (Array.isArray(list)) {
         setCourseOptions(list);
@@ -151,7 +151,7 @@ export const InstructorQAModule: React.FC = () => {
 
   // Fetch lesson options when course filter changes
   useEffect(() => {
-    ApiService.getInstructorQuestionLessonOptions(filter.course !== 'all' ? filter.course : undefined).then((res: any) => {
+    instructorApi.getInstructorQuestionLessonOptions(filter.course !== 'all' ? filter.course : undefined).then((res: any) => {
       const list = res.data || res;
       if (Array.isArray(list)) {
         setLessonOptions(list);
@@ -164,7 +164,7 @@ export const InstructorQAModule: React.FC = () => {
     setIsLoadingList(true);
     setListError(null);
     try {
-      const res = await ApiService.getInstructorQuestions({
+      const res = await instructorApi.getInstructorQuestions({
         course_id: filter.course,
         lesson_id: filter.lesson,
         status: filter.status === 'bookmarked' ? 'all' : filter.status,
@@ -207,7 +207,7 @@ export const InstructorQAModule: React.FC = () => {
     }
 
     setIsLoadingDetail(true);
-    ApiService.getInstructorQuestion(selectedQuestionId).then((res: any) => {
+    instructorApi.getInstructorQuestion(selectedQuestionId).then((res: any) => {
       const detailData = res.data || res;
       if (detailData) {
         setSelectedQuestionDetail(mapBackendQuestion(detailData));
@@ -250,7 +250,7 @@ export const InstructorQAModule: React.FC = () => {
     if (!selectedQuestionId) return;
 
     try {
-      const res: any = await ApiService.replyInstructorQuestion(selectedQuestionId, {
+      const res: any = await instructorApi.replyInstructorQuestion(selectedQuestionId, {
         content: replyText,
         is_official: isOfficial,
         notify_learner: notifyStudent,
@@ -261,7 +261,7 @@ export const InstructorQAModule: React.FC = () => {
       await Promise.all([loadSummary(), loadQuestions()]);
 
       // Refetch detail directly from API to ensure we have the exact saved DB record
-      const detailRes: any = await ApiService.getInstructorQuestion(selectedQuestionId);
+      const detailRes: any = await instructorApi.getInstructorQuestion(selectedQuestionId);
       const detailData = detailRes.data || detailRes;
       if (detailData) {
         setSelectedQuestionDetail(mapBackendQuestion(detailData));
@@ -293,7 +293,7 @@ export const InstructorQAModule: React.FC = () => {
   const handleHide = async () => {
     if (!selectedQuestionId) return;
     try {
-      await ApiService.hideInstructorQuestion(selectedQuestionId);
+      await instructorApi.hideInstructorQuestion(selectedQuestionId);
       showToast('Đã ẩn câu hỏi thành công.');
       loadSummary();
       loadQuestions();
@@ -307,9 +307,9 @@ export const InstructorQAModule: React.FC = () => {
     const isCurrentlyBookmarked = selectedQuestionDetail.is_bookmarked;
     try {
       if (isCurrentlyBookmarked) {
-        await ApiService.unstarInstructorQuestion(selectedQuestionId);
+        await instructorApi.unstarInstructorQuestion(selectedQuestionId);
       } else {
-        await ApiService.starInstructorQuestion(selectedQuestionId);
+        await instructorApi.starInstructorQuestion(selectedQuestionId);
       }
       const nextState = !isCurrentlyBookmarked;
       setSelectedQuestionDetail(prev => prev ? { ...prev, is_bookmarked: nextState } : null);
