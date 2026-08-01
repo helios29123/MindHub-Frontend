@@ -37,7 +37,8 @@ const FAQPage = React.lazy(() => import('@/pages/FAQPage').then(m => ({ default:
 const PricingPage = React.lazy(() => import('@/pages/PricingPage').then(m => ({ default: m.default })));
 const ClassroomPage = React.lazy(() => import('@/features/classroom/ClassroomPage').then(m => ({ default: m.default })));
 const ProfilePage = React.lazy(() => import('@/features/profile/ProfilePage').then(m => ({ default: m.ProfilePage })));
-const AuthScreens = React.lazy(() => import('@/features/auth/components/AuthScreens').then(m => ({ default: m.default })));
+const LoginPage = React.lazy(() => import('@/features/auth/LoginPage').then(m => ({ default: m.default })));
+const RegisterPage = React.lazy(() => import('@/features/auth/RegisterPage').then(m => ({ default: m.default })));
 const CartAndCheckout = React.lazy(() => import('@/features/cart/CartAndCheckout').then(m => ({ default: m.default })));
 const VNPayReturnPage = React.lazy(() => import('@/features/cart/VNPayReturnPage').then(m => ({ default: m.default })));
 const InstructorDashboard = React.lazy(() => import('@/features/instructor/InstructorDashboard').then(m => ({ default: m.default })));
@@ -86,8 +87,8 @@ function AppRoutes() {
       <Suspense fallback={<PageLoader />}>
         <Routes location={location} key={location.pathname}>
           {/* Auth Routes */}
-          <Route path="/login" element={<AuthScreens onLoginSuccess={() => {}} onClose={() => {}} />} />
-          <Route path="/register" element={<AuthScreens onLoginSuccess={() => {}} onClose={() => {}} />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
           
           {/* Main Layout Routes (Navbar + Footer) */}
           <Route element={<MainLayout />}>

@@ -47,6 +47,7 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
   const [successMsg, setSuccessMsg] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Instructor specific registration fields
   const [registerRole, setRegisterRole] = useState<'student' | 'instructor'>('student');
@@ -139,6 +140,8 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
   // Perform standard login simulator with structural email verification block
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (!email || !password) {
       setErrorMsg('Vui lòng nhập đầy đủ email và mật khẩu.');
       return;
@@ -146,12 +149,14 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
     
     const emailTrimmed = email.trim().toLowerCase();
     
+    setIsSubmitting(true);
     setSuccessMsg('Đang đăng nhập...');
     setErrorMsg('');
     ApiService.login({ email: emailTrimmed, password })
       .then(res => {
+        const rawUser = res.user || res;
         const apiUser = normalizeUser({
-          ...res,
+          ...rawUser,
           isEmailVerified: true
         });
         saveToHistory(apiUser);
@@ -162,6 +167,7 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
         }
       })
       .catch(err => {
+        setIsSubmitting(false);
         setSuccessMsg('');
         setErrorMsg(mapAuthError(err));
       });
@@ -443,9 +449,19 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
                 <button 
                   id="btn-login-submit"
                   type="submit"
-                  className="w-full bg-[#432c28] hover:bg-black text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-all flex justify-center items-center gap-2 shadow"
+                  disabled={isSubmitting}
+                  className={`w-full bg-[#432c28] hover:bg-black text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-all flex justify-center items-center gap-2 shadow ${isSubmitting ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                 >
-                  <LogIn className="w-4 h-4" /> Truy cập Hệ thống
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0"></div>
+                      <span>Đang đăng nhập...</span>
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="w-4 h-4" /> Truy cập Hệ thống
+                    </>
+                  )}
                 </button>
 
                 <div className="relative my-3 flex items-center justify-center">

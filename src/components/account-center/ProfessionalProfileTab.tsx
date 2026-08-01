@@ -83,7 +83,7 @@ export const ProfessionalProfileTab: React.FC<ProfessionalProfileTabProps> = ({
     e.preventDefault();
     setSaving(true);
     try {
-      await ApiService.updateInstructorProfile({
+      const res = await ApiService.updateInstructorProfile({
         expertise: form.expertise,
         bio: form.bio,
         social_links: {
@@ -94,9 +94,12 @@ export const ProfessionalProfileTab: React.FC<ProfessionalProfileTabProps> = ({
         }
       });
 
+      const updatedData = res?.data || res;
+
       setInitialForm({ ...form });
       onProfileUpdated({
         ...currentUser,
+        ...(typeof updatedData === 'object' ? updatedData : {}),
         expertise: form.expertise,
         bio: form.bio,
         website: form.website,

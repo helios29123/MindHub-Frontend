@@ -141,6 +141,13 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
     }
     const errMsg = errJson?.message || errJson?.error || `HTTP error! status: ${response.status}`;
     devLog('Error Response', errMsg, { status: response.status, url });
+
+    if (response.status === 401) {
+      config.authToken = undefined;
+      localStorage.removeItem('mindhub_api_token');
+      window.dispatchEvent(new CustomEvent('mindhub-auth-unauthorized', { detail: { message: errMsg } }));
+    }
+
     throw new ApiError(errMsg, response.status, errJson?.errors);
   }
 
@@ -204,6 +211,13 @@ async function apiFetchEnvelope<T>(endpoint: string, options: RequestInit = {}):
     }
     const errMsg = errJson?.message || errJson?.error || `HTTP error! status: ${response.status}`;
     devLog('Error Response', errMsg, { status: response.status, url });
+
+    if (response.status === 401) {
+      config.authToken = undefined;
+      localStorage.removeItem('mindhub_api_token');
+      window.dispatchEvent(new CustomEvent('mindhub-auth-unauthorized', { detail: { message: errMsg } }));
+    }
+
     throw new ApiError(errMsg, response.status, errJson?.errors);
   }
 
@@ -1630,8 +1644,17 @@ export const ApiService = {
         backendPayload.short_description = payload.subtitle ?? payload.short_description;
       }
       if (payload.description) backendPayload.description = payload.description;
-      if (payload.price !== undefined) {
-        backendPayload.price = typeof payload.price === 'number' ? payload.price : parseFloat(payload.price || 0);
+      if (payload.price !== undefined || payload.original_price !== undefined) {
+        const pr = payload.original_price ?? payload.price;
+        backendPayload.original_price = typeof pr === 'number' ? pr : parseFloat(pr || 0);
+        backendPayload.price = backendPayload.original_price;
+      }
+      if (payload.has_discount !== undefined || payload.hasDiscount !== undefined) {
+        backendPayload.has_discount = Boolean(payload.has_discount ?? payload.hasDiscount);
+      }
+      if (payload.discount_percent !== undefined || payload.discountPercent !== undefined) {
+        const dp = payload.discount_percent ?? payload.discountPercent;
+        backendPayload.discount_percent = dp !== null && dp !== undefined && dp !== '' ? Number(dp) : null;
       }
       if (payload.salePrice !== undefined || payload.sale_price !== undefined) {
         const sp = payload.salePrice ?? payload.sale_price;
@@ -1676,8 +1699,17 @@ export const ApiService = {
         backendPayload.short_description = payload.subtitle ?? payload.short_description;
       }
       if (payload.description !== undefined) backendPayload.description = payload.description;
-      if (payload.price !== undefined) {
-        backendPayload.price = typeof payload.price === 'number' ? payload.price : parseFloat(payload.price || 0);
+      if (payload.price !== undefined || payload.original_price !== undefined) {
+        const pr = payload.original_price ?? payload.price;
+        backendPayload.original_price = typeof pr === 'number' ? pr : parseFloat(pr || 0);
+        backendPayload.price = backendPayload.original_price;
+      }
+      if (payload.has_discount !== undefined || payload.hasDiscount !== undefined) {
+        backendPayload.has_discount = Boolean(payload.has_discount ?? payload.hasDiscount);
+      }
+      if (payload.discount_percent !== undefined || payload.discountPercent !== undefined) {
+        const dp = payload.discount_percent ?? payload.discountPercent;
+        backendPayload.discount_percent = dp !== null && dp !== undefined && dp !== '' ? Number(dp) : null;
       }
       if (payload.salePrice !== undefined || payload.sale_price !== undefined) {
         const sp = payload.salePrice ?? payload.sale_price;
