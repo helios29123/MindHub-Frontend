@@ -102,7 +102,7 @@ export default function MyCoursesPage() {
             {displayCourses.map((course: any) => (
               <Link 
                 key={course.id} 
-                to={activeTab === 'saved' ? `/courses/${course.id}` : `/learn/${course.id}`}
+                to={activeTab === 'saved' ? `/courses/${course.slug || course.id}` : `/learn/${course.id}`}
                 className="group bg-card border rounded-2xl overflow-hidden hover:shadow-xl transition-all block relative"
               >
                 <div className="relative aspect-video bg-muted overflow-hidden">

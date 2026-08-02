@@ -27,6 +27,7 @@ export function useHomepageData() {
           // Map backend course data to frontend CourseData UI format
           const mapCourse = (c: any): CourseData => ({
             id: String(c.id),
+            slug: c.slug,
             title: c.title,
             instructor: c.instructor?.full_name || 'Giảng viên MindHub',
             thumbnail: c.thumbnail_url || 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&q=80',
