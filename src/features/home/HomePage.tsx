@@ -6,6 +6,7 @@ import { TrendingCourses } from './components/TrendingCourses';
 import { NewCourses } from './components/NewCourses';
 import { TopInstructors } from './components/TopInstructors';
 import { ActivityCalendar } from './components/ActivityCalendar';
+import { LeaderboardWidget } from './components/LeaderboardWidget';
 import { RecentBadges } from './components/RecentBadges';
 import { LearningStatsWidget } from './components/LearningStatsWidget';
 import { QuickNavWidget } from './components/QuickNavWidget';
@@ -60,6 +61,9 @@ export default function HomePage() {
 
                 {/* Daily Goal & Tracking */}
                 <ActivityCalendar />
+
+                {/* Leaderboard */}
+                <LeaderboardWidget />
                 
                 {/* Recently Viewed */}
                 <RecentlyViewedWidget />
