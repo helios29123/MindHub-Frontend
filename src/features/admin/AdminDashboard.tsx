@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import AdminLayout from '@/features/admin/components/AdminLayout';
 
 // Import all the generated pages
@@ -13,13 +14,29 @@ import CourseReviews from '@/features/admin/components/pages/CourseReviews';
 import Faqs from '@/features/admin/components/pages/Faqs';
 import InstructorUpgrades from '@/features/admin/components/pages/InstructorUpgrades';
 import Moderation from '@/features/admin/components/pages/Moderation';
-import Notifications from '@/features/admin/components/pages/Notifications';
 import PayoutAccounts from '@/features/admin/components/pages/PayoutAccounts';
 import Reports from '@/features/admin/components/pages/Reports';
 import Banners from '@/features/admin/components/pages/Banners';
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Extract active tab from URL path (e.g., /admin/categories -> categories)
+  const pathParts = location.pathname.split('/');
+  const tabFromPath = pathParts[2] || 'dashboard';
+  const activeTab = tabFromPath === '' ? 'dashboard' : tabFromPath;
+
+  // Redirect /admin or /admin/ to /admin/dashboard
+  useEffect(() => {
+    if (location.pathname === `/admin` || location.pathname === `/admin/`) {
+      navigate(`/admin/dashboard`, { replace: true });
+    }
+  }, [location.pathname, navigate]);
+
+  const handleTabChange = (tabId: string) => {
+    navigate(`/admin/${tabId}`);
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -34,7 +51,6 @@ export default function AdminDashboard() {
       case 'faqs': return <Faqs />;
       case 'instructor-upgrades': return <InstructorUpgrades />;
       case 'moderation': return <Moderation />;
-      case 'notifications': return <Notifications />;
       case 'payout-accounts': return <PayoutAccounts />;
       case 'reports': return <Reports />;
       case 'banners': return <Banners />;
@@ -55,7 +71,6 @@ export default function AdminDashboard() {
       'faqs': 'Quản lý FAQ',
       'instructor-upgrades': 'Yêu cầu lên giảng viên',
       'moderation': 'Kiểm duyệt bình luận',
-      'notifications': 'Thông báo',
       'payout-accounts': 'Tài khoản nhận tiền',
       'reports': 'Báo cáo và thống kê',
       'banners': 'Banner / Trang chủ',
@@ -66,7 +81,7 @@ export default function AdminDashboard() {
   return (
     <AdminLayout 
       activeTab={activeTab} 
-      onTabChange={setActiveTab}
+      onTabChange={handleTabChange}
       breadcrumbLabel={getBreadcrumb()}
     >
       {renderContent()}

@@ -5,7 +5,7 @@ import { QAList } from './QAList';
 import { QADetailView } from './QADetailView';
 import { Question, QAFilterState, Reply } from './types';
 import { HelpCircle, Sparkles, Loader2, AlertCircle } from 'lucide-react';
-import { ApiService } from '../../services/api';
+import { instructorApi } from '@/features/instructor/api';
 
 const mapBackendQuestion = (q: any): Question => {
   const isAns = q.is_answered ?? (q.question_status === 'answered' || q.status === 'answered');
@@ -23,14 +23,19 @@ const mapBackendQuestion = (q: any): Question => {
     device: q.learnerDevice || q.device || 'Windows',
     browser: q.learnerBrowser || q.browser || 'Chrome 124.0',
     is_bookmarked: !!q.is_bookmarked,
-    replies: Array.isArray(q.replies) ? q.replies.map((r: any) => ({
-      id: String(r.id),
-      user_name: r.user_full_name || r.author?.full_name || (r.user_role === 'instructor' || r.author?.role === 'instructor' ? 'Giảng viên (Bạn)' : 'Học viên'),
-      user_avatar: r.user_avatar || r.author?.avatar_url,
-      role: (r.user_role === 'instructor' || r.author?.role === 'instructor') ? 'instructor' : 'student',
-      content: r.content || '',
-      created_at: r.created_at || new Date().toISOString()
-    })) : []
+    replies: Array.isArray(q.replies) ? q.replies.map((r: any) => {
+      const isInstructor = !!r.is_instructor_reply || r.user?.role === 'instructor' || r.user_role === 'instructor' || r.author?.role === 'instructor';
+      const userName = r.user?.full_name || r.user_full_name || r.author?.full_name || (isInstructor ? 'Giảng viên (Bạn)' : 'Học viên');
+      const userAvatar = r.user?.avatar_url || r.user_avatar || r.author?.avatar_url;
+      return {
+        id: String(r.id),
+        user_name: userName,
+        user_avatar: userAvatar,
+        role: isInstructor ? 'instructor' : 'student',
+        content: r.content || '',
+        created_at: r.created_at || new Date().toISOString()
+      };
+    }) : []
   };
 };
 
@@ -119,7 +124,7 @@ export const InstructorQAModule: React.FC = () => {
   // Fetch summary
   const loadSummary = useCallback(async () => {
     try {
-      const res = await ApiService.getInstructorQuestionSummary({
+      const res = await instructorApi.getInstructorQuestionSummary({
         course_id: filter.course !== 'all' ? filter.course : undefined,
         lesson_id: filter.lesson !== 'all' ? filter.lesson : undefined,
       });
@@ -136,7 +141,7 @@ export const InstructorQAModule: React.FC = () => {
 
   // Fetch course options
   useEffect(() => {
-    ApiService.getInstructorQuestionCourseOptions().then((res: any) => {
+    instructorApi.getInstructorQuestionCourseOptions().then((res: any) => {
       const list = res.data || res;
       if (Array.isArray(list)) {
         setCourseOptions(list);
@@ -146,7 +151,7 @@ export const InstructorQAModule: React.FC = () => {
 
   // Fetch lesson options when course filter changes
   useEffect(() => {
-    ApiService.getInstructorQuestionLessonOptions(filter.course !== 'all' ? filter.course : undefined).then((res: any) => {
+    instructorApi.getInstructorQuestionLessonOptions(filter.course !== 'all' ? filter.course : undefined).then((res: any) => {
       const list = res.data || res;
       if (Array.isArray(list)) {
         setLessonOptions(list);
@@ -159,7 +164,7 @@ export const InstructorQAModule: React.FC = () => {
     setIsLoadingList(true);
     setListError(null);
     try {
-      const res = await ApiService.getInstructorQuestions({
+      const res = await instructorApi.getInstructorQuestions({
         course_id: filter.course,
         lesson_id: filter.lesson,
         status: filter.status === 'bookmarked' ? 'all' : filter.status,
@@ -202,7 +207,7 @@ export const InstructorQAModule: React.FC = () => {
     }
 
     setIsLoadingDetail(true);
-    ApiService.getInstructorQuestion(selectedQuestionId).then((res: any) => {
+    instructorApi.getInstructorQuestion(selectedQuestionId).then((res: any) => {
       const detailData = res.data || res;
       if (detailData) {
         setSelectedQuestionDetail(mapBackendQuestion(detailData));
@@ -219,7 +224,7 @@ export const InstructorQAModule: React.FC = () => {
     });
 
     updateUrl(selectedQuestionId, filter, page);
-  }, [selectedQuestionId, filter, page, updateUrl, questions]);
+  }, [selectedQuestionId, filter, page, updateUrl]);
 
   // Listen to popstate (browser back/forward)
   useEffect(() => {
@@ -245,43 +250,50 @@ export const InstructorQAModule: React.FC = () => {
     if (!selectedQuestionId) return;
 
     try {
-      const res = await ApiService.replyInstructorQuestion(selectedQuestionId, {
+      const res: any = await instructorApi.replyInstructorQuestion(selectedQuestionId, {
         content: replyText,
         is_official: isOfficial,
         notify_learner: notifyStudent,
       });
       showToast('Đã gửi câu trả lời thành công!');
 
-      // Reload detail and list
-      loadSummary();
-      loadQuestions();
+      // Reload summary and list
+      await Promise.all([loadSummary(), loadQuestions()]);
 
-      // Optimistically append reply
-      const newReply: Reply = {
-        id: String(res.data?.reply?.id || 'reply-' + Date.now()),
-        user_name: 'Giảng viên (Bạn)',
-        role: 'instructor',
-        content: replyText,
-        created_at: new Date().toISOString(),
-      };
+      // Refetch detail directly from API to ensure we have the exact saved DB record
+      const detailRes: any = await instructorApi.getInstructorQuestion(selectedQuestionId);
+      const detailData = detailRes.data || detailRes;
+      if (detailData) {
+        setSelectedQuestionDetail(mapBackendQuestion(detailData));
+      } else {
+        const replyObj = res.reply || res.data?.reply;
+        const newReply: Reply = {
+          id: String(replyObj?.id || 'reply-' + Date.now()),
+          user_name: 'Giảng viên (Bạn)',
+          role: 'instructor',
+          content: replyText,
+          created_at: new Date().toISOString(),
+        };
 
-      setSelectedQuestionDetail(prev => prev ? {
-        ...prev,
-        is_answered: true,
-        status: 'answered',
-        reply_count: (prev.reply_count || 0) + 1,
-        replies: [...(prev.replies || []), newReply],
-      } : null);
+        setSelectedQuestionDetail(prev => prev ? {
+          ...prev,
+          is_answered: true,
+          status: 'answered',
+          reply_count: (prev.reply_count || 0) + 1,
+          replies: [...(prev.replies || []), newReply],
+        } : null);
+      }
     } catch (err: any) {
       console.error("Failed to reply question:", err);
       showToast(err.message || "Gửi trả lời thất bại.", 'error');
+      throw err; // Re-throw error so QADetailView keeps content in editor
     }
   };
 
   const handleHide = async () => {
     if (!selectedQuestionId) return;
     try {
-      await ApiService.hideInstructorQuestion(selectedQuestionId);
+      await instructorApi.hideInstructorQuestion(selectedQuestionId);
       showToast('Đã ẩn câu hỏi thành công.');
       loadSummary();
       loadQuestions();
@@ -295,9 +307,9 @@ export const InstructorQAModule: React.FC = () => {
     const isCurrentlyBookmarked = selectedQuestionDetail.is_bookmarked;
     try {
       if (isCurrentlyBookmarked) {
-        await ApiService.unstarInstructorQuestion(selectedQuestionId);
+        await instructorApi.unstarInstructorQuestion(selectedQuestionId);
       } else {
-        await ApiService.starInstructorQuestion(selectedQuestionId);
+        await instructorApi.starInstructorQuestion(selectedQuestionId);
       }
       const nextState = !isCurrentlyBookmarked;
       setSelectedQuestionDetail(prev => prev ? { ...prev, is_bookmarked: nextState } : null);

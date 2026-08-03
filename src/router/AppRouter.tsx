@@ -5,6 +5,7 @@ import { AnimatePresence } from 'framer-motion';
 // Layouts
 import MainLayout from '@/layouts/MainLayout';
 import { useApp } from '@/app/AppContext';
+import { getDashboardRouteByRole } from '@/router/routes';
 
 // Loading Fallback
 const PageLoader = () => (
@@ -37,10 +38,11 @@ const FAQPage = React.lazy(() => import('@/pages/FAQPage').then(m => ({ default:
 const PricingPage = React.lazy(() => import('@/pages/PricingPage').then(m => ({ default: m.default })));
 const ClassroomPage = React.lazy(() => import('@/features/classroom/ClassroomPage').then(m => ({ default: m.default })));
 const ProfilePage = React.lazy(() => import('@/features/profile/ProfilePage').then(m => ({ default: m.ProfilePage })));
-const AuthScreens = React.lazy(() => import('@/features/auth/components/AuthScreens').then(m => ({ default: m.default })));
+const LoginPage = React.lazy(() => import('@/features/auth/LoginPage').then(m => ({ default: m.default })));
+const RegisterPage = React.lazy(() => import('@/features/auth/RegisterPage').then(m => ({ default: m.default })));
 const CartAndCheckout = React.lazy(() => import('@/features/cart/CartAndCheckout').then(m => ({ default: m.default })));
 const VNPayReturnPage = React.lazy(() => import('@/features/cart/VNPayReturnPage').then(m => ({ default: m.default })));
-const InstructorDashboard = React.lazy(() => import('@/features/instructor/InstructorDashboard').then(m => ({ default: m.default })));
+const InstructorDashboard = React.lazy(() => import('@/features/instructor/InstructorPage'));
 const AdminDashboard = React.lazy(() => import('@/features/admin/AdminDashboard').then(m => ({ default: m.default })));
 const InstructorProfilePage = React.lazy(() => import('@/features/instructor/InstructorProfilePage').then(m => ({ default: m.default })));
 const InstructorCoursesPage = React.lazy(() => import('@/features/instructor/components/InstructorCoursesPage').then(m => ({ default: m.default })));
@@ -73,12 +75,55 @@ const InstructorCoursesPageWrapper = () => {
 };
 
 function AppRoutes() {
-  const { isLoggedIn, currentUser, enrolledCourseIds, courses, favorites } = useApp();
+  const { 
+    isLoggedIn: rawIsLoggedIn, 
+    currentUser: rawCurrentUser, 
+    setIsLoggedIn,
+    setCurrentUser,
+    enrolledCourseIds, 
+    courses, 
+    favorites 
+  } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
 
+  const isAdminPreview = import.meta.env.VITE_ADMIN_PREVIEW === 'true';
+  const isLoggedIn = isAdminPreview ? true : rawIsLoggedIn;
+  const currentUser = isAdminPreview 
+    ? {
+        id: "1",
+        name: "Admin Preview",
+        email: "admin@preview.com",
+        avatar: "https://api.dicebear.com/7.x/adventurer/svg?seed=Admin",
+        role: 'admin' as const,
+        streak: 0,
+        lastActiveDate: new Date().toISOString().split('T')[0],
+        interestedTopics: [],
+        notificationSettings: {
+          email: true,
+          push: true,
+          app: true,
+          scheduleReminders: true
+        }
+      }
+    : rawCurrentUser;
+
   const navigateTo = (path: string) => {
     navigate(path.startsWith('/') ? path : `/${path}`);
+  };
+
+  const handleLoginSuccess = (user: any) => {
+    setIsLoggedIn(true);
+    setCurrentUser(user);
+    localStorage.setItem('mindhub_is_logged_in', 'true');
+    localStorage.setItem('mindhub_current_user', JSON.stringify(user));
+    
+    // Redirect based on role
+    if (user.role === 'admin') {
+      navigate(`/admin/dashboard`, { replace: true });
+    } else {
+      navigate(getDashboardRouteByRole(user.role), { replace: true });
+    }
   };
 
   return (
@@ -86,8 +131,8 @@ function AppRoutes() {
       <Suspense fallback={<PageLoader />}>
         <Routes location={location} key={location.pathname}>
           {/* Auth Routes */}
-          <Route path="/login" element={<AuthScreens onLoginSuccess={() => {}} onClose={() => {}} />} />
-          <Route path="/register" element={<AuthScreens onLoginSuccess={() => {}} onClose={() => {}} />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
           
           {/* Main Layout Routes (Navbar + Footer) */}
           <Route element={<MainLayout />}>
@@ -161,11 +206,11 @@ function AppRoutes() {
           {/* Instructor Workspace (No Main Navbar/Footer) */}
           <Route path="/instructor/:instructorId/*" element={
             // @ts-ignore
-            isLoggedIn ? <InstructorDashboard currentUser={currentUser} /> : <Navigate to="/login" replace />
+            isLoggedIn ? <InstructorDashboard /> : <Navigate to="/login" replace />
           } />
 
           {/* Admin Workspace */}
-          <Route path="/admin/:adminId/*" element={
+          <Route path="/admin/*" element={
             // @ts-ignore
             isLoggedIn && currentUser.role === 'admin' ? (
               <AdminDashboard />

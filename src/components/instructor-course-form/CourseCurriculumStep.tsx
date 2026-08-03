@@ -10,7 +10,8 @@ import LessonModal from './LessonModal';
 import AssetModal from './AssetModal';
 import LessonPreviewModal from './LessonPreviewModal';
 import { InstructorVideoUploader } from './InstructorUploaders';
-import { ApiService } from '../../services/api';
+import { sharedApi } from '@/features/shared/api';
+import { instructorApi } from '@/features/instructor/api';
 import { 
   formatDuration, 
   parseDurationToSeconds, 
@@ -38,7 +39,7 @@ export function resolveLessonVideoUrl(rawUrl: string | null | undefined): string
   }
 
   // Relative storage paths
-  const configUrl = ApiService.getConfig().baseUrl || 'http://127.0.0.1:8000';
+  const configUrl = sharedApi.getConfig().baseUrl || 'http://127.0.0.1:8000';
   const backendOrigin = configUrl.replace(/\/api\/?$/, '');
 
   const cleanPath = url.startsWith('/') ? url : `/${url}`;
@@ -274,9 +275,9 @@ export default function CourseCurriculumStep({
       const isPreviewBool = Boolean(lessonDraft.is_preview || lessonDraft.previewType === 'free' || lessonDraft.previewType === '2');
 
       const numericLessonId = Number(activeLessonId);
-      if (!isNaN(numericLessonId) && numericLessonId > 0 && ApiService.getConfig().mode === 'api') {
+      if (!isNaN(numericLessonId) && numericLessonId > 0 && sharedApi.getConfig().mode === 'api') {
         try {
-          const res = await ApiService.updateLesson(numericLessonId, {
+          const res = await instructorApi.updateLesson(numericLessonId, {
             title: lessonDraft.title,
             slug: finalSlug,
             content: lessonDraft.content,
@@ -384,8 +385,8 @@ export default function CourseCurriculumStep({
       };
 
       const numericLessonId = Number(activeLessonId);
-      if (!isNaN(numericLessonId) && numericLessonId > 0 && ApiService.getConfig().mode === 'api') {
-        const res = await ApiService.createLessonAsset(numericLessonId, payload);
+      if (!isNaN(numericLessonId) && numericLessonId > 0 && sharedApi.getConfig().mode === 'api') {
+        const res = await instructorApi.createLessonAsset(numericLessonId, payload);
         if (res && (res.id || res.data?.id)) {
           const item = res.data || res;
           createdAsset = {
@@ -472,12 +473,14 @@ export default function CourseCurriculumStep({
         {/* ==================================================
             CỘT BÊN TRÁI: DANH SÁCH CHƯƠNG & BÀI HỌC (col-span-4)
             ================================================== */}
-        <div className="lg:col-span-4 bg-white border border-slate-100 rounded-2xl p-4 shadow-3xs space-y-3 instructor-curriculum-sidebar">
+        <div id="focus-published_section" data-focus-id="published_section" className="lg:col-span-4 bg-white border border-slate-100 rounded-2xl p-4 shadow-3xs space-y-3 instructor-curriculum-sidebar">
           <div className="flex justify-between items-center pb-2 border-b">
             <h3 className="font-black text-xs text-stone-900 uppercase tracking-wider flex items-center gap-1.5">
               <FileText className="w-4 h-4 text-emerald-600" /> Cấu trúc khóa học
             </h3>
             <button
+              id="focus-add-section"
+              data-focus-id="add-section"
               type="button"
               onClick={handleOpenAddSection}
               className="text-[9.5px] font-extrabold text-white bg-[#10b981] hover:bg-emerald-600 rounded-lg px-2.5 py-1 flex items-center gap-1 cursor-pointer transition-colors shadow-3xs"
@@ -515,6 +518,8 @@ export default function CourseCurriculumStep({
                       
                       <div className="flex items-center gap-1.5 ml-2 shrink-0">
                         <button
+                          id="focus-add-lesson"
+                          data-focus-id="add-lesson"
                           type="button"
                           onClick={() => handleOpenAddLesson(chapter.id)}
                           className="text-[9.5px] font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg px-2 py-0.5 flex items-center gap-1 cursor-pointer transition-colors"

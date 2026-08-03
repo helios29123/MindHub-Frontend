@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, Mail, Phone, User, Check, RefreshCw, Loader2 } from 'lucide-react';
-import { ApiService } from '../../services/api';
+import { profileApi } from '@/features/profile/api';
 
 interface PersonalInformationCardProps {
   currentUser: any;
@@ -63,7 +63,7 @@ export const PersonalInformationCard: React.FC<PersonalInformationCardProps> = (
 
     setSaving(true);
     try {
-      const res = await ApiService.updateAccountProfile({
+      const res = await profileApi.updateAccountProfile({
         full_name: form.fullName.trim(),
         phone: form.phone.trim() || null,
         bio: form.bio.trim() || null
@@ -71,14 +71,16 @@ export const PersonalInformationCard: React.FC<PersonalInformationCardProps> = (
 
       const updatedData = res?.data || res;
 
-      onProfileUpdated({
+      const mergedUser = {
         ...currentUser,
-        name: form.fullName.trim(),
-        full_name: form.fullName.trim(),
-        phone: form.phone.trim() || null,
-        bio: form.bio.trim() || null
-      });
+        ...(typeof updatedData === 'object' ? updatedData : {}),
+        name: updatedData?.full_name || form.fullName.trim(),
+        full_name: updatedData?.full_name || form.fullName.trim(),
+        phone: updatedData?.phone !== undefined ? updatedData.phone : (form.phone.trim() || null),
+        bio: updatedData?.bio !== undefined ? updatedData.bio : (form.bio.trim() || null)
+      };
 
+      onProfileUpdated(mergedUser);
       showToast('Cập nhật thông tin cá nhân thành công!');
     } catch (err: any) {
       showToast(err.message || 'Lỗi cập nhật thông tin cá nhân.', 'error');

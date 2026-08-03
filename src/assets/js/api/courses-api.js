@@ -1,195 +1,238 @@
-import { getCourses as getRepoCourses, saveCourses as saveRepoCourses, populateCourse } from "@/assets/js/mocks/mock-repository.js";
+import { apiFetchEnvelope } from "@/shared/lib/api-client";
 
-// Cấu hình nguồn dữ liệu: true để dùng mock (localStorage), false để gọi API thật
-const USE_MOCK = true;
-const API_BASE_URL = "/api/admin/courses";
-
-/**
- * Lấy toàn bộ danh sách từ localStorage (chỉ dùng nội bộ cho Mock)
- */
-function getRawMockCourses() {
-    return getRepoCourses().map(populateCourse);
-}
-
-/**
- * Lưu danh sách vào localStorage (chỉ dùng nội bộ cho Mock)
- */
-function saveRawMockCourses(courses) {
-    const raw = courses.map(c => {
-        const { instructor, categories, ...rest } = c;
-        return rest;
-    });
-    saveRepoCourses(raw);
-}
-
-/**
- * Lấy danh sách khóa học (hỗ trợ phân trang, lọc, sắp xếp)
- */
-export async function getCourses(params = {}) {
-    if (!USE_MOCK) {
-        // Gọi API thật khi sẵn sàng
-        const query = new URLSearchParams(params).toString();
-        const response = await fetch(`${API_BASE_URL}?${query}`);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+function getThumbnailUrl(url, title = "") {
+    const rawUrl = url || "";
+    if (rawUrl.includes("demo/courses") || rawUrl.trim() === "") {
+        const lowerTitle = title.toLowerCase();
+        if (lowerTitle.includes("laravel") || lowerTitle.includes("php")) {
+            return "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=400&auto=format&fit=crop&q=80";
         }
-        return await response.json();
+        if (lowerTitle.includes("react") || lowerTitle.includes("frontend")) {
+            return "https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=400&auto=format&fit=crop&q=80";
+        }
+        if (lowerTitle.includes("node")) {
+            return "https://images.unsplash.com/photo-1544383835-bda2bc66a55d?w=400&auto=format&fit=crop&q=80";
+        }
+        if (lowerTitle.includes("ui/ux") || lowerTitle.includes("design") || lowerTitle.includes("thiết kế")) {
+            return "https://images.unsplash.com/photo-1561070791-26c113006238?w=400&auto=format&fit=crop&q=80";
+        }
+        if (lowerTitle.includes("git") || lowerTitle.includes("github")) {
+            return "https://images.unsplash.com/photo-1618401471353-b98aedd07871?w=400&auto=format&fit=crop&q=80";
+        }
+        if (lowerTitle.includes("ai") || lowerTitle.includes("intelligence") || lowerTitle.includes("trí tuệ nhân tạo")) {
+            return "https://images.unsplash.com/photo-1677442136019-21780efad99a?w=400&auto=format&fit=crop&q=80";
+        }
+        return "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=400&auto=format&fit=crop&q=80";
+    }
+    return rawUrl;
+}
+
+// Hàm adapter ánh xạ an toàn dữ liệu từ backend sang format dùng trong component
+function adaptCourse(item) {
+    if (!item) return null;
+
+    // 1. Ánh xạ Giảng viên (instructor)
+    let instructor = null;
+    if (item.instructor) {
+        instructor = {
+            id: item.instructor.id || 0,
+            full_name: item.instructor.full_name || item.instructor.name || item.instructor_name || "Chưa rõ",
+            email: item.instructor.email || "",
+            status: item.instructor.status || "active",
+        };
+    } else if (item.instructor_name) {
+        instructor = {
+            id: 0,
+            full_name: item.instructor_name,
+            email: "",
+            status: "active",
+        };
     }
 
-    // --- Xử lý MOCK DATA ---
-    // Giả lập độ trễ mạng 350ms
-    await new Promise(resolve => setTimeout(resolve, 350));
+    // 2. Ánh xạ Danh mục (categories)
+    let categories = [];
+    if (Array.isArray(item.categories)) {
+        categories = item.categories.map(c => ({
+            id: c.id || 0,
+            name: c.name || c.category_name || "",
+            slug: c.slug || ""
+        }));
+    } else if (item.category_name) {
+        categories = [{
+            id: 0,
+            name: item.category_name,
+            slug: ""
+        }];
+    } else if (item.category) {
+        categories = [{
+            id: item.category.id || 0,
+            name: item.category.name || item.category.category_name || "",
+            slug: item.category.slug || ""
+        }];
+    }
 
-    try {
-        const rawCourses = getRawMockCourses();
-        // Giả sử không có xóa mềm hoặc lọc bỏ các bản ghi đã xóa
-        const activeCoursesList = [...rawCourses];
+    const enrollment_count = Number(item.enrollments_count ?? item.students_count ?? item.enrollment_count ?? 0) || 0;
+    const paid_order_count = Number(item.paid_orders_count ?? item.paid_order_count ?? 0) || 0;
+    const gross_revenue = Number(item.gross_revenue ?? item.revenue ?? 0) || 0;
+    const average_rating = Number(item.average_rating ?? item.rating_average ?? 0) || 0;
+    const review_count = Number(item.reviews_count ?? item.ratings_count ?? item.review_count ?? 0) || 0;
+    const comment_count = Number(item.comments_count ?? item.comment_count ?? 0) || 0;
 
-        // 1. Tính toán các chỉ số thống kê (Summary) trên TOÀN BỘ dữ liệu mock (trước khi lọc)
-        // Các trạng thái: draft, pending_review, approved, rejected, published, hidden
-        const summary = {
-            total_courses: activeCoursesList.length,
-            published_courses: activeCoursesList.filter(c => c.status === "published").length,
-            pending_review_courses: activeCoursesList.filter(c => c.status === "pending_review").length,
-            draft_courses: activeCoursesList.filter(c => c.status === "draft").length,
-            hidden_courses: activeCoursesList.filter(c => c.status === "hidden").length,
-            rejected_courses: activeCoursesList.filter(c => c.status === "rejected").length,
+    const courseTitle = item.title || "Khóa học không tên";
+
+    return {
+        id: item.id || 0,
+        title: courseTitle,
+        slug: item.slug || "",
+        thumbnail_url: getThumbnailUrl(item.thumbnail_url || item.image || "", courseTitle),
+        description: item.description || "",
+        short_description: item.short_description || item.subtitle || "Không có mô tả ngắn.",
+        level: item.level || "all_levels",
+        language: item.language || "Tiếng Việt",
+        price: Number(item.price) || 0,
+        sale_price: item.sale_price !== null && item.sale_price !== undefined ? Number(item.sale_price) : null,
+        is_featured: item.is_featured === true || item.is_featured === 1 || item.is_featured === "true",
+        status: item.status || "draft",
+        created_at: item.created_at || new Date().toISOString(),
+        updated_at: item.updated_at || new Date().toISOString(),
+        published_at: item.published_at || null,
+        enrollment_count,
+        paid_order_count,
+        gross_revenue,
+        average_rating,
+        review_count,
+        comment_count,
+        instructor,
+        categories,
+        requirements: Array.isArray(item.requirements) ? item.requirements : [],
+        outcomes: Array.isArray(item.outcomes) ? item.outcomes : (Array.isArray(item.will_learn) ? item.will_learn : (Array.isArray(item.willLearn) ? item.willLearn : [])),
+        summary: item.summary ? {
+            section_count: Number(item.summary.section_count || 0),
+            lesson_count: Number(item.summary.lesson_count || 0),
+            asset_count: Number(item.summary.asset_count || 0),
+            comment_count: comment_count
+        } : {
+            section_count: Number(item.section_count || 0),
+            lesson_count: Number(item.lesson_count || 0),
+            asset_count: Number(item.asset_count || 0),
+            comment_count: comment_count
+        }
+    };
+}
+
+// Giải bọc các kiểu đóng gói dữ liệu của backend: data, data.data, data.items
+function unwrapResponse(json) {
+    if (!json) return { items: [], summary: {}, meta: {} };
+
+    let items = [];
+    let summary = null;
+    let meta = null;
+
+    if (json.data && Array.isArray(json.data.items)) {
+        items = json.data.items;
+        summary = json.data.summary;
+        meta = json.meta || json.data.meta;
+    } else if (json.data && Array.isArray(json.data.data)) {
+        items = json.data.data;
+        summary = json.data.summary;
+        meta = json.data.meta || json.meta;
+    } else if (Array.isArray(json.data)) {
+        items = json.data;
+        summary = json.summary;
+        meta = json.meta;
+    } else if (json.items && Array.isArray(json.items)) {
+        items = json.items;
+        summary = json.summary;
+        meta = json.meta;
+    } else {
+        items = json.items || json.data || [];
+        if (!Array.isArray(items)) {
+            items = [];
+        }
+        summary = json.summary;
+        meta = json.meta;
+    }
+
+    const adaptedItems = items.map(adaptCourse);
+
+    // Xây dựng KPI Summary từ danh sách nếu backend không trả về summary
+    if (!summary) {
+        summary = {
+            total_courses: adaptedItems.length,
+            published_courses: adaptedItems.filter(c => c.status === "published").length,
+            pending_review_courses: adaptedItems.filter(c => c.status === "pending_review").length,
+            draft_courses: adaptedItems.filter(c => c.status === "draft").length,
+            hidden_courses: adaptedItems.filter(c => c.status === "hidden").length,
+            rejected_courses: adaptedItems.filter(c => c.status === "rejected").length,
             
-            // Các chỉ số phụ cho quick insight
-            new_courses_30_days: activeCoursesList.filter(c => {
-                // Giả lập khóa học mới trong 30 ngày gần nhất
+            new_courses_30_days: adaptedItems.filter(c => {
                 if (c.published_at) {
-                    const diffTime = Math.abs(new Date() - new Date(c.published_at));
+                    const diffTime = Math.abs(new Date().getTime() - new Date(c.published_at).getTime());
                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                     return diffDays <= 30;
                 }
                 return false;
             }).length,
-            total_enrollments: activeCoursesList.reduce((sum, c) => sum + (c.enrollment_count || 0), 0),
-            total_paid_orders: activeCoursesList.reduce((sum, c) => sum + (c.paid_order_count || 0), 0),
-            total_gross_revenue: activeCoursesList.reduce((sum, c) => sum + (c.gross_revenue || 0), 0)
+            total_enrollments: adaptedItems.reduce((sum, c) => sum + (c.enrollment_count || 0), 0),
+            total_paid_orders: adaptedItems.reduce((sum, c) => sum + (c.paid_order_count || 0), 0),
+            total_gross_revenue: adaptedItems.reduce((sum, c) => sum + (c.gross_revenue || 0), 0)
         };
 
-        // Tính điểm đánh giá trung bình hệ thống (có trọng số theo review_count)
         let totalRatingPoints = 0;
         let totalReviews = 0;
-        activeCoursesList.forEach(c => {
+        adaptedItems.forEach(c => {
             if (c.average_rating && c.review_count) {
                 totalRatingPoints += c.average_rating * c.review_count;
                 totalReviews += c.review_count;
             }
         });
         summary.average_rating = totalReviews > 0 ? parseFloat((totalRatingPoints / totalReviews).toFixed(1)) : 0;
+    }
 
-        // 2. Lọc dữ liệu theo tham số truy vấn
-        let filtered = [...activeCoursesList];
-
-        // Lọc theo search (title, slug, instructor name, instructor email)
-        if (params.search) {
-            const searchKeyword = params.search.toLowerCase().trim();
-            filtered = filtered.filter(c => 
-                (c.title && c.title.toLowerCase().includes(searchKeyword)) ||
-                (c.slug && c.slug.toLowerCase().includes(searchKeyword)) ||
-                (c.instructor && c.instructor.full_name && c.instructor.full_name.toLowerCase().includes(searchKeyword)) ||
-                (c.instructor && c.instructor.email && c.instructor.email.toLowerCase().includes(searchKeyword))
-            );
+    return {
+        items: adaptedItems,
+        summary: summary,
+        meta: meta || {
+            current_page: 1,
+            last_page: 1,
+            per_page: 20,
+            total: adaptedItems.length
         }
+    };
+}
 
-        // Lọc theo trạng thái (status)
-        if (params.status && params.status !== "" && params.status !== "all") {
-            filtered = filtered.filter(c => c.status === params.status);
+/**
+ * Lấy danh sách khóa học (hỗ trợ phân trang, lọc, sắp xếp)
+ */
+export async function getCourses(params = {}) {
+    const queryParams = new URLSearchParams();
+    Object.keys(params).forEach(key => {
+        if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
+            queryParams.append(key, String(params[key]));
         }
+    });
+    const queryStr = queryParams.toString();
+    const url = queryStr ? `/admin/courses?${queryStr}` : '/admin/courses';
 
-        // Lọc theo giảng viên (instructor_id)
-        if (params.instructor_id && params.instructor_id !== "") {
-            filtered = filtered.filter(c => c.instructor && c.instructor.id === parseInt(params.instructor_id));
-        }
-
-        // Lọc theo danh mục (category_id)
-        if (params.category_id && params.category_id !== "") {
-            filtered = filtered.filter(c => c.categories && c.categories.some(cat => cat.id === parseInt(params.category_id)));
-        }
-
-        // Lọc theo trình độ (level)
-        if (params.level && params.level !== "") {
-            filtered = filtered.filter(c => c.level === params.level);
-        }
-
-        // Lọc theo nổi bật (is_featured)
-        if (params.is_featured !== undefined && params.is_featured !== "" && params.is_featured !== "all") {
-            const isFeaturedBool = params.is_featured === "true" || params.is_featured === true;
-            filtered = filtered.filter(c => c.is_featured === isFeaturedBool);
-        }
-
-        // Lọc theo khoảng ngày tạo/cập nhật (date_from, date_to)
-        // Spec ghi: Khoảng thời gian cập nhật.
-        if (params.date_from) {
-            const fromDate = new Date(params.date_from);
-            fromDate.setHours(0, 0, 0, 0);
-            filtered = filtered.filter(c => new Date(c.updated_at) >= fromDate);
-        }
-        if (params.date_to) {
-            const toDate = new Date(params.date_to);
-            toDate.setHours(23, 59, 59, 999);
-            filtered = filtered.filter(c => new Date(c.updated_at) <= toDate);
-        }
-
-        // 3. Sắp xếp dữ liệu (Sort)
-        const sortBy = params.sort_by || "updated_at";
-        const sortDir = params.sort_direction || "desc";
-
-        filtered.sort((a, b) => {
-            let comparison = 0;
-            if (sortBy === "updated_at") {
-                comparison = new Date(a.updated_at) - new Date(b.updated_at);
-            } else if (sortBy === "created_at") {
-                // Nếu không có created_at, ta fallback về updated_at
-                const dateA = a.published_at ? new Date(a.published_at) : new Date(a.updated_at);
-                const dateB = b.published_at ? new Date(b.published_at) : new Date(b.updated_at);
-                comparison = dateA - dateB;
-            } else if (sortBy === "title") {
-                comparison = a.title.localeCompare(b.title, "vi");
-            } else if (sortBy === "enrollment_count") {
-                comparison = (a.enrollment_count || 0) - (b.enrollment_count || 0);
-            } else if (sortBy === "gross_revenue") {
-                comparison = (a.gross_revenue || 0) - (b.gross_revenue || 0);
-            } else if (sortBy === "average_rating") {
-                comparison = (a.average_rating || 0) - (b.average_rating || 0);
-            } else if (sortBy === "price") {
-                comparison = (a.price || 0) - (b.price || 0);
-            }
-            return sortDir === "desc" ? -comparison : comparison;
-        });
-
-        // 4. Phân trang (Pagination)
-        const total = filtered.length;
-        const perPage = parseInt(params.per_page) || 20;
-        const currentPage = parseInt(params.page) || 1;
-        const lastPage = Math.max(1, Math.ceil(total / perPage));
-        
-        const startIndex = (currentPage - 1) * perPage;
-        const paginatedItems = filtered.slice(startIndex, startIndex + perPage);
+    try {
+        const envelope = await apiFetchEnvelope(url);
+        const unwrapped = unwrapResponse(envelope);
 
         return {
             success: true,
-            message: "Lấy dữ liệu thành công.",
+            message: "Lấy dữ liệu từ API thành công.",
             data: {
-                summary: summary,
-                items: paginatedItems
+                summary: unwrapped.summary,
+                items: unwrapped.items
             },
-            meta: {
-                current_page: currentPage,
-                last_page: lastPage,
-                per_page: perPage,
-                total: total
-            }
+            meta: unwrapped.meta
         };
     } catch (error) {
-        console.error("Lỗi Mock API getCourses:", error);
+        console.error("Lỗi API getCourses:", error);
         return {
             success: false,
-            message: "Lỗi hệ thống khi tải danh sách khóa học.",
-            error_code: 500
+            message: error.message || "Lỗi hệ thống khi tải danh sách khóa học.",
+            error_code: error.status || 500
         };
     }
 }
@@ -199,29 +242,21 @@ export async function getCourses(params = {}) {
  */
 export async function getCourse(id) {
     const courseId = parseInt(id);
-    if (!USE_MOCK) {
-        const response = await fetch(`${API_BASE_URL}/${courseId}`);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return await response.json();
-    }
+    try {
+        const envelope = await apiFetchEnvelope(`/admin/courses/${courseId}`);
+        const adapted = adaptCourse(envelope.data || envelope);
 
-    await new Promise(resolve => setTimeout(resolve, 200));
-    const rawCourses = getRawMockCourses();
-    const course = rawCourses.find(c => c.id === courseId);
-
-    if (course) {
         return {
             success: true,
-            message: "Lấy chi tiết khóa học thành công.",
-            data: course
+            message: "Lấy chi tiết khóa học từ API thành công.",
+            data: adapted
         };
-    } else {
+    } catch (error) {
+        console.error("Lỗi API getCourse:", error);
         return {
             success: false,
-            message: "Không tìm thấy khóa học.",
-            error_code: 404
+            message: error.message || "Không tìm thấy khóa học.",
+            error_code: error.status || 500
         };
     }
 }
@@ -231,77 +266,25 @@ export async function getCourse(id) {
  */
 export async function updateCourse(id, payload) {
     const courseId = parseInt(id);
-    if (!USE_MOCK) {
-        const response = await fetch(`${API_BASE_URL}/${courseId}`, {
+    try {
+        const envelope = await apiFetchEnvelope(`/admin/courses/${courseId}`, {
             method: "PATCH",
-            headers: {
-                "Content-Type": "application/json"
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return await response.json();
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const rawCourses = getRawMockCourses();
-    const index = rawCourses.findIndex(c => c.id === courseId);
-
-    if (index !== -1) {
-        const course = rawCourses[index];
-
-        // Validate payload chỉ được gửi các thuộc tính cho phép
-        // is_featured? status?
-        const allowedKeys = ["is_featured", "status"];
-        const keys = Object.keys(payload);
-        const isValid = keys.every(key => allowedKeys.includes(key));
-
-        if (!isValid) {
-            return {
-                success: false,
-                message: "Payload chứa các trường không được phép chỉnh sửa.",
-                error_code: 422
-            };
-        }
-
-        // Cập nhật is_featured
-        if (payload.is_featured !== undefined) {
-            course.is_featured = payload.is_featured === true || payload.is_featured === "true";
-        }
-
-        // Cập nhật status (chỉ cho phép published <-> hidden)
-        if (payload.status !== undefined) {
-            const targetStatus = payload.status;
-            if (targetStatus === "hidden" && course.status === "published") {
-                course.status = "hidden";
-            } else if (targetStatus === "published" && course.status === "hidden") {
-                course.status = "published";
-                course.published_at = course.published_at || new Date().toISOString();
-            } else {
-                return {
-                    success: false,
-                    message: "Trạng thái chuyển đổi không hợp lệ.",
-                    error_code: 409
-                };
-            }
-        }
-
-        course.updated_at = new Date().toISOString();
-        rawCourses[index] = course;
-        saveRawMockCourses(rawCourses);
+        const adapted = adaptCourse(envelope.data || envelope);
 
         return {
             success: true,
-            message: "Cập nhật khóa học thành công.",
-            data: course
+            message: "Cập nhật khóa học trên API thành công.",
+            data: adapted
         };
-    } else {
+    } catch (error) {
+        console.error("Lỗi API updateCourse:", error);
         return {
             success: false,
-            message: "Không tìm thấy khóa học để cập nhật.",
-            error_code: 404
+            message: error.message || "Cập nhật khóa học thất bại.",
+            error_code: error.status || 500
         };
     }
 }
