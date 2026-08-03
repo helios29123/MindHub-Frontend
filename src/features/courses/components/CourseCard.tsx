@@ -13,6 +13,7 @@ export interface CourseData {
   difficulty?: "Beginner" | "Intermediate" | "Advanced";
   progress?: number; // 0-100, if enrolled
   status?: "enrolled" | "completed" | "not_enrolled";
+  slug?: string;
 }
 
 import { toast } from 'sonner';
@@ -71,7 +72,7 @@ export const CourseCard = React.memo(({ course }: { course: CourseData }) => {
             </span>
           )}
         </div>
-        <Link to={`/courses/${course.id}`} className="hover:underline">
+        <Link to={`/courses/${course.slug || course.id}`} className="hover:underline">
           <h3 className="font-bold text-base line-clamp-2 leading-tight group-hover:text-primary transition-colors">
             {course.title}
           </h3>
