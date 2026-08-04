@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   getModerationItems,
   getModerationItemDetail,
@@ -87,6 +87,15 @@ interface ModerationItem {
 }
 
 export default function Moderation() {
+  const tableRef = useRef<HTMLElement>(null);
+
+  const scrollToTable = (filterName: string) => {
+    if (tableRef.current) {
+      tableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    showToast(`Đã áp dụng bộ lọc: ${filterName}`, "success");
+  };
+
   // Filters state
   const [search, setSearch] = useState("");
   const [targetType, setTargetType] = useState("all");
@@ -462,6 +471,7 @@ export default function Moderation() {
             setStatus("all");
             setReplyStatus("all");
             setPage(1);
+            scrollToTable("Tổng nội dung");
           }}
           className={`flex flex-col justify-between h-[122px] rounded-2xl border bg-paper p-4 text-left shadow-xs transition-all hover:shadow-subtle cursor-pointer group relative overflow-hidden ${targetType === "all" && status === "all" && replyStatus === "all" ? "border-ink shadow-sm" : "border-hairline"}`}
         >
@@ -505,6 +515,7 @@ export default function Moderation() {
             setStatus("all");
             setReplyStatus("all");
             setPage(1);
+            scrollToTable("Bình luận");
           }}
           className={`flex flex-col justify-between h-[122px] rounded-2xl border bg-paper p-4 text-left shadow-xs transition-all hover:shadow-subtle cursor-pointer group relative overflow-hidden ${targetType === "comment" && replyStatus === "all" ? "border-blue-500 shadow-sm" : "border-hairline"}`}
         >
@@ -550,6 +561,7 @@ export default function Moderation() {
             setStatus("all");
             setReplyStatus("all");
             setPage(1);
+            scrollToTable("Đánh giá");
           }}
           className={`flex flex-col justify-between h-[122px] rounded-2xl border bg-paper p-4 text-left shadow-xs transition-all hover:shadow-subtle cursor-pointer group relative overflow-hidden ${targetType === "review" && replyStatus === "all" ? "border-amber-500 shadow-sm" : "border-hairline"}`}
         >
@@ -592,6 +604,7 @@ export default function Moderation() {
           onClick={() => {
             setReplyStatus("needs_action");
             setPage(1);
+            scrollToTable("Cần xử lý");
           }}
           className={`flex flex-col justify-between h-[122px] rounded-2xl border bg-paper p-4 text-left shadow-xs transition-all hover:shadow-subtle cursor-pointer group relative overflow-hidden ${replyStatus === "needs_action" ? "border-rose-500 shadow-sm" : "border-hairline"}`}
         >
@@ -667,15 +680,27 @@ export default function Moderation() {
                 placeholder="Tất cả nội dung"
                 value={targetType}
                 options={[
-                  { value: 'all', label: 'Tất cả nội dung' },
-                  { value: 'comment', label: 'Bình luận' },
-                  { value: 'review', label: 'Đánh giá' }
+                  { value: "all", label: "Tất cả nội dung" },
+                  {
+                    value: "comment",
+                    label: "● Bình luận",
+                    colorClass: "text-blue-600",
+                  },
+                  {
+                    value: "review",
+                    label: "● Đánh giá",
+                    colorClass: "text-amber-500",
+                  },
                 ]}
-                onChange={(val) => { setTargetType(val); setPage(1); }}
+                onChange={(val) => {
+                  setTargetType(val);
+                  setPage(1);
+                }}
                 id="select-target-type"
                 activeId={activeDropdownId}
                 setActiveId={setActiveDropdownId}
                 className="w-full h-[44px]"
+                searchable
               />
             </div>
 
@@ -686,16 +711,36 @@ export default function Moderation() {
                 placeholder="Tất cả trạng thái"
                 value={status}
                 options={[
-                  { value: 'all', label: 'Tất cả trạng thái' },
-                  { value: 'visible', label: 'Đang hiển thị' },
-                  ...(targetType !== "review" ? [{ value: 'hidden', label: 'Đã ẩn' }] : []),
-                  { value: 'deleted', label: 'Đã xóa' }
+                  { value: "all", label: "Tất cả trạng thái" },
+                  {
+                    value: "visible",
+                    label: "● Đang hiển thị",
+                    colorClass: "text-emerald-600",
+                  },
+                  ...(targetType !== "review"
+                    ? [
+                        {
+                          value: "hidden",
+                          label: "● Đã ẩn",
+                          colorClass: "text-mid-gray",
+                        },
+                      ]
+                    : []),
+                  {
+                    value: "deleted",
+                    label: "● Đã xóa",
+                    colorClass: "text-red-500",
+                  },
                 ]}
-                onChange={(val) => { setStatus(val); setPage(1); }}
+                onChange={(val) => {
+                  setStatus(val);
+                  setPage(1);
+                }}
                 id="select-status"
                 activeId={activeDropdownId}
                 setActiveId={setActiveDropdownId}
                 className="w-full h-[44px]"
+                searchable
               />
             </div>
 
@@ -706,18 +751,42 @@ export default function Moderation() {
                 placeholder="Tất cả phản hồi"
                 value={replyStatus}
                 options={[
-                  { value: 'all', label: 'Tất cả phản hồi' },
-                  { value: 'unanswered', label: 'Chưa phản hồi' },
-                  { value: 'answered', label: 'Đã phản hồi' },
-                  { value: 'multiple_replies', label: 'Nhiều phản hồi' },
-                  { value: 'overdue', label: 'Quá hạn phản hồi' },
-                  { value: 'needs_action', label: 'Cần xử lý gấp' }
+                  { value: "all", label: "Tất cả phản hồi" },
+                  {
+                    value: "unanswered",
+                    label: "● Chưa phản hồi",
+                    colorClass: "text-rose-500",
+                  },
+                  {
+                    value: "answered",
+                    label: "● Đã phản hồi",
+                    colorClass: "text-emerald-600",
+                  },
+                  {
+                    value: "multiple_replies",
+                    label: "● Nhiều phản hồi",
+                    colorClass: "text-blue-500",
+                  },
+                  {
+                    value: "overdue",
+                    label: "● Quá hạn",
+                    colorClass: "text-red-600",
+                  },
+                  {
+                    value: "needs_action",
+                    label: "● Cần xử lý gấp",
+                    colorClass: "text-rose-600 font-bold",
+                  },
                 ]}
-                onChange={(val) => { setReplyStatus(val); setPage(1); }}
+                onChange={(val) => {
+                  setReplyStatus(val);
+                  setPage(1);
+                }}
                 id="select-reply-status"
                 activeId={activeDropdownId}
                 setActiveId={setActiveDropdownId}
                 className="w-full h-[44px]"
+                searchable
               />
             </div>
 
@@ -728,18 +797,22 @@ export default function Moderation() {
                 placeholder="Tất cả thời gian"
                 value={timePreset}
                 options={[
-                  { value: 'all', label: 'Tất cả thời gian' },
-                  { value: 'today', label: 'Hôm nay' },
-                  { value: '7days', label: '7 ngày qua' },
-                  { value: '1month', label: '1 tháng qua' },
-                  { value: '3months', label: '3 tháng qua' },
-                  { value: 'custom', label: 'Tùy chọn ngày' }
+                  { value: "all", label: "Tất cả thời gian" },
+                  { value: "today", label: "Hôm nay" },
+                  { value: "7days", label: "7 ngày qua" },
+                  { value: "1month", label: "1 tháng qua" },
+                  { value: "3months", label: "3 tháng qua" },
+                  { value: "custom", label: "Tùy chọn ngày" },
                 ]}
-                onChange={(val) => { setTimePreset(val); setPage(1); }}
+                onChange={(val) => {
+                  setTimePreset(val);
+                  setPage(1);
+                }}
                 id="select-time-preset"
                 activeId={activeDropdownId}
                 setActiveId={setActiveDropdownId}
                 className="w-full h-[44px]"
+                searchable
               />
             </div>
           </div>
@@ -845,7 +918,7 @@ export default function Moderation() {
       )}
 
       {/* Table section */}
-      <section className="rounded-2xl border border-hairline bg-paper shadow-xs overflow-hidden">
+      <section ref={tableRef} className="rounded-2xl border border-hairline bg-paper shadow-xs overflow-hidden">
         {/* Table Header Controls */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-5 py-4 border-b border-hairline gap-3 bg-canvas/40">
           <div className="flex items-center gap-2">
