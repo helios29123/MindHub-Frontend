@@ -9,6 +9,7 @@ import {
   syncFaqCourses 
 } from '@/assets/js/api/faqs-api';
 import { getCourses } from '@/assets/js/api/courses-api';
+import FilterSelect from './FilterSelect';
 import AdminPagination from "../shared/AdminPagination";
 
 // Mapping Loại FAQ (raw value -> Tiếng Việt & CSS Class cho Chip)
@@ -50,6 +51,7 @@ export default function Faqs() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
   const [search, setSearch] = useState("");
+  const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
   const [type, setType] = useState("all");
   const [status, setStatus] = useState("all");
   const [scope, setScope] = useState("all");
@@ -516,72 +518,92 @@ export default function Faqs() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                className="w-full h-10 rounded-full border border-hairline bg-canvas pl-9 pr-4 text-sm text-ink placeholder:text-mid-gray/60 focus:border-ink focus:outline-none transition-colors"
+                className="w-full h-10 rounded-lg border border-hairline bg-canvas pl-9 pr-4 text-sm text-ink placeholder:text-mid-gray/60 focus:border-ink focus:outline-none transition-colors"
                 placeholder="Tìm câu hỏi, câu trả lời hoặc khóa học"
               />
             </div>
 
             {/* Type Select */}
             <div className="min-w-[150px]">
-              <select
+              <FilterSelect
+                label=""
+                placeholder="Tất cả loại FAQ"
                 value={type}
-                onChange={(e) => {
-                  setType(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full h-10 rounded-full border border-hairline bg-canvas px-3 text-sm text-ink cursor-pointer outline-none"
-              >
-                <option value="all">Tất cả loại FAQ</option>
-                <option value="general">Chung</option>
-                <option value="account">Tài khoản</option>
-                <option value="course">Khóa học</option>
-                <option value="payment">Thanh toán</option>
-                <option value="refund">Hoàn tiền</option>
-                <option value="certificate">Chứng chỉ</option>
-                <option value="technical">Kỹ thuật</option>
-                <option value="policy">Chính sách</option>
-              </select>
+                options={[
+                  { value: 'all', label: 'Tất cả loại FAQ' },
+                  { value: 'general', label: 'Chung' },
+                  { value: 'account', label: 'Tài khoản' },
+                  { value: 'course', label: 'Khóa học' },
+                  { value: 'payment', label: 'Thanh toán' },
+                  { value: 'refund', label: 'Hoàn tiền' },
+                  { value: 'certificate', label: 'Chứng chỉ' },
+                  { value: 'technical', label: 'Kỹ thuật' },
+                  { value: 'policy', label: 'Chính sách' }
+                ]}
+                onChange={(val) => { setType(val); setPage(1); }}
+                id="select-type"
+                activeId={activeDropdownId}
+                setActiveId={setActiveDropdownId}
+                className="w-full h-10 bg-canvas"
+              />
             </div>
 
             {/* Status Select */}
             <div className="min-w-[160px]">
-              <select
+              <FilterSelect
+                label=""
+                placeholder="Tất cả trạng thái"
                 value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full h-10 rounded-full border border-hairline bg-canvas px-3 text-sm text-ink cursor-pointer outline-none"
-              >
-                <option value="all">Tất cả trạng thái</option>
-                <option value="active">● Đang hiển thị</option>
-                <option value="inactive">● Đang ẩn</option>
-              </select>
+                options={[
+                  { value: 'all', label: 'Tất cả trạng thái' },
+                  { value: 'active', label: '● Đang hiển thị', colorClass: 'text-emerald-600' },
+                  { value: 'inactive', label: '● Đang ẩn', colorClass: 'text-mid-gray' }
+                ]}
+                onChange={(val) => { setStatus(val); setPage(1); }}
+                id="select-status"
+                activeId={activeDropdownId}
+                setActiveId={setActiveDropdownId}
+                className="w-full h-10 bg-canvas"
+              />
             </div>
 
             {/* Scope Select */}
             <div className="min-w-[180px]">
-              <select
+              <FilterSelect
+                label=""
+                placeholder="Tất cả phạm vi"
                 value={scope}
-                onChange={(e) => {
-                  setScope(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full h-10 rounded-full border border-hairline bg-canvas px-3 text-sm text-ink cursor-pointer outline-none"
-              >
-                <option value="all">Tất cả phạm vi</option>
-                <option value="general">FAQ dùng chung</option>
-                <option value="linked">Đã liên kết khóa học</option>
-                <option value="unlinked">Chưa liên kết khóa học</option>
-              </select>
+                options={[
+                  { value: 'all', label: 'Tất cả phạm vi' },
+                  { value: 'general', label: 'FAQ dùng chung' },
+                  { value: 'linked', label: 'Đã liên kết khóa học' },
+                  { value: 'unlinked', label: 'Chưa liên kết khóa học' }
+                ]}
+                onChange={(val) => { setScope(val); setPage(1); }}
+                id="select-scope"
+                activeId={activeDropdownId}
+                setActiveId={setActiveDropdownId}
+                className="w-full h-10 bg-canvas"
+              />
             </div>
 
             {/* Sort Select */}
             <div className="min-w-[160px]">
-              <select
+              <FilterSelect
+                label=""
+                placeholder="Sắp xếp theo"
                 value={`${sortBy}_${sortDirection}`}
-                onChange={(e) => {
-                  const val = e.target.value;
+                options={[
+                  { value: 'sort_order_asc', label: 'Thứ tự ưu tiên (Tăng)' },
+                  { value: 'sort_order_desc', label: 'Thứ tự ưu tiên (Giảm)' },
+                  { value: 'updated_at_desc', label: 'Mới cập nhật' },
+                  { value: 'updated_at_asc', label: 'Cập nhật cũ nhất' },
+                  { value: 'question_asc', label: 'Câu hỏi (A-Z)' },
+                  { value: 'question_desc', label: 'Câu hỏi (Z-A)' },
+                  { value: 'course_count_desc', label: 'Nhiều khóa học nhất' },
+                  { value: 'course_count_asc', label: 'Ít khóa học nhất' }
+                ]}
+                onChange={(val) => {
                   if (val.startsWith("sort_order")) {
                     setSortBy("sort_order");
                     setSortDirection(val.endsWith("desc") ? "desc" : "asc");
@@ -597,17 +619,11 @@ export default function Faqs() {
                   }
                   setPage(1);
                 }}
-                className="w-full h-10 rounded-full border border-hairline bg-canvas px-3 text-sm text-ink cursor-pointer outline-none"
-              >
-                <option value="sort_order_asc">Sắp xếp: Thứ tự tăng dần</option>
-                <option value="sort_order_desc">Thứ tự giảm dần</option>
-                <option value="updated_at_desc">Mới cập nhật trước</option>
-                <option value="updated_at_asc">Cũ cập nhật trước</option>
-                <option value="question_asc">Câu hỏi A–Z</option>
-                <option value="question_desc">Câu hỏi Z–A</option>
-                <option value="course_count_desc">Nhiều khóa học nhất</option>
-                <option value="course_count_asc">Ít khóa học nhất</option>
-              </select>
+                id="select-sort"
+                activeId={activeDropdownId}
+                setActiveId={setActiveDropdownId}
+                className="w-full h-10 bg-canvas"
+              />
             </div>
           </div>
 
@@ -682,7 +698,7 @@ export default function Faqs() {
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr class="border-b border-hairline bg-surface-alt/60 text-[11px] font-bold uppercase tracking-wider text-mid-gray">
+                <tr className="border-b border-hairline bg-surface-alt/60 text-[11px] font-bold uppercase tracking-wider text-mid-gray">
                   <th scope="col" className="py-3.5 px-4 min-w-[280px]">
                     <button
                       type="button"
@@ -1042,12 +1058,12 @@ export default function Faqs() {
                   {/* Type */}
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-mid-gray mb-1.5">
-                      Loại FAQ <span class="text-red-500">*</span>
+                      Loại FAQ <span className="text-red-500">*</span>
                     </label>
                     <select
                       value={formFaq.type}
                       onChange={(e) => setFormFaq(prev => ({ ...prev, type: e.target.value }))}
-                      className="w-full h-10 rounded-full border border-hairline bg-canvas px-3 text-sm text-ink outline-none cursor-pointer"
+                      className="w-full h-10 rounded-lg border border-hairline bg-canvas px-3 text-sm text-ink outline-none cursor-pointer"
                     >
                       <option value="general">Chung</option>
                       <option value="account">Tài khoản</option>
@@ -1070,7 +1086,7 @@ export default function Faqs() {
                       min={0}
                       value={formFaq.sort_order}
                       onChange={(e) => setFormFaq(prev => ({ ...prev, sort_order: Number(e.target.value) }))}
-                      className="w-full h-10 rounded-full border border-hairline bg-canvas px-4 text-sm text-ink focus:border-ink focus:outline-none transition-colors"
+                      className="w-full h-10 rounded-lg border border-hairline bg-canvas px-4 text-sm text-ink focus:border-ink focus:outline-none transition-colors"
                     />
                   </div>
                 </div>

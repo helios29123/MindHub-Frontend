@@ -6,6 +6,7 @@ import {
 } from "@/assets/js/api/moderation-api";
 import { showToast } from "@/assets/js/toast";
 import AdminPagination from "../shared/AdminPagination";
+import FilterSelect from "./FilterSelect";
 
 interface UserInfo {
   id: number;
@@ -98,6 +99,7 @@ export default function Moderation() {
   const [perPage, setPerPage] = useState(20);
   const [sortBy, setSortBy] = useState("created_at");
   const [sortDirection, setSortDirection] = useState("desc");
+  const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
 
   // Course Filter Context (if active)
   const [courseFilter, setCourseFilter] = useState<{
@@ -652,74 +654,94 @@ export default function Moderation() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Nội dung, người dùng, khóa học..."
-              className="w-full h-full pl-10 pr-3 text-xs md:text-sm bg-canvas border border-hairline rounded-xl focus:outline-none focus:border-ink transition-colors text-ink placeholder:text-mid-gray/70"
+              className="w-full h-full pl-10 pr-3 text-xs md:text-sm bg-canvas border border-hairline rounded-lg focus:outline-none focus:border-ink transition-colors text-ink placeholder:text-mid-gray/70"
             />
           </div>
 
           {/* Controls Select grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:flex xl:items-center gap-2.5 flex-1 min-w-0">
             {/* Target Type select */}
-            <select
-              value={targetType}
-              onChange={(e) => {
-                setTargetType(e.target.value);
-                setPage(1);
-              }}
-              className="h-[44px] px-3.5 text-xs md:text-sm bg-canvas border border-hairline rounded-xl focus:outline-none focus:border-ink text-ink font-medium shrink-0 min-w-[130px]"
-            >
-              <option value="all">Tất cả nội dung</option>
-              <option value="comment">Bình luận</option>
-              <option value="review">Đánh giá</option>
-            </select>
+            <div className="min-w-[130px] shrink-0">
+              <FilterSelect
+                label=""
+                placeholder="Tất cả nội dung"
+                value={targetType}
+                options={[
+                  { value: 'all', label: 'Tất cả nội dung' },
+                  { value: 'comment', label: 'Bình luận' },
+                  { value: 'review', label: 'Đánh giá' }
+                ]}
+                onChange={(val) => { setTargetType(val); setPage(1); }}
+                id="select-target-type"
+                activeId={activeDropdownId}
+                setActiveId={setActiveDropdownId}
+                className="w-full h-[44px]"
+              />
+            </div>
 
             {/* Status select */}
-            <select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                setPage(1);
-              }}
-              className="h-[44px] px-3.5 text-xs md:text-sm bg-canvas border border-hairline rounded-xl focus:outline-none focus:border-ink text-ink font-medium shrink-0 min-w-[140px]"
-            >
-              <option value="all">Tất cả trạng thái</option>
-              <option value="visible">Đang hiển thị</option>
-              {targetType !== "review" && <option value="hidden">Đã ẩn</option>}
-              <option value="deleted">Đã xóa</option>
-            </select>
+            <div className="min-w-[140px] shrink-0">
+              <FilterSelect
+                label=""
+                placeholder="Tất cả trạng thái"
+                value={status}
+                options={[
+                  { value: 'all', label: 'Tất cả trạng thái' },
+                  { value: 'visible', label: 'Đang hiển thị' },
+                  ...(targetType !== "review" ? [{ value: 'hidden', label: 'Đã ẩn' }] : []),
+                  { value: 'deleted', label: 'Đã xóa' }
+                ]}
+                onChange={(val) => { setStatus(val); setPage(1); }}
+                id="select-status"
+                activeId={activeDropdownId}
+                setActiveId={setActiveDropdownId}
+                className="w-full h-[44px]"
+              />
+            </div>
 
             {/* Reply Status select */}
-            <select
-              value={replyStatus}
-              onChange={(e) => {
-                setReplyStatus(e.target.value);
-                setPage(1);
-              }}
-              className="h-[44px] px-3.5 text-xs md:text-sm bg-canvas border border-hairline rounded-xl focus:outline-none focus:border-ink text-ink font-medium shrink-0 min-w-[145px]"
-            >
-              <option value="all">Tất cả phản hồi</option>
-              <option value="unanswered">Chưa phản hồi</option>
-              <option value="answered">Đã phản hồi</option>
-              <option value="multiple_replies">Nhiều phản hồi</option>
-              <option value="overdue">Quá hạn phản hồi</option>
-              <option value="needs_action">Cần xử lý gấp</option>
-            </select>
+            <div className="min-w-[145px] shrink-0">
+              <FilterSelect
+                label=""
+                placeholder="Tất cả phản hồi"
+                value={replyStatus}
+                options={[
+                  { value: 'all', label: 'Tất cả phản hồi' },
+                  { value: 'unanswered', label: 'Chưa phản hồi' },
+                  { value: 'answered', label: 'Đã phản hồi' },
+                  { value: 'multiple_replies', label: 'Nhiều phản hồi' },
+                  { value: 'overdue', label: 'Quá hạn phản hồi' },
+                  { value: 'needs_action', label: 'Cần xử lý gấp' }
+                ]}
+                onChange={(val) => { setReplyStatus(val); setPage(1); }}
+                id="select-reply-status"
+                activeId={activeDropdownId}
+                setActiveId={setActiveDropdownId}
+                className="w-full h-[44px]"
+              />
+            </div>
 
             {/* Time Preset select */}
-            <select
-              value={timePreset}
-              onChange={(e) => {
-                setTimePreset(e.target.value);
-                setPage(1);
-              }}
-              className="h-[44px] px-3.5 text-xs md:text-sm bg-canvas border border-hairline rounded-xl focus:outline-none focus:border-ink text-ink font-medium shrink-0 min-w-[140px]"
-            >
-              <option value="all">Tất cả thời gian</option>
-              <option value="today">Hôm nay</option>
-              <option value="7days">7 ngày qua</option>
-              <option value="1month">1 tháng qua</option>
-              <option value="3months">3 tháng qua</option>
-              <option value="custom">Tùy chọn ngày</option>
-            </select>
+            <div className="min-w-[140px] shrink-0">
+              <FilterSelect
+                label=""
+                placeholder="Tất cả thời gian"
+                value={timePreset}
+                options={[
+                  { value: 'all', label: 'Tất cả thời gian' },
+                  { value: 'today', label: 'Hôm nay' },
+                  { value: '7days', label: '7 ngày qua' },
+                  { value: '1month', label: '1 tháng qua' },
+                  { value: '3months', label: '3 tháng qua' },
+                  { value: 'custom', label: 'Tùy chọn ngày' }
+                ]}
+                onChange={(val) => { setTimePreset(val); setPage(1); }}
+                id="select-time-preset"
+                activeId={activeDropdownId}
+                setActiveId={setActiveDropdownId}
+                className="w-full h-[44px]"
+              />
+            </div>
           </div>
 
           {/* Reset button */}

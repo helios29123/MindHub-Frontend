@@ -70,7 +70,7 @@ export default function FilterSelect({
       <button
         type="button"
         onClick={() => setActiveId(isOpen ? null : id)}
-        className="w-full h-10 px-3 text-xs bg-paper border border-hairline rounded-[6px] hover:border-mid-gray/40 focus:ring-1 focus:ring-mid-gray/40 outline-none flex items-center justify-between transition-all cursor-pointer text-left shadow-subtle font-medium text-ink"
+        className="w-full h-10 px-3 text-xs bg-paper border border-hairline rounded-lg hover:border-mid-gray/40 focus:ring-1 focus:ring-mid-gray/40 outline-none flex items-center justify-between transition-all cursor-pointer text-left shadow-subtle font-medium text-ink"
       >
         <span className={cn("truncate font-semibold", displayColor)}>
           {displayLabel}
@@ -80,7 +80,7 @@ export default function FilterSelect({
         </svg>
       </button>
       {isOpen && (
-        <div className="absolute left-0 right-0 top-[62px] z-20 bg-paper border border-hairline rounded-[6px] p-1 shadow-subtle flex flex-col max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in duration-100">
+        <div className="absolute left-0 right-0 top-[62px] z-20 bg-paper border border-hairline rounded-xl p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.08)] flex flex-col max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in duration-100">
           {options.map((opt) => {
             const isSelected = opt.value === value;
             return (
@@ -92,7 +92,7 @@ export default function FilterSelect({
                   setActiveId(null);
                 }}
                 className={cn(
-                  "w-full text-left px-3 py-2 text-xs rounded-[4px] transition-colors font-medium cursor-pointer border-none bg-transparent flex items-center justify-between",
+                  "w-full text-left px-3 py-2 text-xs rounded-md transition-colors font-medium cursor-pointer border-none bg-transparent flex items-center justify-between",
                   opt.colorClass,
                   isSelected ? "bg-neutral-50 font-semibold text-ink" : opt.hoverBgClass
                 )}
