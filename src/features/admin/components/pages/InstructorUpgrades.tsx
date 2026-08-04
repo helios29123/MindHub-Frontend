@@ -359,11 +359,18 @@ export default function InstructorUpgrades() {
       date_preset: formDatePreset,
       page: 1,
     });
+    toast.success("Áp dụng bộ lọc thành công");
   };
 
   // KPI Card clicks -> updates status param
   const handleTabChange = (tabValue: string) => {
     updateFilters({ status: tabValue, page: 1 });
+    setTimeout(() => {
+      const el = document.getElementById("upgrade-list-section");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
   };
 
   // Date/Time Format Helpers
