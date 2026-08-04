@@ -65,6 +65,8 @@ export async function getCourseReviews(params = {}) {
   if (params.category_id) query.category_id = params.category_id;
   if (params.date_from) query.date_from = params.date_from;
   if (params.date_to) query.date_to = params.date_to;
+  if (params.status) query.status = params.status;
+  if (params.reviewed_date) query.reviewed_date = params.reviewed_date;
 
   // Ánh xạ kiểu sắp xếp phù hợp backend
   if (params.sort) {
@@ -74,9 +76,11 @@ export async function getCourseReviews(params = {}) {
     else if (params.sort === "title_desc") query.sort = "title_desc";
   }
 
-  const res = await apiFetchEnvelope("/admin/course-reviews", {
-    method: "GET",
-    query
+  const queryString = new URLSearchParams(query).toString();
+  const endpoint = queryString ? `/admin/course-reviews?${queryString}` : "/admin/course-reviews";
+
+  const res = await apiFetchEnvelope(endpoint, {
+    method: "GET"
   });
 
   if (res && res.data) {
@@ -157,9 +161,9 @@ export async function approveCourse(id) {
 export async function rejectCourse(id, payload = {}) {
   const res = await apiFetchEnvelope(`/admin/courses/${id}/reject`, {
     method: "PATCH",
-    body: {
+    body: JSON.stringify({
       reason: payload.admin_reject_reason
-    }
+    })
   });
 
   if (res && res.data) {

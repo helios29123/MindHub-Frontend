@@ -359,11 +359,18 @@ export default function InstructorUpgrades() {
       date_preset: formDatePreset,
       page: 1,
     });
+    toast.success("Áp dụng bộ lọc thành công");
   };
 
   // KPI Card clicks -> updates status param
   const handleTabChange = (tabValue: string) => {
     updateFilters({ status: tabValue, page: 1 });
+    setTimeout(() => {
+      const el = document.getElementById("upgrade-list-section");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
   };
 
   // Date/Time Format Helpers
@@ -445,7 +452,35 @@ export default function InstructorUpgrades() {
       const allRes = await upgradesApi.getUpgradeRequests({ per_page: 99999 });
 
       if (tableRes.success && allRes.success) {
-        setPaginatedItems(tableRes.data.items);
+        let fetchedItems = tableRes.data.items || [];
+        
+        // 1. Lọc bớt dữ liệu trùng lặp (Deduplicate) dựa vào user.id
+        // (Do backend trả về trùng nhiều request của 1 user)
+        const uniqueItemsMap = new Map();
+        fetchedItems.forEach((item: any) => {
+          if (item?.user?.id) {
+            // Ưu tiên giữ lại item mới nhất hoặc item chưa duyệt
+            if (!uniqueItemsMap.has(item.user.id)) {
+              uniqueItemsMap.set(item.user.id, item);
+            } else {
+              const existing = uniqueItemsMap.get(item.user.id);
+              if (existing.application_status !== "pending" && item.application_status === "pending") {
+                uniqueItemsMap.set(item.user.id, item); // Ưu tiên pending
+              }
+            }
+          }
+        });
+        let processedItems = Array.from(uniqueItemsMap.values());
+
+        // 2. Lọc theo trạng thái (Frontend fallback)
+        // (Trong trường hợp backend không nhận param status)
+        if (statusParam) {
+          processedItems = processedItems.filter(
+            (item: any) => item.application_status === statusParam
+          );
+        }
+
+        setPaginatedItems(processedItems);
         const resolvedMeta = tableRes.meta ?? tableRes.data?.meta ?? null;
         setMeta(resolvedMeta);
         setSummary(allRes.data.summary);

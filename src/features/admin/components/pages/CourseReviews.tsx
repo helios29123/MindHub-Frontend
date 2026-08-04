@@ -139,6 +139,7 @@ export default function CourseReviews() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState({
+    total_count: 0,
     pending_count: 0,
     approved_today: 0,
     rejected_today: 0,
@@ -311,7 +312,7 @@ export default function CourseReviews() {
     setPerPage(urlPerPage);
 
     try {
-      getCategories().then(res => {
+      getCategories().then((res: any) => {
         if (res && res.success) {
           setCategories(res.data.items || res.data || []);
         }
@@ -339,6 +340,9 @@ export default function CourseReviews() {
         category_id: appliedFilters.category_id,
         sort: appliedFilters.sort,
       };
+
+      if (statusFilter) apiParams.status = statusFilter;
+      if (reviewedDateFilter) apiParams.reviewed_date = reviewedDateFilter;
 
       // Mapped date filters
       if (appliedFilters.date_preset && appliedFilters.date_preset !== 'all') {
@@ -375,7 +379,7 @@ export default function CourseReviews() {
 
       if (res && res.success && res.data && allRes && allRes.success) {
         setItems(res.data.items || []);
-        setSummary(res.data.summary || { pending_count: 0, approved_today: 0, rejected_today: 0 });
+        setSummary(res.data.summary || { total_count: 0, pending_count: 0, approved_today: 0, rejected_today: 0 });
         setMeta(res.meta || { current_page: page, last_page: 1, per_page: perPage, total: 0 });
         setAllItems(allRes.data.items || []);
         
@@ -1024,7 +1028,7 @@ export default function CourseReviews() {
           </div>
           <div className="mt-2">
             <span className="text-2xl lg:text-3xl font-bold text-indigo-600 leading-none">
-              {summary.pending_count + summary.approved_today + summary.rejected_today}
+              {summary.total_count}
             </span>
             <p className="text-[10px] text-mid-gray mt-1">Tổng cộng các trạng thái</p>
           </div>

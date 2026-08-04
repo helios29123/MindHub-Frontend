@@ -21,8 +21,7 @@ import {
   fetchPayoutAccountById,
   approvePayoutAccountApi,
   rejectPayoutAccountApi,
-  disablePayoutAccountApi,
-  updatePayoutAccountStatus
+  disablePayoutAccountApi
 } from '@/assets/js/api/payout-accounts-api';
 import AdminPagination from "../shared/AdminPagination";
 

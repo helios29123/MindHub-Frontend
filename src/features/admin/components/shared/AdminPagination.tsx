@@ -78,7 +78,6 @@ export default function AdminPagination({
             value={perPage}
             onChange={(e) => {
               onPerPageChange(Number(e.target.value));
-              onPageChange(1); // Reset to page 1 on per-page change
             }}
             className="h-7 px-2 bg-canvas border border-hairline rounded focus:ring-1 focus:ring-mid-gray/40 outline-none text-ink cursor-pointer font-medium"
           >
