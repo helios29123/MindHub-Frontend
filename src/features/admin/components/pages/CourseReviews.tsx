@@ -311,7 +311,7 @@ export default function CourseReviews() {
     setPerPage(urlPerPage);
 
     try {
-      getCategories().then(res => {
+      getCategories().then((res: any) => {
         if (res && res.success) {
           setCategories(res.data.items || res.data || []);
         }
