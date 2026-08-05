@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Chart } from 'chart.js/auto';
 import zoomPlugin from 'chartjs-plugin-zoom';
@@ -19,6 +20,7 @@ function roundPercent(part: number, total: number): number {
 }
 
 export default function RevenuesManagement() {
+  const navigate = useNavigate();
   // --- States ---
   const [items, setItems] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>({
@@ -942,7 +944,15 @@ export default function RevenuesManagement() {
                     {/* Course */}
                     {selectedRevenue.course && (
                       <div>
-                        <h3 className="text-[10px] font-bold uppercase tracking-wider text-mid-gray mb-2">Khóa học</h3>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-[10px] font-bold uppercase tracking-wider text-mid-gray">Khóa học</h3>
+                          <button 
+                            onClick={() => navigate(`/admin/courses?open_course_id=${selectedRevenue.course.id}`)}
+                            className="text-[10px] font-semibold text-blue-600 hover:underline cursor-pointer"
+                          >
+                            Xem chi tiết
+                          </button>
+                        </div>
                         <div className="p-3.5 border border-hairline rounded-[6px] bg-paper flex items-center gap-3.5 text-xs">
                           <img
                             src={selectedRevenue.course.thumbnail_url || "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=120&auto=format&fit=crop&q=60"}
@@ -951,7 +961,11 @@ export default function RevenuesManagement() {
                           />
                           <div className="min-w-0 flex-1">
                             <div className="font-semibold text-ink truncate">{selectedRevenue.course.title}</div>
-                            <div className="text-[10px] text-mid-gray mt-1">Cấp độ: <span className="capitalize">{selectedRevenue.course.level || "Tất cả"}</span></div>
+                            <div className="text-[10px] text-mid-gray mt-1 flex items-center gap-1.5">
+                              <span>Cấp độ: <span className="capitalize">{selectedRevenue.course.level || "Tất cả"}</span></span>
+                              <span className="text-hairline">•</span>
+                              <span>ID: {selectedRevenue.course.id}</span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -960,10 +974,31 @@ export default function RevenuesManagement() {
                     {/* Instructor */}
                     {selectedRevenue.instructor && (
                       <div>
-                        <h3 className="text-[10px] font-bold uppercase tracking-wider text-mid-gray mb-2">Giảng viên</h3>
-                        <div className="p-3.5 border border-hairline rounded-[6px] bg-paper text-xs space-y-1">
-                          <div className="font-semibold text-ink">{selectedRevenue.instructor.name}</div>
-                          <div className="text-mid-gray font-mono text-[11px]">{selectedRevenue.instructor.email}</div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-[10px] font-bold uppercase tracking-wider text-mid-gray">Giảng viên</h3>
+                          <button 
+                            onClick={() => navigate(`/admin/users?open_user_id=${selectedRevenue.instructor.id}`)}
+                            className="text-[10px] font-semibold text-blue-600 hover:underline cursor-pointer"
+                          >
+                            Xem chi tiết
+                          </button>
+                        </div>
+                        <div className="p-3.5 border border-hairline rounded-[6px] bg-paper text-xs space-y-2">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm shrink-0">
+                              {selectedRevenue.instructor.name.charAt(0)}
+                            </div>
+                            <div>
+                              <div className="font-semibold text-ink">{selectedRevenue.instructor.name}</div>
+                              <div className="text-mid-gray font-mono text-[11px]">{selectedRevenue.instructor.email}</div>
+                            </div>
+                          </div>
+                          {selectedRevenue.instructor.phone && (
+                            <div className="flex items-center justify-between pt-2 border-t border-hairline">
+                              <span className="text-mid-gray">Số điện thoại:</span>
+                              <span className="font-mono text-ink">{selectedRevenue.instructor.phone}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -971,7 +1006,15 @@ export default function RevenuesManagement() {
                     {/* Original Order */}
                     {selectedRevenue.order && (
                       <div>
-                        <h3 className="text-[10px] font-bold uppercase tracking-wider text-mid-gray mb-2">Đơn hàng gốc</h3>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-[10px] font-bold uppercase tracking-wider text-mid-gray">Đơn hàng gốc</h3>
+                          <button 
+                            onClick={() => navigate(`/admin/orders?open_order_id=${selectedRevenue.order.id}`)}
+                            className="text-[10px] font-semibold text-blue-600 hover:underline cursor-pointer"
+                          >
+                            Xem chi tiết
+                          </button>
+                        </div>
                         <div className="p-3.5 border border-hairline rounded-[6px] bg-paper text-xs space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-mid-gray">Mã đơn hàng:</span>
@@ -987,6 +1030,12 @@ export default function RevenuesManagement() {
                               {selectedRevenue.order.payment_method === "vnpay" ? "VNPay" : selectedRevenue.order.payment_method === "momo" ? "MoMo" : "Chuyển khoản"}
                             </span>
                           </div>
+                          {selectedRevenue.order.created_at && (
+                            <div className="flex items-center justify-between pt-1 border-t border-hairline/50">
+                              <span className="text-mid-gray">Ngày tạo đơn:</span>
+                              <span className="font-medium text-ink text-[11px]">{formatDateTime(selectedRevenue.order.created_at)}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1002,7 +1051,7 @@ export default function RevenuesManagement() {
                 <button
                   type="button"
                   onClick={handleCloseDrawer}
-                  className="h-8 px-4 font-medium rounded-[6px] border border-hairline bg-paper text-ink hover:bg-canvas transition-colors cursor-pointer text-xs"
+                  className="h-8 px-4 font-semibold rounded-[6px] border border-rose-500/20 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:border-rose-500/30 transition-colors cursor-pointer text-xs"
                 >
                   Đóng
                 </button>

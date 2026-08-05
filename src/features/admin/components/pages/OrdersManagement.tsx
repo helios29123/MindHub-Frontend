@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { 
   getOrders, 
@@ -10,6 +11,7 @@ import {
 import AdminPagination from "../shared/AdminPagination";
 
 export default function OrdersManagement() {
+  const navigate = useNavigate();
   // --- States ---
   const [items, setItems] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>({
@@ -1169,9 +1171,9 @@ export default function OrdersManagement() {
                               Thông tin người mua
                             </h3>
                             {selectedOrder.user && (
-                              <a href={`/admin/users?open_user_id=${selectedOrder.user.id}`} className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                              <button onClick={() => navigate(`/admin/users?open_user_id=${selectedOrder.user.id}`)} className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer">
                                 Xem chi tiết &rarr;
-                              </a>
+                              </button>
                             )}
                           </div>
                           {selectedOrder.user ? (
@@ -1194,9 +1196,9 @@ export default function OrdersManagement() {
                               Khóa học mua
                             </h3>
                             {selectedOrder.course && (
-                              <a href={`/admin/courses?open_course_id=${selectedOrder.course.id}`} className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                              <button onClick={() => navigate(`/admin/courses?open_course_id=${selectedOrder.course.id}`)} className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer">
                                 Xem chi tiết &rarr;
-                              </a>
+                              </button>
                             )}
                           </div>
                           {selectedOrder.course ? (
@@ -1291,9 +1293,9 @@ export default function OrdersManagement() {
                                 ● {isFullyPaid ? (hasEnrollment ? "Khớp (Có dữ liệu)" : "Không khớp (Thiếu bất thường)") : (hasEnrollment ? "Đã phát sinh" : "Chưa phát sinh")}
                               </span>
                               {hasEnrollment && (
-                                <a href={`/admin/enrollments?open_enrollment_id=${selectedOrder.enrollment.id}`} className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                                <button onClick={() => navigate(`/admin/enrollments?open_enrollment_id=${selectedOrder.enrollment.id}`)} className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer">
                                   Chi tiết &rarr;
-                                </a>
+                                </button>
                               )}
                             </div>
                           </div>
@@ -1319,9 +1321,9 @@ export default function OrdersManagement() {
                                 ● {isFullyPaid ? (hasRevenue ? "Khớp (Có dữ liệu)" : "Không khớp (Thiếu bất thường)") : (hasRevenue ? "Đã phát sinh" : "Chưa phát sinh")}
                               </span>
                               {hasRevenue && (
-                                <a href={`/admin/revenue?open_revenue_id=${selectedOrder.revenue.id}`} className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                                <button onClick={() => navigate(`/admin/revenues?open_revenue_id=${selectedOrder.revenue.id}`)} className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer">
                                   Chi tiết &rarr;
-                                </a>
+                                </button>
                               )}
                             </div>
                           </div>
@@ -1398,7 +1400,7 @@ export default function OrdersManagement() {
                 <button
                   type="button"
                   onClick={handleCloseDrawer}
-                  className="h-8 px-4 font-medium rounded-[6px] border border-hairline bg-paper text-ink hover:bg-canvas transition-colors cursor-pointer"
+                  className="h-8 px-4 font-semibold rounded-[6px] border border-rose-500/20 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:border-rose-500/30 transition-colors cursor-pointer text-xs"
                 >
                   Đóng
                 </button>
