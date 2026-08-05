@@ -567,10 +567,10 @@ export default function OrdersManagement() {
 
       {/* 4. DETAIL FILTERS ROW */}
       <div className="rounded-[6px] border border-hairline bg-paper p-4 shadow-subtle space-y-3 mb-4 w-full min-w-0">
-        <form onSubmit={handleApplyFilters} className="flex flex-col gap-3 p-0">
-          <div className="flex flex-wrap lg:flex-nowrap items-end gap-2 w-full">
+        <form onSubmit={handleApplyFilters} className="flex flex-wrap xl:flex-nowrap items-end justify-between gap-[7px] p-0 w-full">
+          <div className="flex flex-wrap md:flex-nowrap items-end gap-[7px]">
             {/* Unified Search */}
-            <div className="flex-1 lg:flex-[1.5] min-w-[120px] lg:min-w-0 flex flex-col gap-1.5 w-full">
+            <div className="w-[340px] flex flex-col gap-1.5 shrink-0">
               <label htmlFor="filter-search" className="block text-[10px] font-bold uppercase tracking-wider text-mid-gray select-none">TÌM KIẾM</label>
               <div className="relative">
                 <input
@@ -596,7 +596,7 @@ export default function OrdersManagement() {
             </div>
 
             {/* Trạng thái đơn */}
-            <div className="flex-1 lg:flex-1 min-w-[130px] lg:min-w-0 flex flex-col gap-1.5 w-full" ref={statusRef}>
+            <div className="w-[180px] flex flex-col gap-1.5 shrink-0" ref={statusRef}>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-mid-gray select-none">TRẠNG THÁI ĐƠN</label>
               <div className="relative">
                 <button
@@ -635,7 +635,7 @@ export default function OrdersManagement() {
             </div>
 
             {/* Thanh toán */}
-            <div className="flex-1 lg:flex-1 min-w-[130px] lg:min-w-0 flex flex-col gap-1.5 w-full" ref={paymentRef}>
+            <div className="w-[180px] flex flex-col gap-1.5 shrink-0" ref={paymentRef}>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-mid-gray select-none">THANH TOÁN</label>
               <div className="relative">
                 <button
@@ -674,7 +674,7 @@ export default function OrdersManagement() {
             </div>
 
             {/* Khoảng thời gian */}
-            <div className="flex-1 lg:flex-1 min-w-[140px] lg:min-w-0 flex flex-col gap-1.5 w-full" ref={dateRef}>
+            <div className="w-[180px] flex flex-col gap-1.5 shrink-0" ref={dateRef}>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-mid-gray select-none">KHOẢNG THỜI GIAN</label>
               <div className="relative">
                 <button
@@ -703,7 +703,7 @@ export default function OrdersManagement() {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-2 shrink-0 w-full">
+          <div className="flex items-center justify-end gap-[7px] shrink-0">
             <button
               type="button"
               onClick={handleResetFilters}
@@ -996,7 +996,7 @@ export default function OrdersManagement() {
           />
 
           <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-            <div className="w-screen max-w-[760px] bg-paper shadow-2xl flex flex-col h-full transform transition-transform duration-300 translate-x-0 border-l border-hairline">
+            <div className="w-screen max-w-[650px] md:w-[60vw] lg:w-[43vw] bg-paper shadow-2xl flex flex-col h-full transform transition-transform duration-300 translate-x-0 border-l border-hairline">
               
               {/* Drawer Header */}
               <div className="px-5 py-4 border-b border-hairline flex items-center justify-between shrink-0 bg-paper sticky top-0 z-10">
@@ -1110,13 +1110,20 @@ export default function OrdersManagement() {
                             <h3 className="text-xs font-bold uppercase tracking-wider text-mid-gray">
                               Thông tin người mua
                             </h3>
+                            {selectedOrder.user && (
+                              <a href={`/admin/users?open_user_id=${selectedOrder.user.id}`} className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                                Xem chi tiết &rarr;
+                              </a>
+                            )}
                           </div>
                           {selectedOrder.user ? (
-                            <div className="grid grid-cols-2 gap-3 text-xs">
-                              <div><span className="text-mid-gray mr-1">Họ và tên:</span> <span className="font-semibold text-ink">{selectedOrder.user.full_name}</span></div>
-                              <div><span className="text-mid-gray mr-1">Email:</span> <span className="font-mono text-ink">{selectedOrder.user.email}</span></div>
-                              <div><span className="text-mid-gray mr-1">Vai trò:</span> <span className="capitalize text-ink">{selectedOrder.user.role}</span></div>
-                              <div><span className="text-mid-gray mr-1">Trạng thái tài khoản:</span> <span className="capitalize font-semibold text-emerald-600">● {selectedOrder.user.status}</span></div>
+                            <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-[11px]">
+                              <div><span className="text-mid-gray block mb-0.5">Họ và tên</span><span className="font-semibold text-ink text-xs">{selectedOrder.user.full_name}</span></div>
+                              <div><span className="text-mid-gray block mb-0.5">Email</span><span className="font-mono text-ink text-xs">{selectedOrder.user.email}</span></div>
+                              <div><span className="text-mid-gray block mb-0.5">Số điện thoại</span><span className="font-mono text-ink text-xs">{selectedOrder.user.phone || "---"}</span></div>
+                              <div><span className="text-mid-gray block mb-0.5">ID User</span><span className="font-mono text-ink text-xs">#{selectedOrder.user.id}</span></div>
+                              <div><span className="text-mid-gray block mb-0.5">Ngày tham gia</span><span className="text-ink text-xs">{formatDateTime(selectedOrder.user.created_at)}</span></div>
+                              <div><span className="text-mid-gray block mb-0.5">Trạng thái</span><span className="capitalize font-semibold text-emerald-600 text-xs">● {selectedOrder.user.status}</span></div>
                             </div>
                           ) : (
                             <p className="text-xs text-mid-gray">Không có dữ liệu người mua</p>
@@ -1128,14 +1135,26 @@ export default function OrdersManagement() {
                             <h3 className="text-xs font-bold uppercase tracking-wider text-mid-gray">
                               Khóa học mua
                             </h3>
+                            {selectedOrder.course && (
+                              <a href={`/admin/courses?open_course_id=${selectedOrder.course.id}`} className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                                Xem chi tiết &rarr;
+                              </a>
+                            )}
                           </div>
                           {selectedOrder.course ? (
-                            <div className="space-y-1.5 text-xs">
-                              <div className="font-bold text-ink text-sm">{selectedOrder.course.title}</div>
-                              <div className="text-mid-gray font-mono text-[11px]">{selectedOrder.course.slug}</div>
-                              <div className="flex items-center gap-4 text-xs pt-1">
-                                <span>Giá niêm yết: <strong className="text-ink font-sans">{formatVND(selectedOrder.course.price)}</strong></span>
-                                <span>Trạng thái: <strong className="capitalize text-emerald-600">● {selectedOrder.course.status}</strong></span>
+                            <div className="flex items-start gap-3 text-xs">
+                              <img
+                                src={selectedOrder.course.thumbnail_url || "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=120&auto=format&fit=crop&q=60"}
+                                alt="Course"
+                                className="w-16 h-10 rounded object-cover border border-hairline bg-canvas shrink-0"
+                              />
+                              <div className="space-y-1 flex-1">
+                                <div className="font-bold text-ink text-sm line-clamp-2">{selectedOrder.course.title}</div>
+                                <div className="text-mid-gray text-[11px]">Giảng viên: <span className="font-semibold text-ink">{selectedOrder.course.instructor_name || selectedOrder.course.instructor?.full_name || "---"}</span></div>
+                                <div className="flex items-center gap-4 text-[11px] pt-1">
+                                  <span>Giá: <strong className="text-ink font-sans">{formatVND(selectedOrder.course.price)}</strong></span>
+                                  <span>Trạng thái: <strong className="capitalize text-emerald-600">● {selectedOrder.course.status}</strong></span>
+                                </div>
                               </div>
                             </div>
                           ) : (
@@ -1189,75 +1208,120 @@ export default function OrdersManagement() {
                     )}
 
                     {/* Tab 3: Đối chiếu dữ liệu */}
-                    {activeTab === 'consistency' && (
+                    {activeTab === 'consistency' && (() => {
+                      const isFullyPaid = selectedOrder.status === "paid" && selectedOrder.payment_status === "paid";
+                      const hasEnrollment = !!selectedOrder.enrollment;
+                      const hasRevenue = !!selectedOrder.revenue;
+                      
+                      return (
                       <div className="space-y-4">
-                        {!(selectedOrder.status === "paid" && selectedOrder.payment_status === "paid") && (
-                          <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50 text-amber-800 text-xs font-medium">
-                            ● Đơn chưa hoàn tất thanh toán chuẩn (Status = {selectedOrder.status}, Payment Status = {selectedOrder.payment_status}).
+                        {!isFullyPaid && (
+                          <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs">
+                            <strong className="block mb-1 font-bold">● Đơn chưa hoàn tất thanh toán</strong>
+                            <p className="opacity-90 leading-relaxed">
+                              (Trạng thái đơn: {getOrderStatusMeta(selectedOrder.status).label}, Thanh toán: {getPaymentStatusMeta(selectedOrder.payment_status).label})<br/>
+                              Đơn chưa thanh toán nên hệ thống chưa tạo Ghi danh (Enrollment) và chưa phân bổ Doanh thu (Revenue).
+                            </p>
                           </div>
                         )}
 
-                        <div className="rounded-2xl border border-hairline bg-paper p-4 space-y-2 text-xs">
+                        <div className="rounded-xl border border-hairline bg-paper p-4 text-xs">
                           <div className="flex items-center justify-between border-b border-hairline pb-2 mb-2">
-                            <h4 className="font-bold text-ink uppercase tracking-wider text-[11px]">1. Kiểm tra Ghi danh học tập (Enrollment)</h4>
-                            <span className={`font-semibold ${selectedOrder.consistency?.paid_has_enrollment ? "text-emerald-600" : "text-rose-600"}`}>
-                              ● {selectedOrder.consistency?.paid_has_enrollment ? "Có enrollment tương ứng" : "Thiếu enrollment"}
-                            </span>
+                            <h4 className="font-bold text-ink uppercase tracking-wider text-[11px]">1. Ghi danh học tập (Enrollment)</h4>
+                            <div className="flex items-center gap-3">
+                              <span className={`font-semibold ${isFullyPaid ? (hasEnrollment ? "text-emerald-600" : "text-rose-600") : (hasEnrollment ? "text-emerald-600" : "text-amber-600")}`}>
+                                ● {isFullyPaid ? (hasEnrollment ? "Khớp (Có dữ liệu)" : "Không khớp (Thiếu bất thường)") : (hasEnrollment ? "Đã phát sinh" : "Chưa phát sinh")}
+                              </span>
+                              {hasEnrollment && (
+                                <a href={`/admin/enrollments?open_enrollment_id=${selectedOrder.enrollment.id}`} className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                                  Chi tiết &rarr;
+                                </a>
+                              )}
+                            </div>
                           </div>
-                          {selectedOrder.enrollment ? (
-                            <div className="grid grid-cols-2 gap-2 pt-1">
-                              <div><span className="text-mid-gray mr-1">Enrollment ID:</span> <span className="font-mono text-ink">#{selectedOrder.enrollment.id}</span></div>
-                              <div><span className="text-mid-gray mr-1">Tiến độ học tập:</span> <span className="font-bold text-ink">{selectedOrder.enrollment.progress_percent}%</span></div>
+                          {hasEnrollment ? (
+                            <div className="grid grid-cols-2 gap-y-2 gap-x-4 pt-1 text-[11px]">
+                              <div><span className="text-mid-gray block mb-0.5">Enrollment ID</span><span className="font-mono text-ink">#{selectedOrder.enrollment.id}</span></div>
+                              <div><span className="text-mid-gray block mb-0.5">Tiến độ học tập</span><span className="font-bold text-ink">{selectedOrder.enrollment.progress_percent}%</span></div>
                             </div>
                           ) : (
-                            <p className="text-mid-gray pt-1">
-                              {selectedOrder.status === "paid" && selectedOrder.payment_status === "paid" 
-                                ? "Cảnh báo: Đơn đã thanh toán nhưng chưa tìm thấy dữ liệu Enrollment!" 
-                                : "Đơn chưa phát sinh ghi danh."}
+                            <p className={`pt-1 text-[11px] ${isFullyPaid ? "text-rose-600 font-medium" : "text-mid-gray"}`}>
+                              {isFullyPaid 
+                                ? "Cảnh báo: Đơn đã thanh toán nhưng chưa tìm thấy dữ liệu Enrollment trong hệ thống. Cần kiểm tra lại luồng đồng bộ." 
+                                : "Dữ liệu chưa phát sinh do đơn chưa hoàn tất."}
                             </p>
                           )}
                         </div>
 
-                        <div className="rounded-2xl border border-hairline bg-paper p-4 space-y-2 text-xs">
+                        <div className="rounded-xl border border-hairline bg-paper p-4 text-xs">
                           <div className="flex items-center justify-between border-b border-hairline pb-2 mb-2">
-                            <h4 className="font-bold text-ink uppercase tracking-wider text-[11px]">2. Kiểm tra Phân bổ doanh thu (Revenue Split)</h4>
-                            <span className={`font-semibold ${selectedOrder.consistency?.paid_has_revenue ? "text-emerald-600" : "text-rose-600"}`}>
-                              ● {selectedOrder.consistency?.paid_has_revenue ? "Có revenue tương ứng" : "Thiếu revenue"}
-                            </span>
+                            <h4 className="font-bold text-ink uppercase tracking-wider text-[11px]">2. Phân bổ doanh thu (Revenue Split)</h4>
+                            <div className="flex items-center gap-3">
+                              <span className={`font-semibold ${isFullyPaid ? (hasRevenue ? "text-emerald-600" : "text-rose-600") : (hasRevenue ? "text-emerald-600" : "text-amber-600")}`}>
+                                ● {isFullyPaid ? (hasRevenue ? "Khớp (Có dữ liệu)" : "Không khớp (Thiếu bất thường)") : (hasRevenue ? "Đã phát sinh" : "Chưa phát sinh")}
+                              </span>
+                              {hasRevenue && (
+                                <a href={`/admin/revenue?open_revenue_id=${selectedOrder.revenue.id}`} className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                                  Chi tiết &rarr;
+                                </a>
+                              )}
+                            </div>
                           </div>
-                          {selectedOrder.revenue ? (
-                            <div className="grid grid-cols-2 gap-2 pt-1">
-                              <div><span className="text-mid-gray mr-1">Revenue ID:</span> <span className="font-mono text-ink font-sans">#{selectedOrder.revenue.id}</span></div>
-                              <div><span className="text-mid-gray mr-1">Gross Amount:</span> <span className="font-bold text-ink font-sans">{formatVND(selectedOrder.revenue.gross_amount)}</span></div>
-                              <div><span className="text-mid-gray mr-1">Instructor Share:</span> <span className="font-medium text-ink font-sans">{formatVND(selectedOrder.revenue.instructor_amount)}</span></div>
-                              <div><span className="text-mid-gray mr-1">Platform Fee:</span> <span className="font-medium text-ink font-sans">{formatVND(selectedOrder.revenue.platform_amount)}</span></div>
+                          {hasRevenue ? (
+                            <div className="grid grid-cols-2 gap-y-2 gap-x-4 pt-1 text-[11px]">
+                              <div><span className="text-mid-gray block mb-0.5">Revenue ID</span><span className="font-mono text-ink font-sans">#{selectedOrder.revenue.id}</span></div>
+                              <div><span className="text-mid-gray block mb-0.5">Gross Amount</span><span className="font-bold text-ink font-sans">{formatVND(selectedOrder.revenue.gross_amount)}</span></div>
+                              <div><span className="text-mid-gray block mb-0.5">Instructor Share</span><span className="font-medium text-ink font-sans">{formatVND(selectedOrder.revenue.instructor_amount)}</span></div>
+                              <div><span className="text-mid-gray block mb-0.5">Platform Fee</span><span className="font-medium text-ink font-sans">{formatVND(selectedOrder.revenue.platform_amount)}</span></div>
                             </div>
                           ) : (
-                            <p className="text-mid-gray pt-1">
-                              {selectedOrder.status === "paid" && selectedOrder.payment_status === "paid" 
-                                ? "Cảnh báo: Đơn đã thanh toán nhưng chưa phân bổ doanh thu!" 
-                                : "Đơn chưa phát sinh phân bổ."}
+                            <p className={`pt-1 text-[11px] ${isFullyPaid ? "text-rose-600 font-medium" : "text-mid-gray"}`}>
+                              {isFullyPaid 
+                                ? "Cảnh báo: Đơn đã thanh toán nhưng chưa phân bổ doanh thu. Cần kiểm tra lại luồng đối soát." 
+                                : "Dữ liệu chưa phát sinh do đơn chưa hoàn tất."}
                             </p>
                           )}
                         </div>
                       </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Tab 4: Timeline */}
                     {activeTab === 'timeline' && (
                       <div className="space-y-4">
-                        <div className="rounded-2xl border border-hairline bg-paper p-4 text-xs space-y-4">
-                          <div className="relative pl-6 border-l border-hairline space-y-4">
+                        <div className="rounded-xl border border-hairline bg-paper p-4 text-xs">
+                          <div className="relative pl-4 border-l border-hairline/60 ml-2 space-y-3">
                             <div className="relative">
-                              <span className="absolute -left-[29px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 border border-emerald-200">✓</span>
-                              <div className="font-bold text-ink">Khởi tạo đơn hàng</div>
-                              <div className="text-[10px] text-mid-gray mt-0.5">{formatDateTime(selectedOrder.created_at)}</div>
+                              <span className="absolute -left-[21px] top-0 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-paper"></span>
+                              <div className="font-semibold text-ink leading-none">Khởi tạo đơn hàng</div>
+                              <div className="text-[10px] text-mid-gray mt-1.5 leading-none">{formatDateTime(selectedOrder.created_at)}</div>
                             </div>
                             {selectedOrder.paid_at && (
                               <div className="relative">
-                                <span className="absolute -left-[29px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 border border-emerald-200">✓</span>
-                                <div className="font-bold text-ink">Xác nhận thanh toán (Success)</div>
-                                <div className="text-[10px] text-mid-gray mt-0.5">{formatDateTime(selectedOrder.paid_at)}</div>
+                                <span className="absolute -left-[21px] top-0 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-paper"></span>
+                                <div className="font-semibold text-ink leading-none">Xác nhận thanh toán</div>
+                                <div className="text-[10px] text-mid-gray mt-1.5 leading-none">{formatDateTime(selectedOrder.paid_at)}</div>
+                              </div>
+                            )}
+                            {selectedOrder.enrollment?.created_at && (
+                              <div className="relative">
+                                <span className="absolute -left-[21px] top-0 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-blue-500 ring-4 ring-paper"></span>
+                                <div className="font-semibold text-ink leading-none">Ghi danh học tập</div>
+                                <div className="text-[10px] text-mid-gray mt-1.5 leading-none">{formatDateTime(selectedOrder.enrollment.created_at)}</div>
+                              </div>
+                            )}
+                            {selectedOrder.revenue?.created_at && (
+                              <div className="relative">
+                                <span className="absolute -left-[21px] top-0 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-purple-500 ring-4 ring-paper"></span>
+                                <div className="font-semibold text-ink leading-none">Phân bổ doanh thu</div>
+                                <div className="text-[10px] text-mid-gray mt-1.5 leading-none">{formatDateTime(selectedOrder.revenue.created_at)}</div>
+                              </div>
+                            )}
+                            {selectedOrder.refunded_at && (
+                              <div className="relative">
+                                <span className="absolute -left-[21px] top-0 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-rose-500 ring-4 ring-paper"></span>
+                                <div className="font-semibold text-ink leading-none">Hoàn tiền</div>
+                                <div className="text-[10px] text-mid-gray mt-1.5 leading-none">{formatDateTime(selectedOrder.refunded_at)}</div>
                               </div>
                             )}
                           </div>
