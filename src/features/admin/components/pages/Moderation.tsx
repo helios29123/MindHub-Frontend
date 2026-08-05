@@ -5,6 +5,7 @@ import {
   moderateItem,
 } from "@/assets/js/api/moderation-api";
 import { showToast } from "@/assets/js/toast";
+import { Link, useSearchParams } from "react-router-dom";
 import AdminPagination from "../shared/AdminPagination";
 import FilterSelect from "./FilterSelect";
 
@@ -97,17 +98,76 @@ export default function Moderation() {
   };
 
   // Filters state
-  const [search, setSearch] = useState("");
-  const [targetType, setTargetType] = useState("all");
-  const [status, setStatus] = useState("all");
-  const [replyStatus, setReplyStatus] = useState("all");
-  const [timePreset, setTimePreset] = useState("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(20);
-  const [sortBy, setSortBy] = useState("created_at");
-  const [sortDirection, setSortDirection] = useState("desc");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const updateFilter = (key: string, value: string | number | null) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value === null || value === "all" || value === "") {
+        next.delete(key);
+      } else {
+        next.set(key, String(value));
+      }
+      
+      if (key !== "page" && key !== "sort_by" && key !== "sort_direction") {
+        next.delete("page");
+      }
+      
+      return next;
+    });
+  };
+
+  const updateFilters = (updates: Record<string, string | number | null>) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      let isFilterChange = false;
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value === null || value === "all" || value === "") {
+          next.delete(key);
+        } else {
+          next.set(key, String(value));
+        }
+        if (key !== "page" && key !== "sort_by" && key !== "sort_direction") {
+          isFilterChange = true;
+        }
+      });
+      if (isFilterChange) {
+        next.delete("page");
+      }
+      return next;
+    });
+  };
+
+  const search = searchParams.get("search") || "";
+  const [tempSearch, setTempSearch] = useState(search);
+  const setSearch = (val: string) => updateFilter("search", val);
+
+  // Sync tempSearch when URL changes
+  useEffect(() => {
+    setTempSearch(search);
+  }, [search]);
+  const targetType = searchParams.get("target_type") || "all";
+  const setTargetType = (val: string) => updateFilter("target_type", val);
+  const status = searchParams.get("status") || "all";
+  const setStatus = (val: string) => updateFilter("status", val);
+  const replyStatus = searchParams.get("reply_status") || "all";
+  const setReplyStatus = (val: string) => updateFilter("reply_status", val);
+  const rating = searchParams.get("rating") || "all";
+  const setRating = (val: string) => updateFilter("rating", val);
+  const timePreset = searchParams.get("time_preset") || "all";
+  const setTimePreset = (val: string) => updateFilter("time_preset", val);
+  const dateFrom = searchParams.get("date_from") || "";
+  const setDateFrom = (val: string) => updateFilter("date_from", val);
+  const dateTo = searchParams.get("date_to") || "";
+  const setDateTo = (val: string) => updateFilter("date_to", val);
+  const page = Number(searchParams.get("page")) || 1;
+  const setPage = (val: number) => updateFilter("page", val);
+  const perPage = Number(searchParams.get("per_page")) || 20;
+  const setPerPage = (val: number) => updateFilter("per_page", val);
+  const sortBy = searchParams.get("sort_by") || "created_at";
+  const setSortBy = (val: string) => updateFilter("sort_by", val);
+  const sortDirection = searchParams.get("sort_direction") || "desc";
+  const setSortDirection = (val: string) => updateFilter("sort_direction", val);
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
 
   // Course Filter Context (if active)
@@ -141,6 +201,7 @@ export default function Moderation() {
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeColumnMenu, setActiveColumnMenu] = useState<string | null>(null);
 
   // Drawer detail state
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -167,6 +228,7 @@ export default function Moderation() {
       targetType !== "all" ||
       status !== "all" ||
       replyStatus !== "all" ||
+      rating !== "all" ||
       timePreset !== "all" ||
       dateFrom !== "" ||
       dateTo !== "" ||
@@ -177,6 +239,7 @@ export default function Moderation() {
     targetType,
     status,
     replyStatus,
+    rating,
     timePreset,
     dateFrom,
     dateTo,
@@ -196,6 +259,7 @@ export default function Moderation() {
         target_type: targetType,
         status,
         reply_status: replyStatus,
+        rating,
         time_preset: timePreset,
         date_from: dateFrom,
         date_to: dateTo,
@@ -259,9 +323,11 @@ export default function Moderation() {
   }, [
     page,
     perPage,
+    search,
     targetType,
     status,
     replyStatus,
+    rating,
     timePreset,
     dateFrom,
     dateTo,
@@ -273,21 +339,15 @@ export default function Moderation() {
   // Handle Search Input Submission or trigger
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setPage(1);
-    loadData();
+    if (tempSearch !== search) {
+      setSearch(tempSearch);
+    }
   };
 
   // Handle Reset Filters
   const handleResetFilters = () => {
-    setSearch("");
-    setTargetType("all");
-    setStatus("all");
-    setReplyStatus("all");
-    setTimePreset("all");
-    setDateFrom("");
-    setDateTo("");
+    setSearchParams(new URLSearchParams());
     setCourseFilter(null);
-    setPage(1);
   };
 
   // Handle Detail Drawer Open
@@ -426,6 +486,74 @@ export default function Moderation() {
     };
   };
 
+  const renderSortHeader = (field: string, label: string, ascLabel = "Từ A–Z", descLabel = "Từ Z–A") => {
+    return (
+      <th scope="col" className="p-3 relative whitespace-nowrap" data-column-menu>
+        <button
+          type="button"
+          onClick={() =>
+            setActiveColumnMenu(activeColumnMenu === field ? null : field)
+          }
+          className={`inline-flex items-center gap-1 hover:text-ink transition-colors cursor-pointer font-bold bg-transparent border-none ${
+            sortBy === field ? "text-blue-600" : "text-mid-gray"
+          }`}
+        >
+          {label}
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+          </svg>
+        </button>
+        {activeColumnMenu === field && (
+          <div className="absolute left-3 top-9 z-30 w-40 bg-paper border border-hairline rounded-[6px] p-1.5 shadow-subtle flex flex-col text-left font-normal normal-case">
+            <button
+              type="button"
+              onClick={() => {
+                setSortBy(field);
+                setSortDirection("asc");
+                
+                setActiveColumnMenu(null);
+              }}
+              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-50 rounded-[4px] transition-colors font-medium cursor-pointer border-none bg-transparent ${
+                sortBy === field && sortDirection === "asc" ? "bg-neutral-50 font-bold text-blue-600" : "text-ink"
+              }`}
+            >
+              {ascLabel}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSortBy(field);
+                setSortDirection("desc");
+                
+                setActiveColumnMenu(null);
+              }}
+              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-50 rounded-[4px] transition-colors font-medium cursor-pointer border-none bg-transparent ${
+                sortBy === field && sortDirection === "desc" ? "bg-neutral-50 font-bold text-blue-600" : "text-ink"
+              }`}
+            >
+              {descLabel}
+            </button>
+            <div className="h-[1px] bg-hairline my-1 mx-1.5"></div>
+            <button
+              type="button"
+              onClick={() => {
+                if (sortBy === field) {
+                   setSortBy("created_at");
+                   setSortDirection("desc");
+                   
+                }
+                setActiveColumnMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 text-red-600 rounded-[4px] transition-colors font-semibold cursor-pointer border-none bg-transparent"
+            >
+              Bỏ sắp xếp
+            </button>
+          </div>
+        )}
+      </th>
+    );
+  };
+
   return (
     <>
       <header className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -469,10 +597,8 @@ export default function Moderation() {
         <button
           type="button"
           onClick={() => {
-            setTargetType("all");
-            setStatus("all");
-            setReplyStatus("all");
-            setPage(1);
+            updateFilters({ target_type: "all", status: "all", reply_status: "all" });
+            
             scrollToTable("Tổng nội dung");
           }}
           className={`flex flex-col justify-between h-[122px] rounded-2xl border bg-paper p-4 text-left shadow-xs transition-all hover:shadow-subtle cursor-pointer group relative overflow-hidden ${targetType === "all" && status === "all" && replyStatus === "all" ? "border-ink shadow-sm" : "border-hairline"}`}
@@ -513,10 +639,8 @@ export default function Moderation() {
         <button
           type="button"
           onClick={() => {
-            setTargetType("comment");
-            setStatus("all");
-            setReplyStatus("all");
-            setPage(1);
+            updateFilters({ target_type: "comment", status: "all", reply_status: "all" });
+            
             scrollToTable("Bình luận");
           }}
           className={`flex flex-col justify-between h-[122px] rounded-2xl border bg-paper p-4 text-left shadow-xs transition-all hover:shadow-subtle cursor-pointer group relative overflow-hidden ${targetType === "comment" && replyStatus === "all" ? "border-blue-500 shadow-sm" : "border-hairline"}`}
@@ -559,10 +683,8 @@ export default function Moderation() {
         <button
           type="button"
           onClick={() => {
-            setTargetType("review");
-            setStatus("all");
-            setReplyStatus("all");
-            setPage(1);
+            updateFilters({ target_type: "review", status: "all", reply_status: "all" });
+            
             scrollToTable("Đánh giá");
           }}
           className={`flex flex-col justify-between h-[122px] rounded-2xl border bg-paper p-4 text-left shadow-xs transition-all hover:shadow-subtle cursor-pointer group relative overflow-hidden ${targetType === "review" && replyStatus === "all" ? "border-amber-500 shadow-sm" : "border-hairline"}`}
@@ -604,11 +726,11 @@ export default function Moderation() {
         <button
           type="button"
           onClick={() => {
-            setReplyStatus("violation");
-            setPage(1);
+            updateFilters({ target_type: "comment", status: "all", reply_status: "violation" });
+            
             scrollToTable("Bình luận vi phạm");
           }}
-          className={`flex flex-col justify-between h-[122px] rounded-2xl border bg-paper p-4 text-left shadow-xs transition-all hover:shadow-subtle cursor-pointer group relative overflow-hidden ${replyStatus === "violation" ? "border-rose-500 shadow-sm" : "border-hairline"}`}
+          className={`flex flex-col justify-between h-[122px] rounded-2xl border bg-paper p-4 text-left shadow-xs transition-all hover:shadow-subtle cursor-pointer group relative overflow-hidden ${targetType === "comment" && replyStatus === "violation" ? "border-rose-500 shadow-sm" : "border-hairline"}`}
         >
           <div className="flex items-center justify-between w-full">
             <span className="text-xs font-semibold text-mid-gray">
@@ -666,8 +788,8 @@ export default function Moderation() {
             </svg>
             <input
               type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={tempSearch}
+              onChange={(e) => setTempSearch(e.target.value)}
               placeholder="Nội dung, người dùng, khóa học..."
               className="w-full h-full pl-10 pr-3 text-xs md:text-sm bg-canvas border border-hairline rounded-lg focus:outline-none focus:border-ink transition-colors text-ink placeholder:text-mid-gray/70"
             />
@@ -696,7 +818,7 @@ export default function Moderation() {
                 ]}
                 onChange={(val) => {
                   setTargetType(val);
-                  setPage(1);
+                  
                 }}
                 id="select-target-type"
                 activeId={activeDropdownId}
@@ -736,7 +858,7 @@ export default function Moderation() {
                 ]}
                 onChange={(val) => {
                   setStatus(val);
-                  setPage(1);
+                  
                 }}
                 id="select-status"
                 activeId={activeDropdownId}
@@ -777,7 +899,7 @@ export default function Moderation() {
                 ]}
                 onChange={(val) => {
                   setReplyStatus(val);
-                  setPage(1);
+                  
                 }}
                 id="select-reply-status"
                 activeId={activeDropdownId}
@@ -786,6 +908,34 @@ export default function Moderation() {
                 searchable
               />
             </div>
+
+            {/* Rating select */}
+            {targetType !== "comment" && (
+              <div className="min-w-[140px] shrink-0">
+                <FilterSelect
+                  label=""
+                  placeholder="Tất cả số sao"
+                  value={rating}
+                  options={[
+                    { value: "all", label: "Tất cả số sao" },
+                    { value: "5", label: "⭐⭐⭐⭐⭐ (5 sao)" },
+                    { value: "4", label: "⭐⭐⭐⭐ (4 sao)" },
+                    { value: "3", label: "⭐⭐⭐ (3 sao)" },
+                    { value: "2", label: "⭐⭐ (2 sao)" },
+                    { value: "1", label: "⭐ (1 sao)" },
+                  ]}
+                  onChange={(val) => {
+                    setRating(val);
+                    
+                  }}
+                  id="select-rating"
+                  activeId={activeDropdownId}
+                  setActiveId={setActiveDropdownId}
+                  className="w-full h-[44px]"
+                  searchable
+                />
+              </div>
+            )}
 
             {/* Time Preset select */}
             <div className="min-w-[140px] shrink-0">
@@ -803,7 +953,7 @@ export default function Moderation() {
                 ]}
                 onChange={(val) => {
                   setTimePreset(val);
-                  setPage(1);
+                  
                 }}
                 id="select-time-preset"
                 activeId={activeDropdownId}
@@ -848,7 +998,7 @@ export default function Moderation() {
                 value={dateFrom}
                 onChange={(e) => {
                   setDateFrom(e.target.value);
-                  setPage(1);
+                  
                 }}
                 className="h-9 px-3 text-xs bg-canvas border border-hairline rounded-full focus:outline-none focus:border-ink text-ink"
               />
@@ -860,7 +1010,7 @@ export default function Moderation() {
                 value={dateTo}
                 onChange={(e) => {
                   setDateTo(e.target.value);
-                  setPage(1);
+                  
                 }}
                 className="h-9 px-3 text-xs bg-canvas border border-hairline rounded-full focus:outline-none focus:border-ink text-ink"
               />
@@ -963,24 +1113,12 @@ export default function Moderation() {
               </colgroup>
               <thead>
                 <tr className="border-b border-hairline bg-canvas/80 text-[11px] font-semibold uppercase tracking-wider text-mid-gray">
-                  <th scope="col" className="py-3 px-3.5">
-                    Người gửi
-                  </th>
-                  <th scope="col" className="py-3 px-3.5">
-                    Bài học / Khóa học
-                  </th>
-                  <th scope="col" className="py-3 px-3.5">
-                    Nội dung
-                  </th>
-                  <th scope="col" className="py-3 px-3.5">
-                    Phân loại
-                  </th>
-                  <th scope="col" className="py-3 px-3.5">
-                    Trạng thái
-                  </th>
-                  <th scope="col" className="py-3 px-3.5">
-                    Thời gian
-                  </th>
+                  {renderSortHeader("user_name", "Người gửi")}
+                  {renderSortHeader("course_title", "Bài học / Khóa học")}
+                  {renderSortHeader("content", "Nội dung")}
+                  {renderSortHeader("target_type", "Phân loại")}
+                  {renderSortHeader("status", "Trạng thái")}
+                  {renderSortHeader("created_at", "Thời gian", "Cũ nhất", "Mới nhất")}
                 </tr>
               </thead>
               <tbody className="divide-y divide-hairline text-ink">
@@ -1043,20 +1181,23 @@ export default function Moderation() {
                         </div>
                       </td>
 
-                      {/* Snippet / stars content */}
-                      <td className="py-3.5 px-3.5">
-                        <div className="flex flex-col gap-1 pr-4">
-                          {!isComment && item.rating !== null && (
+                      {/* Content */}
+                      <td className="py-4 px-3.5 align-top">
+                        <div className="flex flex-col gap-1.5 max-w-full">
+                          {!isComment && item.rating && (
                             <div className="mb-0.5">
                               {renderStars(item.rating)}
                             </div>
                           )}
                           {item.warning_type ? (
-                            <p className="text-xs text-rose-600 font-semibold line-clamp-2 leading-relaxed italic">
-                              {isComment ? "Bình luận" : "Đánh giá"} vi phạm chính sách cộng đồng
-                            </p>
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-rose-50 text-rose-600 border border-rose-100 text-[11px] font-semibold w-fit mt-1">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              {isComment ? "Bình luận vi phạm chính sách cộng đồng" : "Đánh giá vi phạm chính sách cộng đồng"}
+                            </div>
                           ) : (
-                            <p className="text-xs text-ink line-clamp-2 leading-relaxed">
+                            <p className="text-xs sm:text-[13px] text-ink leading-relaxed font-medium line-clamp-3">
                               {item.content || (
                                 <span className="text-mid-gray italic">
                                   Không có nội dung nhận xét
@@ -1130,7 +1271,7 @@ export default function Moderation() {
             onPageChange={(p) => setPage(p)}
             onPerPageChange={(pp) => {
               setPerPage(pp);
-              setPage(1);
+              
             }}
             itemLabel="bản ghi"
           />
@@ -1236,9 +1377,17 @@ export default function Moderation() {
 
                   {/* Sender User profile */}
                   <div className="space-y-2.5">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-mid-gray">
-                      Người thực hiện
-                    </h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-mid-gray">
+                        Người thực hiện
+                      </h3>
+                      {drawerItem.user?.id && (
+                        <Link to={`/admin/users?open_user_id=${drawerItem.user.id}`} className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1">
+                          Xem chi tiết người dùng
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                        </Link>
+                      )}
+                    </div>
                     <div className="flex items-center gap-3 p-3.5 rounded-xl border border-hairline bg-paper">
                       {drawerItem.user?.avatar_url ? (
                         <img
@@ -1284,9 +1433,17 @@ export default function Moderation() {
                       Thông tin liên quan
                     </h3>
                     <div className="rounded-xl border border-hairline bg-paper p-4 space-y-3 text-xs">
-                      <div className="flex items-center justify-between pb-2.5 border-b border-hairline/60">
-                        <span className="text-mid-gray">Khóa học:</span>
-                        <span className="font-medium text-ink truncate max-w-[260px]">
+                      <div className="flex flex-col gap-1.5 pb-2.5 border-b border-hairline/60">
+                        <div className="flex items-center justify-between">
+                          <span className="text-mid-gray">Khóa học:</span>
+                          {drawerItem.course?.id && (
+                            <Link to={`/admin/courses?open_course_id=${drawerItem.course.id}`} className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1">
+                              Xem chi tiết khóa học
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                            </Link>
+                          )}
+                        </div>
+                        <span className="font-medium text-ink truncate">
                           {drawerItem.course?.title || "Chưa rõ"}
                         </span>
                       </div>
@@ -1348,9 +1505,15 @@ export default function Moderation() {
                         Bằng chứng mua hàng
                       </h3>
                       <div className="p-4 rounded-xl border border-emerald-200/80 bg-emerald-50/40 text-xs space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-mid-gray">Mã đơn hàng:</span>
-                          <span className="font-semibold text-emerald-700">
+                        <div className="flex flex-col gap-1.5 pb-2 border-b border-emerald-100/50">
+                          <div className="flex items-center justify-between">
+                            <span className="text-mid-gray">Mã đơn hàng:</span>
+                            <Link to={`/admin/orders?open_order_id=${drawerItem.order.id}`} className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:underline flex items-center gap-1">
+                              Xem chi tiết đơn hàng
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                            </Link>
+                          </div>
+                          <span className="font-semibold text-ink">
                             {drawerItem.order.order_code}
                           </span>
                         </div>
@@ -1469,21 +1632,19 @@ export default function Moderation() {
                 <>
                   {drawerItem.status === "visible" && (
                     <>
-                      {drawerItem.target_type === "comment" && (
-                        <button
-                          type="button"
-                          onClick={() => triggerAction(drawerItem, "hide")}
-                          className="px-4 py-2 text-xs font-semibold rounded-full border border-hairline bg-paper text-ink hover:bg-canvas transition-colors cursor-pointer"
-                        >
-                          Ẩn nội dung
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => triggerAction(drawerItem, "hide")}
+                        className="px-4 py-2 text-xs font-semibold rounded-full border border-hairline bg-paper text-ink hover:bg-canvas transition-colors cursor-pointer"
+                      >
+                        {drawerItem.target_type === "comment" ? "Ẩn bình luận" : "Ẩn đánh giá"}
+                      </button>
                       <button
                         type="button"
                         onClick={() => triggerAction(drawerItem, "delete")}
                         className="px-4 py-2 text-xs font-semibold rounded-full bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-xs cursor-pointer"
                       >
-                        Xóa vĩnh viễn
+                        {drawerItem.target_type === "comment" ? "Xoá bình luận" : "Xoá đánh giá"}
                       </button>
                     </>
                   )}
