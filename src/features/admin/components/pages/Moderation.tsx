@@ -122,6 +122,7 @@ export default function Moderation() {
     total_comments: 0,
     total_reviews: 0,
     need_action_count: 0,
+    violation_count: 0,
     visible_comments: 0,
     hidden_comments: 0,
     deleted_comments: 0,
@@ -215,6 +216,7 @@ export default function Moderation() {
             total_comments: 0,
             total_reviews: 0,
             need_action_count: 0,
+            violation_count: 0,
             visible_comments: 0,
             hidden_comments: 0,
             deleted_comments: 0,
@@ -602,15 +604,15 @@ export default function Moderation() {
         <button
           type="button"
           onClick={() => {
-            setReplyStatus("needs_action");
+            setReplyStatus("violation");
             setPage(1);
-            scrollToTable("Cần xử lý");
+            scrollToTable("Bình luận vi phạm");
           }}
-          className={`flex flex-col justify-between h-[122px] rounded-2xl border bg-paper p-4 text-left shadow-xs transition-all hover:shadow-subtle cursor-pointer group relative overflow-hidden ${replyStatus === "needs_action" ? "border-rose-500 shadow-sm" : "border-hairline"}`}
+          className={`flex flex-col justify-between h-[122px] rounded-2xl border bg-paper p-4 text-left shadow-xs transition-all hover:shadow-subtle cursor-pointer group relative overflow-hidden ${replyStatus === "violation" ? "border-rose-500 shadow-sm" : "border-hairline"}`}
         >
           <div className="flex items-center justify-between w-full">
             <span className="text-xs font-semibold text-mid-gray">
-              Cần xử lý
+              Bình luận vi phạm
             </span>
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-50 text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition-colors shrink-0">
               <svg
@@ -626,7 +628,7 @@ export default function Moderation() {
           </div>
           <div className="my-auto">
             <div className="text-2xl font-bold tracking-tight text-ink leading-none">
-              {summary.need_action_count}
+              {summary.violation_count}
             </div>
             <p className="mt-1 text-[11px] text-mid-gray truncate">
               {summary.hidden_comments} bị ẩn •{" "}
@@ -637,7 +639,7 @@ export default function Moderation() {
             <div
               className="h-full rounded-full bg-rose-500 transition-all duration-300"
               style={{
-                width: `${summary.total_items > 0 ? (summary.need_action_count / summary.total_items) * 100 : 0}%`,
+                width: `${summary.total_items > 0 ? (summary.violation_count / summary.total_items) * 100 : 0}%`,
               }}
             ></div>
           </div>
@@ -753,6 +755,11 @@ export default function Moderation() {
                 options={[
                   { value: "all", label: "Tất cả phản hồi" },
                   {
+                    value: "violation",
+                    label: "● Phản hồi vi phạm",
+                    colorClass: "text-rose-600 font-bold",
+                  },
+                  {
                     value: "unanswered",
                     label: "● Chưa phản hồi",
                     colorClass: "text-rose-500",
@@ -766,16 +773,6 @@ export default function Moderation() {
                     value: "multiple_replies",
                     label: "● Nhiều phản hồi",
                     colorClass: "text-blue-500",
-                  },
-                  {
-                    value: "overdue",
-                    label: "● Quá hạn",
-                    colorClass: "text-red-600",
-                  },
-                  {
-                    value: "needs_action",
-                    label: "● Cần xử lý gấp",
-                    colorClass: "text-rose-600 font-bold",
                   },
                 ]}
                 onChange={(val) => {
@@ -1054,13 +1051,19 @@ export default function Moderation() {
                               {renderStars(item.rating)}
                             </div>
                           )}
-                          <p className="text-xs text-ink line-clamp-2 leading-relaxed">
-                            {item.content || (
-                              <span className="text-mid-gray italic">
-                                Không có nội dung nhận xét
-                              </span>
-                            )}
-                          </p>
+                          {item.warning_type ? (
+                            <p className="text-xs text-rose-600 font-semibold line-clamp-2 leading-relaxed italic">
+                              {isComment ? "Bình luận" : "Đánh giá"} vi phạm chính sách cộng đồng
+                            </p>
+                          ) : (
+                            <p className="text-xs text-ink line-clamp-2 leading-relaxed">
+                              {item.content || (
+                                <span className="text-mid-gray italic">
+                                  Không có nội dung nhận xét
+                                </span>
+                              )}
+                            </p>
+                          )}
                         </div>
                       </td>
 
