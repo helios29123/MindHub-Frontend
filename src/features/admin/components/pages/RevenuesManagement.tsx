@@ -607,10 +607,10 @@ export default function RevenuesManagement() {
 
       {/* FILTERS & LIST SECTION */}
       <section className="rounded-[6px] border border-hairline bg-paper shadow-subtle space-y-3 p-4 mb-4">
-        <form onSubmit={handleApplyFilters} className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] items-end gap-3 w-full">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(240px,1fr)_190px_220px] items-end gap-3 min-w-0 w-full">
+        <form onSubmit={handleApplyFilters} className="flex flex-wrap items-end justify-between gap-3 w-full">
+          <div className="flex flex-wrap items-end gap-[10px] min-w-0 flex-1">
             {/* Unified Search */}
-            <div className="relative w-full">
+            <div className="relative w-full sm:w-[380px] max-w-full shrink-0">
               <label htmlFor="filter-search" className="block text-[10px] font-bold uppercase tracking-wider text-mid-gray mb-1">TÌM KIẾM</label>
               <div className="relative">
                 <input
@@ -619,7 +619,7 @@ export default function RevenuesManagement() {
                   value={tempSearch}
                   onChange={(e) => setTempSearch(e.target.value)}
                   placeholder="Nhập tên khóa học, giảng viên hoặc mã đơn..."
-                  className="w-full h-9 pl-8 pr-8 text-xs bg-canvas border border-hairline rounded-[6px] focus:outline-none focus:border-ink transition-colors placeholder:text-mid-gray/60"
+                  className="w-full h-10 pl-8 pr-8 text-xs bg-paper border border-hairline rounded-lg hover:border-mid-gray/40 focus:ring-1 focus:ring-mid-gray/40 outline-none shadow-subtle font-medium text-ink transition-all placeholder:text-mid-gray/60 placeholder:font-normal"
                 />
                 <svg className="w-3.5 h-3.5 text-mid-gray/80 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
@@ -639,13 +639,13 @@ export default function RevenuesManagement() {
             </div>
 
             {/* Trạng thái */}
-            <div className="w-full">
+            <div className="w-full sm:w-[170px] max-w-full shrink-0">
               <label htmlFor="filter-status" className="block text-[10px] font-bold uppercase tracking-wider text-mid-gray mb-1">TRẠNG THÁI</label>
               <select
                 id="filter-status"
                 value={tempStatus}
                 onChange={(e) => setTempStatus(e.target.value)}
-                className="w-full h-9 px-3 text-xs bg-canvas border border-hairline rounded-[6px] focus:outline-none focus:border-ink text-ink cursor-pointer"
+                className="w-full h-10 px-3 text-xs bg-paper border border-hairline rounded-lg hover:border-mid-gray/40 focus:ring-1 focus:ring-mid-gray/40 outline-none shadow-subtle font-medium text-ink transition-all cursor-pointer"
               >
                 <option value="all">Tất cả trạng thái</option>
                 <option value="available">Khả dụng</option>
@@ -656,13 +656,13 @@ export default function RevenuesManagement() {
             </div>
 
             {/* Sắp xếp */}
-            <div className="w-full">
+            <div className="w-full sm:w-[170px] max-w-full shrink-0">
               <label htmlFor="filter-sort" className="block text-[10px] font-bold uppercase tracking-wider text-mid-gray mb-1">SẮP XẾP DOANH THU</label>
               <select
                 id="filter-sort"
                 value={tempSortBy}
                 onChange={(e) => setTempSortBy(e.target.value)}
-                className="w-full h-9 px-3 text-xs bg-canvas border border-hairline rounded-[6px] focus:outline-none focus:border-ink text-ink cursor-pointer"
+                className="w-full h-10 px-3 text-xs bg-paper border border-hairline rounded-lg hover:border-mid-gray/40 focus:ring-1 focus:ring-mid-gray/40 outline-none shadow-subtle font-medium text-ink transition-all cursor-pointer"
               >
                 <option value="latest">Mới ghi nhận</option>
                 <option value="oldest">Cũ nhất</option>
@@ -675,17 +675,17 @@ export default function RevenuesManagement() {
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center justify-end gap-2 h-9 shrink-0 w-full lg:w-auto self-end">
+          <div className="flex items-center justify-end gap-2 h-10 shrink-0 w-full lg:w-auto self-end">
             <button
               type="button"
               onClick={handleResetFilters}
-              className="h-9 px-4 text-xs font-semibold rounded-[6px] border border-hairline bg-paper text-ink hover:bg-canvas transition-colors cursor-pointer"
+              className="h-10 px-4 text-xs font-semibold rounded-lg border border-hairline bg-paper text-ink hover:bg-canvas transition-colors cursor-pointer shadow-subtle hover:border-mid-gray/40 focus:ring-1 focus:ring-mid-gray/40 outline-none"
             >
               Đặt lại
             </button>
             <button
               type="submit"
-              className="h-9 px-4 text-xs font-semibold rounded-[6px] bg-ink text-white hover:bg-ink/90 transition-colors shadow-sm cursor-pointer"
+              className="h-10 px-4 text-xs font-semibold rounded-lg bg-ink text-white hover:bg-ink/90 transition-colors shadow-subtle cursor-pointer"
             >
               Áp dụng
             </button>
@@ -736,14 +736,15 @@ export default function RevenuesManagement() {
                       }`}
                     >
                       {/* Col 1: REVENUE / ĐƠN HÀNG */}
-                      <td className="py-2.5 pl-2 pr-3">
-                        <div className="space-y-1 select-none">
-                          <div className="flex items-center gap-1">
-                            <span className="font-mono font-bold text-ink leading-none">#REV-{item.id}</span>
+                      <td className="py-2.5 pl-3 pr-3">
+                        <div className="flex flex-col gap-1.5 select-none min-w-0">
+                          <div className="flex items-center gap-1.5 group/rev">
+                            <span className="font-mono font-bold text-ink text-[11px] leading-none truncate">#REV-{item.id}</span>
                             <button
                               type="button"
                               onClick={(e) => handleCopyText(e, `#REV-${item.id}`, "mã doanh thu")}
-                              className="text-mid-gray hover:text-ink transition-colors p-0.5 rounded cursor-pointer shrink-0"
+                              className="text-mid-gray hover:text-ink p-0.5 rounded cursor-pointer shrink-0"
+                              title="Sao chép mã doanh thu"
                             >
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                                 <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
@@ -752,13 +753,14 @@ export default function RevenuesManagement() {
                             </button>
                           </div>
                           {item.order && (
-                            <div className="flex items-center gap-1 text-[10px] mt-0.5">
-                              <span className="text-mid-gray font-mono">Đơn:</span>
-                              <span className="font-mono font-semibold text-blue-600 hover:underline">{item.order.order_code}</span>
+                            <div className="flex items-center gap-1.5 group/ord">
+                              <span className="text-[10px] font-semibold text-mid-gray uppercase tracking-wider shrink-0">Đơn:</span>
+                              <span className="font-mono font-semibold text-blue-600 text-[10px] truncate hover:underline cursor-pointer" title={item.order.order_code}>{item.order.order_code}</span>
                               <button
                                 type="button"
                                 onClick={(e) => handleCopyText(e, item.order.order_code, "mã đơn")}
-                                className="text-mid-gray hover:text-ink transition-colors p-0.5 rounded cursor-pointer shrink-0"
+                                className="text-mid-gray hover:text-ink p-0.5 rounded cursor-pointer shrink-0"
+                                title="Sao chép mã đơn"
                               >
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                                   <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
@@ -828,8 +830,11 @@ export default function RevenuesManagement() {
                       </td>
 
                       {/* Col 6: NGÀY GHI NHẬN */}
-                      <td className="py-2.5 px-3 text-mid-gray font-sans">
-                        {formatDateTime(item.earned_at)}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <div className="flex flex-col gap-0.5 select-none text-[11px] leading-tight font-sans text-mid-gray">
+                          <span className="font-semibold text-ink">{formatDateTime(item.earned_at).split(' ')[0]}</span>
+                          <span>{formatDateTime(item.earned_at).split(' ')[1]}</span>
+                        </div>
                       </td>
 
                       {/* Col 7: ĐỐI SOÁT */}
