@@ -637,7 +637,7 @@ export default function CategoriesPage() {
 
     const changedItems: Array<{
       id: number;
-      sort_order: string | number;
+      sort_order: number;
       parent_id: number | null;
     }> = [];
     allCategoriesBase.forEach((c) => {
@@ -648,7 +648,7 @@ export default function CategoriesPage() {
       ) {
         changedItems.push({
           id: c.id,
-          sort_order: c.sort_order,
+          sort_order: Number(c.sort_order) || 0,
           parent_id: c.parent_id,
         });
       }
@@ -1064,7 +1064,7 @@ export default function CategoriesPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Tên hoặc slug danh mục..."
                 disabled={isLoading}
-                className="w-full h-10 pl-8 pr-3 text-xs bg-canvas focus:bg-paper border border-hairline rounded-[6px] focus:ring-1 focus:ring-mid-gray/40 outline-none text-ink placeholder-mid-gray/70 transition-all"
+                className="w-full h-10 pl-8 pr-3 text-xs bg-paper border border-hairline rounded-lg hover:border-mid-gray/40 focus:ring-1 focus:ring-mid-gray/40 outline-none shadow-subtle font-medium text-ink transition-all placeholder:text-mid-gray/60 placeholder:font-normal"
               />
               <Search className="w-3.5 h-3.5 text-mid-gray/80 absolute left-3 top-3.5" />
             </div>
@@ -1139,7 +1139,7 @@ export default function CategoriesPage() {
                 { value: "", label: "Tất cả cha" },
                 ...allCategoriesBase
                   .filter((c) => c.parent_id === null && c.deleted_at === null)
-                  .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+                  .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0))
                   .map((c) => {
                     const childCount = allCategoriesBase.filter(
                       (ch) => ch.parent_id === c.id && ch.deleted_at === null,

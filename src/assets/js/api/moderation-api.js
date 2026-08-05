@@ -18,6 +18,7 @@ export async function getModerationItems(params = {}) {
   if (params.date_to) urlParams.set("date_to", params.date_to);
   if (params.user_id) urlParams.set("user_id", params.user_id);
   if (params.course_id) urlParams.set("course_id", params.course_id);
+  if (params.rating && params.rating !== 'all') urlParams.set("rating", params.rating);
   if (params.sort_by) urlParams.set("sort_by", params.sort_by);
   if (params.sort_direction) urlParams.set("sort_direction", params.sort_direction);
 

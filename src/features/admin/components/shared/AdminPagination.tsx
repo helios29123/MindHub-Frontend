@@ -57,7 +57,7 @@ export default function AdminPagination({
   return (
     <div
       id="pagination-wrapper"
-      className="px-4 py-3 bg-surface-alt/30 border-t border-hairline flex flex-col sm:flex-row items-center justify-between gap-3 select-none w-full"
+      className="px-4 py-3 bg-paper border-t border-hairline flex flex-col sm:flex-row items-center justify-between gap-3 select-none w-full"
     >
       <div className="text-xs text-mid-gray">
         Đang hiển thị{" "}
@@ -79,7 +79,7 @@ export default function AdminPagination({
             onChange={(e) => {
               onPerPageChange(Number(e.target.value));
             }}
-            className="h-7 px-2 bg-canvas border border-hairline rounded focus:ring-1 focus:ring-mid-gray/40 outline-none text-ink cursor-pointer font-medium"
+            className="h-7 px-2 bg-paper border border-hairline rounded focus:outline-none focus:border-ink text-ink cursor-pointer font-medium transition-colors hover:bg-canvas"
           >
             <option value="10">10</option>
             <option value="20">20</option>
