@@ -91,10 +91,12 @@ export default function Moderation() {
   const tableRef = useRef<HTMLElement>(null);
 
   const scrollToTable = (filterName: string) => {
-    if (tableRef.current) {
-      tableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
     showToast(`Đã áp dụng bộ lọc: ${filterName}`, "success");
+    setTimeout(() => {
+      if (tableRef.current) {
+        tableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   };
 
   // Filters state
@@ -1065,7 +1067,7 @@ export default function Moderation() {
       )}
 
       {/* Table section */}
-      <section ref={tableRef} className="rounded-2xl border border-hairline bg-paper shadow-xs overflow-hidden">
+      <section ref={tableRef} className="scroll-mt-20 min-h-[600px] flex flex-col rounded-2xl border border-hairline bg-paper shadow-xs overflow-hidden">
         {/* Table Header Controls */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-5 py-4 border-b border-hairline gap-3 bg-canvas/40">
           <div className="flex items-center gap-2">
@@ -1079,9 +1081,9 @@ export default function Moderation() {
         </div>
 
         {/* Data Table */}
-        <div className="table-scroll overflow-x-auto custom-scrollbar">
+        <div className="table-scroll overflow-x-auto custom-scrollbar flex-1 flex flex-col">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 text-mid-gray">
+            <div className="flex-1 flex flex-col items-center justify-center py-20 text-mid-gray">
               <div className="w-8 h-8 rounded-full border-2 border-hairline border-t-ink animate-spin mb-3"></div>
               <span className="text-xs">Đang tải dữ liệu...</span>
             </div>

@@ -292,6 +292,15 @@ export default function Faqs() {
   };
 
   // --- Form & Filter Handlers ---
+  const scrollToTable = (filterMsg?: string) => {
+    if (filterMsg) {
+      toast.success(filterMsg);
+    }
+    setTimeout(() => {
+      document.getElementById('faqs-table-container')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
+
   const handleResetFilters = () => {
     setSearch("");
     setType("all");
@@ -300,7 +309,7 @@ export default function Faqs() {
     setSortBy("sort_order");
     setSortDirection("asc");
     setPage(1);
-    toast.info("Đã đặt lại các bộ lọc.");
+    scrollToTable("Đã đặt lại các bộ lọc.");
   };
 
   const handleSort = (key: string) => {
@@ -548,7 +557,7 @@ export default function Faqs() {
           onClick={() => {
             setStatus("active");
             setPage(1);
-            toast.info("Đang lọc FAQ: Đang hiển thị.");
+            scrollToTable("Đang lọc FAQ: Đang hiển thị.");
           }}
           className="group cursor-pointer rounded-2xl border border-hairline bg-paper p-4 shadow-subtle hover:border-emerald-500/30 transition-all duration-200"
         >
@@ -574,7 +583,7 @@ export default function Faqs() {
           onClick={() => {
             setStatus("inactive");
             setPage(1);
-            toast.info("Đang lọc FAQ: Đang ẩn.");
+            scrollToTable("Đang lọc FAQ: Đang ẩn.");
           }}
           className="group cursor-pointer rounded-2xl border border-hairline bg-paper p-4 shadow-subtle hover:border-zinc-400/40 transition-all duration-200"
         >
@@ -600,7 +609,7 @@ export default function Faqs() {
           onClick={() => {
             setScope("unlinked");
             setPage(1);
-            toast.info("Đang lọc FAQ: Chưa liên kết khóa học.");
+            scrollToTable("Đang lọc FAQ: Chưa liên kết khóa học.");
           }}
           className="group cursor-pointer rounded-2xl border border-hairline bg-paper p-4 shadow-subtle hover:border-amber-500/30 transition-all duration-200"
         >
@@ -627,7 +636,7 @@ export default function Faqs() {
             setSortBy("course_count");
             setSortDirection("desc");
             setPage(1);
-            toast.info("Đang sắp xếp: Nhiều khóa học liên kết nhất.");
+            scrollToTable("Đang sắp xếp: Nhiều khóa học liên kết nhất.");
           }}
           className="group cursor-pointer rounded-2xl border border-hairline bg-paper p-4 shadow-subtle hover:border-blue-500/30 transition-all duration-200"
         >
@@ -826,16 +835,16 @@ export default function Faqs() {
         )}
 
         {/* Table Container */}
-      <div className="rounded-2xl border border-hairline bg-paper shadow-subtle overflow-hidden relative mb-6">
+      <div id="faqs-table-container" className="scroll-mt-20 min-h-[600px] flex flex-col rounded-2xl border border-hairline bg-paper shadow-subtle overflow-hidden relative mb-6">
         {loading ? (
-          <div className="p-12 text-center">
+          <div className="p-12 text-center flex-1 flex flex-col items-center justify-center">
             <div className="flex flex-col items-center justify-center space-y-3">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-ink border-t-transparent"></div>
               <p className="text-sm font-medium text-mid-gray">Đang tải dữ liệu FAQ...</p>
             </div>
           </div>
         ) : items.length === 0 ? (
-          <div className="p-12 text-center">
+          <div className="p-12 text-center flex-1 flex flex-col items-center justify-center">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-canvas text-mid-gray mb-4">
               <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10"/>
@@ -876,7 +885,7 @@ export default function Faqs() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto custom-scrollbar">
+          <div className="overflow-x-auto custom-scrollbar flex-1 flex flex-col">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-hairline bg-surface-alt/60 text-[11px] font-bold uppercase tracking-wider text-mid-gray">

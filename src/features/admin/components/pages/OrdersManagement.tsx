@@ -188,7 +188,10 @@ export default function OrdersManagement() {
     setStatus(statusTab);
     setTempStatus(statusTab);
     setPage(1);
-    toast.info(`Đang lọc theo đơn hàng: ${getOrderStatusMeta(statusTab).label || "Tất cả"}`);
+    toast.success(`Đã lọc đơn hàng theo: ${getOrderStatusMeta(statusTab).label || "Tất cả"}`);
+    setTimeout(() => {
+      document.getElementById('orders-table-container')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
   };
 
   // --- Helpers ---
@@ -745,9 +748,9 @@ export default function OrdersManagement() {
       </div>
 
       {/* 5. TABLE CONTAINER */}
-      <div className="rounded-[6px] border border-hairline bg-paper shadow-subtle overflow-hidden mb-4">
+      <div id="orders-table-container" className="scroll-mt-20 min-h-[600px] flex flex-col rounded-[6px] border border-hairline bg-paper shadow-subtle overflow-hidden mb-4">
         {loading ? (
-          <div className="p-12 text-center">
+          <div className="p-12 text-center flex-1 flex flex-col items-center justify-center">
             <div className="flex flex-col items-center justify-center space-y-3">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-ink border-t-transparent"></div>
               <p className="text-sm font-medium text-mid-gray">Đang tải danh sách đơn hàng...</p>
