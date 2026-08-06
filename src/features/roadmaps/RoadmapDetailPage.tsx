@@ -83,7 +83,22 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         duration: "3 Tuần",
         estimatedHours: "30 Giờ",
         concepts: ["HTTP/HTTPS Protocol", "DNS & Web Hosting", "Command Line & Git Basics", "Chrome DevTools Master"],
-        courses: []
+        courses: [
+          {
+            id: "web-fundamentals-html-css",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Xây dựng Website Đầu tiên với HTML5, CSS3 Modern & Git",
+            instructor: "Trần Hoàng Nam",
+            price: 399000,
+            salePrice: 199000,
+            rating: 4.8,
+            reviewCount: 240,
+            enrolledCount: 1450,
+            thumbnail: "https://images.unsplash.com/photo-1542831371-29b0f74f9713?w=800&q=80",
+            tags: ["HTML", "CSS", "Git"],
+            level: "Beginner"
+          }
+        ]
       },
       {
         id: 2,
@@ -122,7 +137,22 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         estimatedHours: "50 Giờ",
         concepts: ["ES6+ Syntax & Features", "Promises & Async/Await", "DOM & Browser Events", "LocalStorage & SessionStorage"],
         projectTitle: "🏆 Project chặng 3: Ứng dụng Quản lý Công việc (Task Flow Board) kết hợp LocalStorage",
-        courses: []
+        courses: [
+          {
+            id: "javascript-advanced-es6-async",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Master JavaScript ES6+ & Lập trình Bất đồng bộ Thực chiến",
+            instructor: "Lê Hoàng Bảo",
+            price: 599000,
+            salePrice: 349000,
+            rating: 4.9,
+            reviewCount: 420,
+            enrolledCount: 1890,
+            thumbnail: "https://images.unsplash.com/photo-1579468118864-1b9ea3c0db4a?w=800&q=80",
+            tags: ["JavaScript", "ES6+", "Async"],
+            level: "Intermediate"
+          }
+        ]
       },
       {
         id: 4,
@@ -133,7 +163,22 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         duration: "6 Tuần",
         estimatedHours: "65 Giờ",
         concepts: ["React Components & Props", "React Custom Hooks", "React Router DOM v6", "Redux Toolkit & RTK Query"],
-        courses: []
+        courses: [
+          {
+            id: "react-18-redux-toolkit-mastery",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Chinh phục React 18, Redux Toolkit & Custom Hooks",
+            instructor: "Nguyễn Minh Khoa",
+            price: 699000,
+            salePrice: 399000,
+            rating: 4.9,
+            reviewCount: 510,
+            enrolledCount: 2680,
+            thumbnail: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&q=80",
+            tags: ["React 18", "Redux", "Hooks"],
+            level: "Intermediate"
+          }
+        ]
       },
       {
         id: 5,
@@ -145,7 +190,22 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         estimatedHours: "50 Giờ",
         concepts: ["Next.js 14 App Router", "Server Side Rendering (SSR)", "NextAuth.js OAuth 2.0", "Performance Audit & Vercel"],
         projectTitle: "🏆 Graduation Capstone: Hệ thống Nền tảng Học trực tuyến LMS hoàn chỉnh",
-        courses: []
+        courses: [
+          {
+            id: "nextjs-14-app-router-fullstack",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Lập trình Next.js 14 App Router & Triển khai Production",
+            instructor: "Phạm Thành Nam",
+            price: 799000,
+            salePrice: 499000,
+            rating: 5.0,
+            reviewCount: 310,
+            enrolledCount: 1540,
+            thumbnail: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&q=80",
+            tags: ["Next.js", "SSR", "Vercel"],
+            level: "Advanced"
+          }
+        ]
       }
     ]
   },
@@ -176,7 +236,22 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         duration: "4 Tuần",
         estimatedHours: "40 Giờ",
         concepts: ["SQL Querying & Joins", "Database Normalization", "Indexing & Query Optimization", "PostgreSQL Transactions"],
-        courses: []
+        courses: [
+          {
+            id: "database-design-postgresql-sql",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Thiết kế Cơ sở Dữ liệu & Tối ưu SQL PostgreSQL",
+            instructor: "Vũ Hải Đăng",
+            price: 499000,
+            salePrice: 299000,
+            rating: 4.8,
+            reviewCount: 310,
+            enrolledCount: 1650,
+            thumbnail: "https://images.unsplash.com/photo-1544383835-bda2bc66a55d?w=800&q=80",
+            tags: ["Database", "PostgreSQL", "SQL"],
+            level: "Beginner"
+          }
+        ]
       },
       {
         id: 2,
@@ -214,7 +289,22 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         duration: "5 Tuần",
         estimatedHours: "50 Giờ",
         concepts: ["Redis In-Memory Caching", "Laravel Queue & Horizon", "RabbitMQ Message Broker", "Rate Limiting & Throttling"],
-        courses: []
+        courses: [
+          {
+            id: "redis-rabbitmq-microservices-caching",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Lập trình Redis Cache, RabbitMQ & Microservices Queue",
+            instructor: "Đặng Tuấn Anh",
+            price: 599000,
+            salePrice: 399000,
+            rating: 4.9,
+            reviewCount: 280,
+            enrolledCount: 1420,
+            thumbnail: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&q=80",
+            tags: ["Redis", "RabbitMQ", "Queue"],
+            level: "Intermediate"
+          }
+        ]
       },
       {
         id: 4,
@@ -225,7 +315,22 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         duration: "5 Tuần",
         estimatedHours: "50 Giờ",
         concepts: ["Docker & Multi-stage Build", "Docker Compose Environment", "AWS EC2 & Nginx Reverse Proxy", "SSL/TLS Security"],
-        courses: []
+        courses: [
+          {
+            id: "docker-kubernetes-aws-deployment",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Docker, Kubernetes & Triển khai Đám mây AWS EC2",
+            instructor: "Hoàng Văn Đức",
+            price: 699000,
+            salePrice: 449000,
+            rating: 4.9,
+            reviewCount: 390,
+            enrolledCount: 1980,
+            thumbnail: "https://images.unsplash.com/photo-1667372335854-c522b045683a?w=800&q=80",
+            tags: ["Docker", "AWS", "DevOps"],
+            level: "Advanced"
+          }
+        ]
       },
       {
         id: 5,
@@ -237,7 +342,22 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         estimatedHours: "60 Giờ",
         concepts: ["API Gateway Design", "Event-driven Microservices", "Database Sharding & Replication", "System Design Interview Mastery"],
         projectTitle: "🏆 Graduation Capstone: Kiến trúc Microservices Hệ thống E-commerce chịu tải cao",
-        courses: []
+        courses: [
+          {
+            id: "system-design-microservices-architecture",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Thiết kế Kiến trúc Hệ thống Microservices & High Availability",
+            instructor: "Trần Anh Dũng",
+            price: 899000,
+            salePrice: 599000,
+            rating: 5.0,
+            reviewCount: 450,
+            enrolledCount: 2210,
+            thumbnail: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&q=80",
+            tags: ["System Design", "Microservices", "Scalability"],
+            level: "Advanced"
+          }
+        ]
       }
     ]
   },
@@ -268,7 +388,22 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         duration: "4 Tuần",
         estimatedHours: "45 Giờ",
         concepts: ["Web Basics", "ES6+ JavaScript", "SQL Queries", "Database Design"],
-        courses: []
+        courses: [
+          {
+            id: "fullstack-basics-db-design",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Nền tảng Fullstack Web Development 2026",
+            instructor: "Trần Hoàng Nam",
+            price: 399000,
+            salePrice: 199000,
+            rating: 4.8,
+            reviewCount: 290,
+            enrolledCount: 1560,
+            thumbnail: "https://images.unsplash.com/photo-1542831371-29b0f74f9713?w=800&q=80",
+            tags: ["Fullstack", "Web", "DB"],
+            level: "Beginner"
+          }
+        ]
       },
       {
         id: 2,
@@ -305,7 +440,22 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         duration: "6 Tuần",
         estimatedHours: "65 Giờ",
         concepts: ["Express.js Server", "Laravel Framework", "Sanctum Auth", "Postgres Migration"],
-        courses: []
+        courses: [
+          {
+            id: "fullstack-nextjs-laravel-architecture",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Lập trình Next.js 14 & Laravel RESTful Fullstack Architecture",
+            instructor: "Phạm Thành Nam",
+            price: 799000,
+            salePrice: 499000,
+            rating: 4.9,
+            reviewCount: 410,
+            enrolledCount: 1980,
+            thumbnail: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&q=80",
+            tags: ["Next.js", "Laravel", "Fullstack"],
+            level: "Advanced"
+          }
+        ]
       }
     ]
   },
@@ -336,7 +486,22 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         duration: "4 Tuần",
         estimatedHours: "40 Giờ",
         concepts: ["Python Basics", "Pandas & NumPy", "SQL Window Functions", "Data Cleaning"],
-        courses: []
+        courses: [
+          {
+            id: "python-data-analysis-sql",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Python for Data Analytics & Advanced SQL Queries",
+            instructor: "Đỗ Thanh Hằng",
+            price: 499000,
+            salePrice: 299000,
+            rating: 4.8,
+            reviewCount: 320,
+            enrolledCount: 1780,
+            thumbnail: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&q=80",
+            tags: ["Python", "Data", "SQL"],
+            level: "Beginner"
+          }
+        ]
       },
       {
         id: 2,
@@ -349,17 +514,17 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         projectTitle: "🏆 Project chặng 2: Hệ thống ETL Pipeline Phân tích Hành vi Người dùng",
         courses: [
           {
-            id: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            id: "data-pipeline-airflow-pyspark",
             slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
-            title: "Lập trình React JS & Backend REST API Chuyên nghiệp",
-            instructor: "Nguyễn Minh Khoa",
-            price: 499000,
-            salePrice: 299000,
+            title: "Xây dựng Data Pipeline với Apache Airflow & PySpark",
+            instructor: "Nguyễn Quốc Bảo",
+            price: 699000,
+            salePrice: 449000,
             rating: 4.9,
-            reviewCount: 380,
-            enrolledCount: 2150,
-            thumbnail: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&q=80",
-            tags: ["Python", "Data", "SQL"],
+            reviewCount: 290,
+            enrolledCount: 1430,
+            thumbnail: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80",
+            tags: ["Data Pipeline", "Airflow", "PySpark"],
             level: "Intermediate"
           }
         ]
@@ -393,7 +558,22 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         duration: "4 Tuần",
         estimatedHours: "40 Giờ",
         concepts: ["Dart Fundamentals", "Flutter Widgets", "Responsive Mobile Layout", "Stateful Widget"],
-        courses: []
+        courses: [
+          {
+            id: "flutter-dart-mobile-development",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Lập trình Flutter & Dart từ Cơ bản đến Nâng cao",
+            instructor: "Bùi Tiến Đạt",
+            price: 499000,
+            salePrice: 299000,
+            rating: 4.8,
+            reviewCount: 340,
+            enrolledCount: 1620,
+            thumbnail: "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=800&q=80",
+            tags: ["Flutter", "Dart", "Mobile"],
+            level: "Beginner"
+          }
+        ]
       },
       {
         id: 2,
@@ -406,17 +586,17 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         projectTitle: "🏆 Project chặng 2: App Đặt Đồ ăn trực tuyến chuẩn mượt",
         courses: [
           {
-            id: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            id: "react-native-firebase-integration",
             slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
-            title: "Lập trình React JS & Backend REST API Chuyên nghiệp",
-            instructor: "Nguyễn Minh Khoa",
-            price: 499000,
-            salePrice: 299000,
+            title: "Lập trình React Native & Tích hợp Firebase Cloud",
+            instructor: "Nguyễn Đức Anh",
+            price: 599000,
+            salePrice: 349000,
             rating: 4.9,
-            reviewCount: 380,
-            enrolledCount: 2150,
-            thumbnail: "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=800&q=80",
-            tags: ["Mobile", "Flutter", "React Native"],
+            reviewCount: 290,
+            enrolledCount: 1510,
+            thumbnail: "https://images.unsplash.com/photo-1551650975-87deedd944c3?w=800&q=80",
+            tags: ["React Native", "Firebase", "Mobile"],
             level: "Intermediate"
           }
         ]
@@ -450,7 +630,22 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         duration: "4 Tuần",
         estimatedHours: "40 Giờ",
         concepts: ["Linux Administration", "Bash Scripting", "TCP/IP & Subnetting", "Nginx Config"],
-        courses: []
+        courses: [
+          {
+            id: "linux-admin-networking-security",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Quản trị Hệ thống Linux, Bash Scripting & Network Security",
+            instructor: "Vũ Hải Đăng",
+            price: 499000,
+            salePrice: 299000,
+            rating: 4.8,
+            reviewCount: 310,
+            enrolledCount: 1540,
+            thumbnail: "https://images.unsplash.com/photo-1629654297299-c8506221ca97?w=800&q=80",
+            tags: ["Linux", "Networking", "DevOps"],
+            level: "Beginner"
+          }
+        ]
       },
       {
         id: 2,
@@ -463,17 +658,17 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         projectTitle: "🏆 Project chặng 2: Hệ thống CI/CD Tự động hóa Deploy sản phẩm",
         courses: [
           {
-            id: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            id: "devops-docker-cicd-aws",
             slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
-            title: "Lập trình React JS & Backend REST API Chuyên nghiệp",
-            instructor: "Nguyễn Minh Khoa",
-            price: 499000,
-            salePrice: 299000,
+            title: "DevOps Thực chiến: Docker, CI/CD Pipeline & AWS Cloud",
+            instructor: "Hoàng Văn Đức",
+            price: 699000,
+            salePrice: 449000,
             rating: 4.9,
-            reviewCount: 380,
-            enrolledCount: 2150,
+            reviewCount: 420,
+            enrolledCount: 2050,
             thumbnail: "https://images.unsplash.com/photo-1667372335854-c522b045683a?w=800&q=80",
-            tags: ["DevOps", "Docker", "AWS"],
+            tags: ["DevOps", "Docker", "CI/CD"],
             level: "Intermediate"
           }
         ]
