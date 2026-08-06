@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PageTransition } from '@/shared/components/ui/PageTransition';
 import { 
-  ArrowLeft, CheckCircle2, Circle, Lock, PlayCircle, Clock, BookOpen, 
+  Map as MapIcon, ArrowLeft, CheckCircle2, Circle, Lock, PlayCircle, Clock, BookOpen, 
   Sparkles, Award, ChevronRight, Code, Server, Database, Smartphone, 
   Layers, Cloud, Zap, Briefcase, Share2, FileText, CheckSquare, Trophy
 } from 'lucide-react';
@@ -17,9 +17,9 @@ interface MilestoneStep {
   status: 'completed' | 'in-progress' | 'locked';
   duration: string;
   estimatedHours: string;
-  concepts: string[];
+  concepts?: string[];
   projectTitle?: string;
-  courses: Array<{
+  courses?: Array<{
     id: string;
     slug?: string;
     title: string;
@@ -630,7 +630,7 @@ export default function RoadmapDetailPage() {
             <div className="lg:col-span-8 space-y-8">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                  <Map className="w-6 h-6 text-primary" />
+                  <MapIcon className="w-6 h-6 text-primary" />
                   Các chặng hành trình học tập ({roadmap.steps.length} Chặng)
                 </h2>
                 <span className="text-xs font-semibold text-muted-foreground">
