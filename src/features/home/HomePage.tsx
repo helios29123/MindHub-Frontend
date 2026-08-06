@@ -11,13 +11,16 @@ import { LearningStatsWidget } from './components/LearningStatsWidget';
 import { QuickNavWidget } from './components/QuickNavWidget';
 import { RecentlyViewedWidget } from './components/RecentlyViewedWidget';
 import { RecommendedCategoriesWidget } from './components/RecommendedCategoriesWidget';
+import { ContinueLearningSection } from './components/ContinueLearningSection';
 import { PageTransition } from '@/shared/components/ui/PageTransition';
 import { useHomepageData } from './hooks/useHomepageData';
+import { useLearningDashboardData } from './hooks/useLearningDashboardData';
 
 export default function HomePage() {
   const { data, isLoading } = useHomepageData();
+  const { data: dashboardData, isLoading: dashboardLoading } = useLearningDashboardData();
 
-  if (isLoading || !data) {
+  if (isLoading || dashboardLoading || !data) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -35,6 +38,13 @@ export default function HomePage() {
             <div className="flex-1 min-w-0">
               {/* Where am I? & What should I do now? */}
               <CommandCenter />
+              
+              {/* Tiêp tục học tập */}
+              {dashboardData?.recent_course && (
+                <div className="mb-8">
+                  <ContinueLearningSection recentCourse={dashboardData.recent_course} />
+                </div>
+              )}
               
               {/* How far have I progressed? */}
               <RoadmapTimeline />
@@ -56,7 +66,7 @@ export default function HomePage() {
             <div className="w-full lg:w-80 shrink-0">
               <div className="sticky top-20 flex flex-col">
                 {/* Learning Stats */}
-                <LearningStatsWidget />
+                <LearningStatsWidget statistics={dashboardData?.statistics} />
 
                 {/* Daily Goal & Tracking */}
                 <ActivityCalendar />
