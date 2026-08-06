@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle, XCircle, Loader } from 'lucide-react';
+import { cartApi } from './api';
 
 export default function VNPayReturnPage({ onNavigate }: { onNavigate: (path: string) => void }) {
   const [status, setStatus] = useState<'loading' | 'success' | 'failed'>('loading');
@@ -13,7 +14,7 @@ export default function VNPayReturnPage({ onNavigate }: { onNavigate: (path: str
       return;
     }
 
-    Promise.resolve((Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any))
+    cartApi.parseVNPayCallback(params)
       .then((res) => {
         if (res && res.success) {
           setStatus('success');

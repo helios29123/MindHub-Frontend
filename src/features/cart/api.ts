@@ -6,7 +6,7 @@ async createCheckoutOrder(courseIds: string[]): Promise<any> {
   devLog('Orders', 'Assembling payment carts into transaction invoice', courseIds);
   return apiFetch<any>('/orders', {
           method: 'POST',
-          body: JSON.stringify({ course_ids: courseIds }),
+          body: JSON.stringify({ course_id: parseInt(courseIds[0]) }),
         });
   },
 
@@ -50,7 +50,7 @@ async createVNPayGatewayUrl(orderId: string): Promise<{ paymentUrl: string }> {
   devLog('Orders', `Redirect to VNPay gateway portal checkouts for Order ${orderId}`);
   return apiFetch<{ paymentUrl: string }>('/payments/vnpay/create', {
           method: 'POST',
-          body: JSON.stringify({ order_id: orderId }),
+          body: JSON.stringify({ order_id: parseInt(orderId), payment_method: 'vnpay' }),
         });
   },
 

@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PageTransition } from '@/shared/components/ui/PageTransition';
-import { INITIAL_COURSES } from '@/shared/data';
 import { Course } from '@/shared/types';
-import { BookOpen, PlayCircle, Trophy, Target, Clock, Star, Heart } from 'lucide-react';
+import { BookOpen, PlayCircle, Trophy, Target, Clock, Star, Heart, Loader } from 'lucide-react';
+import { classroomApi } from '../classroom/api';
 import { Button } from '@/shared/components/ui/button';
 import { EmptyState } from '@/shared/components/ui/EmptyState';
 
@@ -11,10 +11,41 @@ export default function MyCoursesPage() {
   const [activeTab, setActiveTab] = useState<'learning' | 'completed' | 'saved'>('learning');
   const navigate = useNavigate();
   
-  // Mock data
-  const learningCourses = INITIAL_COURSES.slice(0, 2).map(c => ({...c, progress: Math.floor(Math.random() * 80) + 10}));
-  const completedCourses = INITIAL_COURSES.slice(2, 3).map(c => ({...c, progress: 100}));
-  const savedCourses = INITIAL_COURSES.slice(3, 5);
+  const [learningCourses, setLearningCourses] = useState<any[]>([]);
+  const [completedCourses, setCompletedCourses] = useState<any[]>([]);
+  const [savedCourses, setSavedCourses] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    classroomApi.getMyCourses()
+      .then(res => {
+        if (!isMounted) return;
+        const courses = res.data || [];
+        // Giả sử API trả về mảng khoá học, ta map lại cho đúng UI.
+        const mapped = courses.map((c: any) => {
+           const courseData = c.course || c; // Tùy thuộc vào payload API
+           return {
+             ...courseData,
+             progress: c.progress || Math.floor(Math.random() * 30) + 5, // Mock progress nếu API chưa trả về
+             image: courseData.thumbnail_url || courseData.image || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&q=80&w=800',
+             instructorName: courseData.instructor?.full_name || courseData.instructorName || 'MindHub Instructor'
+           };
+        });
+        
+        setLearningCourses(mapped.filter((c: any) => c.progress < 100));
+        setCompletedCourses(mapped.filter((c: any) => c.progress >= 100));
+        // Mock saved courses for now
+        setSavedCourses([]);
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error(err);
+        if (isMounted) setIsLoading(false);
+      });
+      
+      return () => { isMounted = false; };
+  }, []);
 
   const getDisplayCourses = () => {
     switch(activeTab) {
@@ -63,7 +94,16 @@ export default function MyCoursesPage() {
           </div>
         </div>
 
-        {/* Tabs */}
+        {isLoading && (
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+            <Loader className="w-10 h-10 animate-spin mb-4 text-primary" />
+            <p>Đang tải dữ liệu khóa học...</p>
+          </div>
+        )}
+
+        {!isLoading && (
+          <>
+            {/* Tabs */}
         <div className="flex items-center gap-2 mb-8 border-b pb-4 overflow-x-auto whitespace-nowrap">
           <Button 
             variant={activeTab === 'learning' ? 'default' : 'ghost'} 
@@ -157,6 +197,8 @@ export default function MyCoursesPage() {
               </Link>
             ))}
           </div>
+        )}
+        </>
         )}
       </div>
     </PageTransition>

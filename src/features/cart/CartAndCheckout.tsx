@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Heart, Trash2, Tag, CreditCard, CheckCircle, Download, Landmark, BookOpen, FileText, Gift, Info } from 'lucide-react';
 import { Course, Order, Coupon } from '@/shared/types';
 import { safeLocalStorage as localStorage } from '@/shared/utils/safeStorage';
 import { SYSTEM_COUPONS } from '@/shared/data';
+import { cartApi } from './api';
 
 interface CartAndCheckoutProps {
-  wishlistCourseIds: string[];
+  cartCourseIds: string[];
   allCourses: Course[];
   enrolledCourseIds: string[];
   onEnrollSuccess: (courseIds: string[], order: Order) => void;
@@ -16,7 +18,7 @@ interface CartAndCheckoutProps {
 }
 
 export default function CartAndCheckout({
-  wishlistCourseIds,
+  cartCourseIds,
   allCourses,
   enrolledCourseIds,
   onEnrollSuccess,
@@ -39,25 +41,26 @@ export default function CartAndCheckout({
     }
     return 'wishlist';
   });
+  const location = useLocation();
   const [checkoutCourse, setCheckoutCourse] = useState<Course | null>(() => {
     if (initialCourseId) {
-      return allCourses.find((c) => String(c.id) === String(initialCourseId)) || null;
+      return location.state?.course || allCourses.find((c) => String(c.id) === String(initialCourseId)) || null;
     }
     return null;
   });
 
   useEffect(() => {
     if (initialCourseId) {
-      const course = allCourses.find((c) => String(c.id) === String(initialCourseId));
+      const course = location.state?.course || allCourses.find((c) => String(c.id) === String(initialCourseId));
       if (course) {
         setCheckoutCourse(course);
         setPhase('paying');
       }
     }
-  }, [initialCourseId, allCourses]);
+  }, [initialCourseId, allCourses, location.state]);
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
 
-  const wishlistCourses = allCourses.filter((c) => wishlistCourseIds.includes(c.id));
+  const cartCourses = allCourses.filter((c) => cartCourseIds.includes(c.id));
   
   // Calculations for single course checkout
   const rawSubtotal = checkoutCourse ? (checkoutCourse.salePrice || checkoutCourse.price) : 0;
@@ -133,11 +136,18 @@ export default function CartAndCheckout({
     if (!checkoutCourse) return;
     setIsProcessing(true);
     try {
-      const orderRes = (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
+      // 1. Tạo đơn hàng thật
+      const orderRes = await cartApi.createCheckoutOrder([checkoutCourse.id]);
       const createdOrderId = orderRes?.order?.id || orderRes?.id || orderRes?.data?.id;
       
       if (createdOrderId) {
-        const vnpayRes = (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
+        // Nếu có mã giảm giá thì apply vào đây nếu backend cần
+        if (activeDiscount) {
+          await cartApi.applyCouponCode(activeDiscount.code, createdOrderId.toString());
+        }
+
+        // 2. Gọi lấy link VNPay
+        const vnpayRes = await cartApi.createVNPayGatewayUrl(createdOrderId.toString());
         const paymentUrl = vnpayRes?.paymentUrl || vnpayRes?.url || vnpayRes?.data?.paymentUrl || vnpayRes?.data?.url;
         
         if (paymentUrl) {
@@ -148,9 +158,9 @@ export default function CartAndCheckout({
       } else {
         throw new Error("Không lấy được mã đơn hàng từ máy chủ");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Lỗi thanh toán VNPay:', err);
-      alert('Đã xảy ra lỗi khi kết nối cổng thanh toán VNPay.');
+      alert('Đã xảy ra lỗi khi kết nối cổng thanh toán VNPay: ' + (err.message || 'Lỗi không xác định'));
       setIsProcessing(false);
     }
   };
@@ -172,7 +182,7 @@ export default function CartAndCheckout({
               <Heart className="w-4.5 h-4.5 text-deep-indigo fill-deep-indigo" />
             )}
             <span className="font-display font-bold text-xs sm:text-sm">
-              {initialCourseId ? "Thanh toán Ghi danh khóa học | MindHub" : "Khóa học Yêu thích & Tuyển sinh | MindHub"}
+              {initialCourseId ? "Thanh toán khóa học | MindHub" : "Giỏ hàng & Thanh toán | MindHub"}
             </span>
           </div>
           <button 
@@ -184,13 +194,7 @@ export default function CartAndCheckout({
           </button>
         </div>
 
-        {/* Info Banner in wishlist page */}
-        {phase === 'wishlist' && (
-          <div className="bg-[#fffcf5] border-b border-[#f3e6cf] p-3 px-5 text-[10.5px] text-stone-700 flex items-center gap-2 shrink-0">
-            <Gift className="w-4 h-4 text-amber-600 shrink-0" />
-            <span className="text-left font-serif leading-relaxed">Nơi lưu giữ những lộ trình chất lượng cao bạn ưu tiên học tập. Ghi danh tuyển sinh trực tuyến nhận ưu đãi vĩnh viễn qua cổng chuyển khoản.</span>
-          </div>
-        )}
+
 
         {/* Scrollable contents wrapper */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 tactile-scrollbar">
@@ -198,23 +202,23 @@ export default function CartAndCheckout({
           {phase === 'wishlist' && (
             <div className="space-y-4">
               <h3 className="text-xs sm:text-sm font-bold text-stone-800 flex items-center gap-2 border-b border-stone-100 pb-2 text-left">
-                Khóa học yêu thích lưu trữ ({wishlistCourses.length} dự phòng)
+                Giỏ hàng của bạn ({cartCourses.length} khóa học)
               </h3>
 
-              {wishlistCourses.length === 0 ? (
+              {cartCourses.length === 0 ? (
                 <div className="text-center py-16 space-y-3.5">
                   <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto text-deep-indigo">
                     <Heart className="w-8 h-8 opacity-75" />
                   </div>
-                  <p className="text-xs font-semibold text-stone-500">Chưa có khóa học nào dưới mục Ước nguyện.</p>
-                  <p className="text-[11px] text-stone-400">Hãy nhấn biểu tượng Yêu thích ở các khóa học ngoài trang chủ để lưu trữ học vụ tại đây!</p>
+                  <p className="text-xs font-semibold text-stone-500">Giỏ hàng của bạn đang trống.</p>
+                  <p className="text-[11px] text-stone-400">Hãy khám phá các khóa học và thêm vào giỏ hàng nhé!</p>
                   <button onClick={onClose} className="bg-[#432c28] hover:bg-black text-white text-xs py-2 px-5 rounded-xl font-bold transition-all shadow-xs">
                     Khám phá Khóa học ngay
                   </button>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 tactile-scrollbar">
-                  {wishlistCourses.map((c) => {
+                  {cartCourses.map((c) => {
                     const isEnrolled = enrolledCourseIds.includes(c.id);
                     return (
                       <div key={c.id} className="flex flex-col sm:flex-row sm:items-center gap-3.5 p-3.5 bg-white border border-stone-250 rounded-2xl hover:shadow-xs transition-all relative text-left">
@@ -539,7 +543,6 @@ export default function CartAndCheckout({
                   <button 
                     type="button"
                     onClick={() => {
-                      onClose();
                       onEnterLesson(checkoutCourse);
                     }} 
                     className="flex-1 bg-[#432c28] hover:bg-black text-white py-2 px-5 rounded-xl text-xs font-bold shadow-md transition-all animate-pulse"

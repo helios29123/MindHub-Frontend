@@ -23,10 +23,10 @@ import { Chart } from 'chart.js/auto';
 import { getCourses } from '@/assets/js/api/courses-api';
 import { getUsers } from '@/assets/js/api/users-api';
 import {
-  fetchDashboardRevenue,
-  fetchTopCourses,
-  fetchTopInstructors
-} from '@/assets/js/api/dashboard-api';
+  getRevenueReport,
+  getTopCoursesReport,
+  getTopInstructorsReport
+} from '@/assets/js/api/reports-api';
 import AdminPagination from '../shared/AdminPagination';
 
 interface CourseOption {

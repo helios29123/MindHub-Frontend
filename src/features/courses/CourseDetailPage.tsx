@@ -47,7 +47,7 @@ export default function CourseDetailPage() {
     if (!cart.includes(course.id)) {
       setCart([...cart, course.id]);
     }
-    navigate('/checkout');
+    navigate(`/checkout?courseId=${course.id}`, { state: { course } });
   };
 
   if (isLoading) return <CourseDetailSkeleton />;
