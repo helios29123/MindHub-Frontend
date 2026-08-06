@@ -99,7 +99,6 @@ export default function CourseDetailPage() {
     navigator.clipboard?.writeText(window.location.href);
     toast.success('Đã sao chép liên kết khóa học!');
   };
-  };
 
   if (isLoading) return <CourseDetailSkeleton />;
 
