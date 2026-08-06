@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageTransition } from '@/shared/components/ui/PageTransition';
 import { 
   Map, ArrowRight, Code, Server, Database, Smartphone, Cloud, Layers, 
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/shared/components/ui/button';
+import { roadmapsApi } from './api';
 
 interface RoadmapItem {
   id: string;
@@ -162,8 +163,33 @@ const CATEGORY_TABS = [
 export default function RoadmapsPage() {
   const [activeTab, setActiveTab] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [roadmapsList, setRoadmapsList] = useState<RoadmapItem[]>(ROADMAPS);
+  const [isLoadingApi, setIsLoadingApi] = useState<boolean>(false);
 
-  const filteredRoadmaps = ROADMAPS.filter((item) => {
+  useEffect(() => {
+    let isMounted = true;
+    async function loadBackendData() {
+      setIsLoadingApi(true);
+      try {
+        const backendCourses = await roadmapsApi.getRoadmaps();
+        if (isMounted && Array.isArray(backendCourses) && backendCourses.length > 0) {
+          // Dynamically enrich courses count from real backend courses
+          setRoadmapsList(prev => prev.map(rm => ({
+            ...rm,
+            coursesCount: Math.max(rm.coursesCount, backendCourses.length)
+          })));
+        }
+      } catch (err) {
+        console.warn('Backend courses load error:', err);
+      } finally {
+        if (isMounted) setIsLoadingApi(false);
+      }
+    }
+    loadBackendData();
+    return () => { isMounted = false; };
+  }, []);
+
+  const filteredRoadmaps = roadmapsList.filter((item) => {
     const matchesTab = activeTab === 'all' || item.category === activeTab;
     const matchesSearch = searchQuery.trim() === '' || 
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { CourseCard, CourseData } from '@/features/courses/components/CourseCard';
+import { roadmapsApi } from './api';
 
 interface MilestoneStep {
   id: number;
@@ -683,16 +684,58 @@ export default function RoadmapDetailPage() {
   
   // Safely resolve roadmap data or fallback to frontend
   const roadmapKey = (roadmapId && ALL_ROADMAPS_DATA[roadmapId]) ? roadmapId : 'frontend';
-  const roadmap = ALL_ROADMAPS_DATA[roadmapKey] || ALL_ROADMAPS_DATA.frontend;
+  const initialRoadmap = ALL_ROADMAPS_DATA[roadmapKey] || ALL_ROADMAPS_DATA.frontend;
 
+  const [roadmap, setRoadmap] = useState<RoadmapData>(initialRoadmap);
   const [activeStepId, setActiveStepId] = useState<number>(1);
 
-  // Sync active step when roadmap changes
+  // Sync active step & real backend courses when roadmap changes
   useEffect(() => {
-    if (roadmap && roadmap.steps && roadmap.steps.length > 0) {
-      const inProgress = roadmap.steps.find(s => s.status === 'in-progress');
-      setActiveStepId(inProgress ? inProgress.id : roadmap.steps[0].id);
+    let isMounted = true;
+    const currentBase = ALL_ROADMAPS_DATA[roadmapKey] || ALL_ROADMAPS_DATA.frontend;
+    setRoadmap(currentBase);
+
+    if (currentBase && currentBase.steps && currentBase.steps.length > 0) {
+      const inProgress = currentBase.steps.find(s => s.status === 'in-progress');
+      setActiveStepId(inProgress ? inProgress.id : currentBase.steps[0].id);
     }
+
+    async function syncBackendCourses() {
+      try {
+        const { courses } = await roadmapsApi.getRoadmapDetail(roadmapKey);
+        if (isMounted && Array.isArray(courses) && courses.length > 0) {
+          setRoadmap(prev => ({
+            ...prev,
+            steps: prev.steps.map((st, idx) => {
+              const slicedBackend = courses.slice(idx, idx + 2);
+              if (slicedBackend.length === 0) return st;
+              return {
+                ...st,
+                courses: slicedBackend.map((c: any) => ({
+                  id: String(c.id),
+                  slug: c.slug || String(c.id),
+                  title: c.title || c.name || 'Khóa học thực chiến',
+                  instructor: c.instructor?.name || c.instructor || 'Giảng viên MindHub',
+                  price: c.price || 499000,
+                  salePrice: c.sale_price || c.salePrice || 299000,
+                  rating: c.rating || 4.9,
+                  reviewCount: c.review_count || 320,
+                  enrolledCount: c.enrolled_count || 1250,
+                  thumbnail: c.thumbnail_url || c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=800&q=80',
+                  tags: c.tags || ['MindHub', 'API'],
+                  level: c.level || 'Intermediate'
+                }))
+              };
+            })
+          }));
+        }
+      } catch (err) {
+        console.warn('Sync roadmap backend courses error:', err);
+      }
+    }
+
+    syncBackendCourses();
+    return () => { isMounted = false; };
   }, [roadmapKey]);
 
   if (!roadmap || !roadmap.steps) {
