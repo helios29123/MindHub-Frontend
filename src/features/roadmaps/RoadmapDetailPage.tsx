@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PageTransition } from '@/shared/components/ui/PageTransition';
 import { 
@@ -7,7 +7,7 @@ import {
   Layers, Cloud, Zap, Briefcase, Share2, FileText, CheckSquare, Trophy
 } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
-import { CourseCard } from '@/features/courses/components/CourseCard';
+import { CourseCard, CourseData } from '@/features/courses/components/CourseCard';
 
 interface MilestoneStep {
   id: number;
@@ -240,6 +240,245 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
         courses: []
       }
     ]
+  },
+  fullstack: {
+    id: "fullstack",
+    title: "Fullstack Engineer",
+    subtitle: "Lộ trình đào tạo Kỹ sư Phần mềm Fullstack Chuyên nghiệp",
+    description: "Chinh phục cả Frontend và Backend, thiết kế toàn diện hệ thống ứng dụng Web hiện đại với Next.js, Node.js, Laravel và Docker.",
+    icon: <Layers className="w-8 h-8 text-indigo-500" />,
+    category: "Fullstack",
+    badge: "Được săn đón",
+    totalCourses: 20,
+    totalMonths: "10 Tháng",
+    totalHours: "400 Giờ học",
+    avgSalary: "20 - 45 Triệu/tháng",
+    hiringDemand: "Đột phá (🚀 Peak)",
+    skills: ["React", "Node.js", "TypeScript", "Laravel", "PostgreSQL", "Docker", "AWS"],
+    gradientTheme: "from-indigo-600 via-purple-600 to-pink-700",
+    accentBg: "bg-indigo-500/10 border-indigo-200 text-indigo-600 dark:text-indigo-400",
+    textColor: "text-indigo-600 dark:text-indigo-400",
+    steps: [
+      {
+        id: 1,
+        title: "Fullstack Fundamentals & Database Design",
+        subtitle: "HTML/CSS, JS ES6+ & PostgreSQL Database",
+        description: "Làm chủ nền tảng lập trình web và thiết kế cơ sở dữ liệu quan hệ.",
+        status: "completed",
+        duration: "4 Tuần",
+        estimatedHours: "45 Giờ",
+        concepts: ["Web Basics", "ES6+ JavaScript", "SQL Queries", "Database Design"],
+        courses: []
+      },
+      {
+        id: 2,
+        title: "Frontend Mastery with React & TypeScript",
+        subtitle: "React Hooks, TypeScript Types & State Management",
+        description: "Xây dựng giao diện mượt mà type-safe với ReactJS & TypeScript.",
+        status: "in-progress",
+        duration: "6 Tuần",
+        estimatedHours: "60 Giờ",
+        projectTitle: "🏆 Project chặng 2: Website Đặt vé Máy bay trực tuyến chuẩn Responsive",
+        courses: [
+          {
+            id: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Lập trình React JS & Backend REST API Chuyên nghiệp",
+            instructor: "Nguyễn Minh Khoa",
+            price: 499000,
+            salePrice: 299000,
+            rating: 4.9,
+            reviewCount: 380,
+            enrolledCount: 2150,
+            thumbnail: "https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=800&q=80",
+            tags: ["Fullstack", "React", "Node.js"],
+            level: "Intermediate"
+          }
+        ]
+      },
+      {
+        id: 3,
+        title: "Backend API Engineering with Node.js & Laravel",
+        subtitle: "Express.js, Laravel REST API & Authentication",
+        description: "Viết RESTful API bảo mật và kết nối mượt mà với ứng dụng Frontend.",
+        status: "locked",
+        duration: "6 Tuần",
+        estimatedHours: "65 Giờ",
+        concepts: ["Express.js Server", "Laravel Framework", "Sanctum Auth", "Postgres Migration"],
+        courses: []
+      }
+    ]
+  },
+  data: {
+    id: "data",
+    title: "Data Engineering & AI",
+    subtitle: "Lộ trình Kỹ sư Dữ liệu & Tích hợp Trí tuệ Nhân tạo AI",
+    description: "Xử lý dữ liệu lớn, làm chủ Data Pipeline, Python, SQL, Spark & Tích hợp mô hình AI / LLM vào doanh nghiệp.",
+    icon: <Database className="w-8 h-8 text-purple-500" />,
+    category: "Data & AI",
+    badge: "Xu hướng 2026",
+    totalCourses: 11,
+    totalMonths: "6 Tháng",
+    totalHours: "250 Giờ học",
+    avgSalary: "22 - 50 Triệu/tháng",
+    hiringDemand: "Tăng trưởng nóng",
+    skills: ["Python", "SQL", "PySpark", "Kafka", "Data Warehouse", "LLM Integration"],
+    gradientTheme: "from-purple-600 via-fuchsia-600 to-pink-700",
+    accentBg: "bg-purple-500/10 border-purple-200 text-purple-600 dark:text-purple-400",
+    textColor: "text-purple-600 dark:text-purple-400",
+    steps: [
+      {
+        id: 1,
+        title: "Python for Data & SQL Mastery",
+        subtitle: "Python Syntax, Data Structures & Advanced SQL",
+        description: "Làm chủ Python cho xử lý dữ liệu và viết các truy vấn SQL phức tạp.",
+        status: "completed",
+        duration: "4 Tuần",
+        estimatedHours: "40 Giờ",
+        concepts: ["Python Basics", "Pandas & NumPy", "SQL Window Functions", "Data Cleaning"],
+        courses: []
+      },
+      {
+        id: 2,
+        title: "Data Pipeline & ETL Engineering",
+        subtitle: "Airflow, Kafka & Data Warehousing",
+        description: "Xây dựng các luồng thu thập và xử lý dữ liệu tự động cho doanh nghiệp.",
+        status: "in-progress",
+        duration: "6 Tuần",
+        estimatedHours: "60 Giờ",
+        projectTitle: "🏆 Project chặng 2: Hệ thống ETL Pipeline Phân tích Hành vi Người dùng",
+        courses: [
+          {
+            id: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Lập trình React JS & Backend REST API Chuyên nghiệp",
+            instructor: "Nguyễn Minh Khoa",
+            price: 499000,
+            salePrice: 299000,
+            rating: 4.9,
+            reviewCount: 380,
+            enrolledCount: 2150,
+            thumbnail: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&q=80",
+            tags: ["Python", "Data", "SQL"],
+            level: "Intermediate"
+          }
+        ]
+      }
+    ]
+  },
+  mobile: {
+    id: "mobile",
+    title: "Mobile App Developer",
+    subtitle: "Lộ trình Phát triển Ứng dụng Di động Đa nền tảng",
+    description: "Xây dựng ứng dụng di động iOS & Android đa nền tảng mượt mà với React Native và Flutter.",
+    icon: <Smartphone className="w-8 h-8 text-amber-500" />,
+    category: "Mobile Dev",
+    badge: "Xu hướng Mobile",
+    totalCourses: 9,
+    totalMonths: "5 Tháng",
+    totalHours: "200 Giờ học",
+    avgSalary: "16 - 35 Triệu/tháng",
+    hiringDemand: "Cao",
+    skills: ["Flutter", "Dart", "React Native", "Swift/Kotlin", "Firebase", "App Store/Play"],
+    gradientTheme: "from-amber-600 via-orange-600 to-red-700",
+    accentBg: "bg-amber-500/10 border-amber-200 text-amber-600 dark:text-amber-400",
+    textColor: "text-amber-600 dark:text-amber-400",
+    steps: [
+      {
+        id: 1,
+        title: "Mobile UI Design & Cross-Platform Fundamentals",
+        subtitle: "Dart Language & Flutter Layout System",
+        description: "Nắm vững ngôn ngữ Dart và thiết kế giao diện ứng dụng di động chuẩn UX.",
+        status: "completed",
+        duration: "4 Tuần",
+        estimatedHours: "40 Giờ",
+        concepts: ["Dart Fundamentals", "Flutter Widgets", "Responsive Mobile Layout", "Stateful Widget"],
+        courses: []
+      },
+      {
+        id: 2,
+        title: "State Management & Firebase Integration",
+        subtitle: "Provider, BLoC Pattern & Firebase Services",
+        description: "Kết nối ứng dụng di động với hệ thống Backend & Firebase.",
+        status: "in-progress",
+        duration: "5 Tuần",
+        estimatedHours: "50 Giờ",
+        projectTitle: "🏆 Project chặng 2: App Đặt Đồ ăn trực tuyến chuẩn mượt",
+        courses: [
+          {
+            id: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Lập trình React JS & Backend REST API Chuyên nghiệp",
+            instructor: "Nguyễn Minh Khoa",
+            price: 499000,
+            salePrice: 299000,
+            rating: 4.9,
+            reviewCount: 380,
+            enrolledCount: 2150,
+            thumbnail: "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=800&q=80",
+            tags: ["Mobile", "Flutter", "React Native"],
+            level: "Intermediate"
+          }
+        ]
+      }
+    ]
+  },
+  devops: {
+    id: "devops",
+    title: "DevOps & Cloud Engineer",
+    subtitle: "Lộ trình Kỹ sư DevOps & Quản trị Hạ tầng Điện toán Đám mây",
+    description: "Tự động hóa triển khai, quản trị hạ tầng điện toán đám mây với Docker, Kubernetes, CI/CD & AWS.",
+    icon: <Cloud className="w-8 h-8 text-sky-500" />,
+    category: "DevOps & Cloud",
+    badge: "Đội ngũ hạ tầng",
+    totalCourses: 10,
+    totalMonths: "6 Tháng",
+    totalHours: "240 Giờ học",
+    avgSalary: "25 - 55 Triệu/tháng",
+    hiringDemand: "Rất cao",
+    skills: ["Docker", "Kubernetes", "AWS", "Terraform", "CI/CD Pipeline", "Linux Admin"],
+    gradientTheme: "from-sky-600 via-blue-600 to-indigo-700",
+    accentBg: "bg-sky-500/10 border-sky-200 text-sky-600 dark:text-sky-400",
+    textColor: "text-sky-600 dark:text-sky-400",
+    steps: [
+      {
+        id: 1,
+        title: "Linux System Administration & Networking",
+        subtitle: "Linux Commands, Bash Scripting & Networking Fundamentals",
+        description: "Làm chủ hệ điều hành Linux và hạ tầng mạng máy tính.",
+        status: "completed",
+        duration: "4 Tuần",
+        estimatedHours: "40 Giờ",
+        concepts: ["Linux Administration", "Bash Scripting", "TCP/IP & Subnetting", "Nginx Config"],
+        courses: []
+      },
+      {
+        id: 2,
+        title: "Docker & Container Orchestration",
+        subtitle: "Containerization, Docker Compose & Microservices Deployment",
+        description: "Đóng gói ứng dụng thành container và quản lý hạ tầng triển khai.",
+        status: "in-progress",
+        duration: "5 Tuần",
+        estimatedHours: "50 Giờ",
+        projectTitle: "🏆 Project chặng 2: Hệ thống CI/CD Tự động hóa Deploy sản phẩm",
+        courses: [
+          {
+            id: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            slug: "laravel-rest-api-tu-co-ban-den-trien-khai",
+            title: "Lập trình React JS & Backend REST API Chuyên nghiệp",
+            instructor: "Nguyễn Minh Khoa",
+            price: 499000,
+            salePrice: 299000,
+            rating: 4.9,
+            reviewCount: 380,
+            enrolledCount: 2150,
+            thumbnail: "https://images.unsplash.com/photo-1667372335854-c522b045683a?w=800&q=80",
+            tags: ["DevOps", "Docker", "AWS"],
+            level: "Intermediate"
+          }
+        ]
+      }
+    ]
   }
 };
 
@@ -247,13 +486,31 @@ export default function RoadmapDetailPage() {
   const { roadmapId } = useParams<{ roadmapId: string }>();
   const navigate = useNavigate();
   
-  // Resolve roadmap data or fallback to frontend
+  // Safely resolve roadmap data or fallback to frontend
   const roadmapKey = (roadmapId && ALL_ROADMAPS_DATA[roadmapId]) ? roadmapId : 'frontend';
-  const roadmap = ALL_ROADMAPS_DATA[roadmapKey];
+  const roadmap = ALL_ROADMAPS_DATA[roadmapKey] || ALL_ROADMAPS_DATA.frontend;
 
-  const [activeStepId, setActiveStepId] = useState<number>(
-    roadmap.steps.find(s => s.status === 'in-progress')?.id || 1
-  );
+  const [activeStepId, setActiveStepId] = useState<number>(1);
+
+  // Sync active step when roadmap changes
+  useEffect(() => {
+    if (roadmap && roadmap.steps && roadmap.steps.length > 0) {
+      const inProgress = roadmap.steps.find(s => s.status === 'in-progress');
+      setActiveStepId(inProgress ? inProgress.id : roadmap.steps[0].id);
+    }
+  }, [roadmapKey]);
+
+  if (!roadmap || !roadmap.steps) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-4 text-center">
+        <h2 className="text-2xl font-bold mb-2 text-foreground">Không tìm thấy lộ trình</h2>
+        <p className="text-sm text-muted-foreground mb-6">Lộ trình bạn đang truy cập không tồn tại hoặc đang được cập nhật.</p>
+        <Button onClick={() => navigate('/roadmaps')} className="rounded-xl font-bold">
+          Quay lại danh sách lộ trình
+        </Button>
+      </div>
+    );
+  }
 
   // Compute overall progress stats
   const completedStepsCount = roadmap.steps.filter(s => s.status === 'completed').length;
@@ -450,19 +707,21 @@ export default function RoadmapDetailPage() {
                     </p>
 
                     {/* Key Concepts Checklist */}
-                    <div className="bg-muted/30 rounded-2xl p-4 border border-border/40 mb-6 space-y-2">
-                      <p className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <CheckSquare className="w-4 h-4 text-primary" /> Kiến thức & Kỹ năng cốt lõi:
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                        {step.concepts.map((concept, idx) => (
-                          <div key={idx} className="flex items-center gap-2 text-xs font-medium text-foreground/90">
-                            <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                            <span>{concept}</span>
-                          </div>
-                        ))}
+                    {step.concepts && step.concepts.length > 0 && (
+                      <div className="bg-muted/30 rounded-2xl p-4 border border-border/40 mb-6 space-y-2">
+                        <p className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                          <CheckSquare className="w-4 h-4 text-primary" /> Kiến thức & Kỹ năng cốt lõi:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          {step.concepts.map((concept, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-xs font-medium text-foreground/90">
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                              <span>{concept}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Project Milestone Highlight if present */}
                     {step.projectTitle && (
@@ -474,16 +733,31 @@ export default function RoadmapDetailPage() {
                     )}
 
                     {/* Recommended Courses Section */}
-                    {step.courses.length > 0 && (
+                    {step.courses && step.courses.length > 0 && (
                       <div className="pt-4 border-t border-border/50">
                         <h4 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2">
                           <BookOpen className="w-4 h-4 text-primary" />
                           Khóa học cốt lõi cần hoàn thành:
                         </h4>
                         <div className="grid grid-cols-1 gap-4">
-                          {step.courses.map(course => (
-                            <CourseCard key={course.id} course={course as any} />
-                          ))}
+                          {step.courses.map(c => {
+                            const mappedCourse: CourseData = {
+                              id: String(c.id),
+                              slug: c.slug || String(c.id),
+                              title: c.title || 'Khoá học MindHub',
+                              instructor: c.instructor || 'Giảng viên MindHub',
+                              thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=800&q=80',
+                              duration: '20 giờ học',
+                              difficulty: (c.level as any) || 'Intermediate',
+                              price: c.price || 499000,
+                              salePrice: c.salePrice || 299000,
+                              status: 'not_enrolled'
+                            };
+
+                            return (
+                              <CourseCard key={c.id} course={mappedCourse} />
+                            );
+                          })}
                         </div>
                       </div>
                     )}
