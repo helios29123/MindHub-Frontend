@@ -45,11 +45,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem('mindhub_is_logged_in');
-      return stored === null || stored === 'undefined' || stored === 'null'
-        ? true
-        : stored === 'true';
+      return stored === 'true';
     } catch (e) {
-      return true;
+      return false;
     }
   });
 
