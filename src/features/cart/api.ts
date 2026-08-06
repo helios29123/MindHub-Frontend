@@ -4,9 +4,10 @@ import { Course, Chapter, Lesson, Resource, User, QAMessage, StudentProgress, Pa
 export const cartApi = {
 async createCheckoutOrder(courseIds: string[]): Promise<any> {
   devLog('Orders', 'Assembling payment carts into transaction invoice', courseIds);
+  const rawId = String(courseIds[0]).replace('course-', '');
   return apiFetch<any>('/orders', {
           method: 'POST',
-          body: JSON.stringify({ course_id: parseInt(courseIds[0]) }),
+          body: JSON.stringify({ course_id: parseInt(rawId) }),
         });
   },
 
