@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Course, Lesson, StudentProgress } from '@/shared/types';
-import { INITIAL_COURSES } from '@/shared/data';
 import { useApp } from '@/app/AppContext';
+import { useCourseDetail } from '@/features/courses/hooks/useCourseDetail';
 
 export type TabType = 'overview' | 'qa' | 'notes' | 'resources';
 
@@ -21,58 +21,48 @@ export interface UseClassroomResult {
 
 export function useClassroom(courseId: string | undefined): UseClassroomResult {
   const { currentUser } = useApp();
-  const [course, setCourse] = useState<Course | null>(null);
+  const { course, isLoading, error } = useCourseDetail(courseId);
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
   const [progress, setProgress] = useState<StudentProgress | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    let isMounted = true;
-    setIsLoading(true);
-
-    const timeout = setTimeout(() => {
-      if (!isMounted) return;
-      try {
-        if (!courseId) throw new Error("Course ID is missing");
-        
-        const foundCourse = INITIAL_COURSES.find(c => c.id === courseId);
-        if (!foundCourse) throw new Error("Course not found");
-
-        setCourse(foundCourse);
-
-        // Find first lesson if exists
-        let firstLesson: Lesson | null = null;
-        if (foundCourse.chapters.length > 0 && foundCourse.chapters[0].lessons.length > 0) {
-          firstLesson = foundCourse.chapters[0].lessons[0];
-        }
-
-        setActiveLesson(firstLesson);
-
-        // Mock initial progress
-        setProgress({
-          courseId: foundCourse.id,
-          currentLessonId: firstLesson?.id || '',
-          completedLessonIds: [],
-          notes: [],
-          bookmarks: [],
-          lastWatchedProgressSec: 0
-        });
-
-      } catch (err: any) {
-        setError(err);
-      } finally {
-        setIsLoading(false);
+    if (course) {
+      // Find first lesson if exists
+      let firstLesson: Lesson | null = null;
+      if (course.chapters && course.chapters.length > 0 && course.chapters[0].lessons.length > 0) {
+        firstLesson = course.chapters[0].lessons[0];
+      } else if (!course.chapters || course.chapters.length === 0) {
+        // Provide a mock chapter if backend didn't return any, so the UI doesn't break
+        course.chapters = [{
+          id: 'mock-chap-1',
+          title: 'Chương 1: Giới thiệu (Tự động tạo)',
+          lessons: [{
+            id: 'mock-less-1',
+            title: 'Bài 1: Tổng quan',
+            duration: '05:00',
+            videoUrl: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4',
+            isFree: true,
+            type: 'video'
+          }]
+        }];
+        firstLesson = course.chapters[0].lessons[0];
       }
-    }, 500); // Simulate API loading
 
-    return () => {
-      isMounted = false;
-      clearTimeout(timeout);
-    };
-  }, [courseId]);
+      setActiveLesson(firstLesson);
+
+      // Mock initial progress
+      setProgress({
+        courseId: course.id,
+        currentLessonId: firstLesson?.id || '',
+        completedLessonIds: [],
+        notes: [],
+        bookmarks: [],
+        lastWatchedProgressSec: 0
+      });
+    }
+  }, [course]);
 
   const toggleSidebar = () => setIsSidebarOpen(prev => !prev);
   const setTab = (tab: TabType) => setActiveTab(tab);

@@ -22,8 +22,21 @@ export default function Navbar() {
   
   const [searchQuery, setSearchQuery] = useState("");
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setIsLoggedIn(false);
+    
+    try {
+      const { safeLocalStorage } = await import('@/shared/utils/safeStorage');
+      safeLocalStorage.removeItem('mindhub_is_logged_in');
+      safeLocalStorage.removeItem('mindhub_current_user');
+      safeLocalStorage.removeItem('mindhub_api_token');
+      
+      const { ApiService } = await import('@/services/api');
+      await ApiService.logout();
+    } catch (e) {
+      console.error('Logout error', e);
+    }
+
     navigate("/");
   };
   

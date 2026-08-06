@@ -15,6 +15,7 @@ const PageLoader = () => (
 );
 
 // Lazy Loaded Pages
+const GuestHomePage = React.lazy(() => import('@/features/public-home/GuestHomePage').then(m => ({ default: m.default })));
 const HomePage = React.lazy(() => import('@/features/home/HomePage').then(m => ({ default: m.default })));
 const CourseDetailPage = React.lazy(() => import('@/features/courses/CourseDetailPage').then(m => ({ default: m.default })));
 const CourseListPage = React.lazy(() => import('@/features/courses/CourseListPage').then(m => ({ default: m.default })));
@@ -41,7 +42,6 @@ const ProfilePage = React.lazy(() => import('@/features/profile/ProfilePage').th
 const LoginPage = React.lazy(() => import('@/features/auth/LoginPage').then(m => ({ default: m.default })));
 const RegisterPage = React.lazy(() => import('@/features/auth/RegisterPage').then(m => ({ default: m.default })));
 const CartAndCheckout = React.lazy(() => import('@/features/cart/CartAndCheckout').then(m => ({ default: m.default })));
-const VNPayReturnPage = React.lazy(() => import('@/features/cart/VNPayReturnPage').then(m => ({ default: m.default })));
 const InstructorDashboard = React.lazy(() => import('@/features/instructor/InstructorPage'));
 const AdminDashboard = React.lazy(() => import('@/features/admin/AdminDashboard').then(m => ({ default: m.default })));
 const InstructorProfilePage = React.lazy(() => import('@/features/instructor/InstructorProfilePage').then(m => ({ default: m.default })));
@@ -82,10 +82,13 @@ function AppRoutes() {
     setCurrentUser,
     enrolledCourseIds, 
     courses, 
-    favorites 
+    favorites,
+    cart
   } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const initialCourseId = queryParams.get('courseId');
 
   const isAdminPreview = import.meta.env.VITE_ADMIN_PREVIEW === 'true';
   const isLoggedIn = isAdminPreview ? true : rawIsLoggedIn;
@@ -136,7 +139,12 @@ function AppRoutes() {
           
           {/* Main Layout Routes (Navbar + Footer) */}
           <Route element={<MainLayout />}>
-            <Route path="/" element={<HomePage />} />
+            <Route path="/" element={
+              isLoggedIn && currentUser 
+                ? <Navigate to={getDashboardRouteByRole(currentUser.role)} replace /> 
+                : <GuestHomePage />
+            } />
+            <Route path="/dashboard" element={isLoggedIn ? <HomePage /> : <Navigate to="/login" replace />} />
             
             {/* Course Discovery & Learning */}
             <Route path="/courses/:courseId" element={<CourseDetailPage />} />
@@ -169,21 +177,17 @@ function AppRoutes() {
             
             <Route path="/cart" element={
               <CartAndCheckout 
-                wishlistCourseIds={favorites}
+                cartCourseIds={cart}
                 allCourses={courses}
                 enrolledCourseIds={enrolledCourseIds}
                 onEnrollSuccess={() => {}}
-                onClose={() => navigate('/')}
+                onClose={() => navigate(-1)}
                 onToggleFavorite={() => {}}
-                onEnterLesson={() => {}}
-                initialCourseId={null}
+                onEnterLesson={(course) => navigate(`/learn/${course.slug || course.id}`)}
+                initialCourseId={initialCourseId}
               />
             } />
-            <Route path="/checkout" element={<Navigate to="/cart" replace />} />
-            <Route path="/vnpay-return" element={
-              // @ts-ignore
-              <VNPayReturnPage onNavigate={navigateTo} />
-            } />
+            <Route path="/checkout" element={<Navigate to={`/cart${location.search}`} state={location.state} replace />} />
             
             {/* Protected Profile Route */}
             <Route path="/profile/:userId?" element={

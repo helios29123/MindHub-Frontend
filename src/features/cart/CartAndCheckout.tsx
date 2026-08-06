@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Heart, Trash2, Tag, CreditCard, CheckCircle, Download, Landmark, BookOpen, FileText, Gift, Info } from 'lucide-react';
 import { Course, Order, Coupon } from '@/shared/types';
 import { safeLocalStorage as localStorage } from '@/shared/utils/safeStorage';
 import { SYSTEM_COUPONS } from '@/shared/data';
+import { cartApi } from './api';
 
 interface CartAndCheckoutProps {
-  wishlistCourseIds: string[];
+  cartCourseIds: string[];
   allCourses: Course[];
   enrolledCourseIds: string[];
   onEnrollSuccess: (courseIds: string[], order: Order) => void;
@@ -16,7 +18,7 @@ interface CartAndCheckoutProps {
 }
 
 export default function CartAndCheckout({
-  wishlistCourseIds,
+  cartCourseIds,
   allCourses,
   enrolledCourseIds,
   onEnrollSuccess,
@@ -26,11 +28,15 @@ export default function CartAndCheckout({
   initialCourseId = null
 }: CartAndCheckoutProps) {
   const [couponCode, setCouponCode] = useState('');
-  const [activeDiscount, setActiveDiscount] = useState<{ code: string; percent: number } | null>(null);
+  const [activeDiscount, setActiveDiscount] = useState<{code: string, percent: number, fixed?: number} | null>(null);
   const [couponError, setCouponError] = useState('');
   const [couponSuccess, setCouponSuccess] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'momo' | 'vnpay'>('vnpay');
+  const [paymentMethod, setPaymentMethod] = useState<'momo' | 'sepay'>('sepay');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [sepayQrUrl, setSepayQrUrl] = useState<string | null>(null);
+  const [pollingOrderId, setPollingOrderId] = useState<string | null>(null);
+
+
   
   // Checkout flow phase: 'wishlist' | 'paying' | 'receipt'
   const [phase, setPhase] = useState<'wishlist' | 'paying' | 'receipt'>(() => {
@@ -39,30 +45,66 @@ export default function CartAndCheckout({
     }
     return 'wishlist';
   });
+  const location = useLocation();
   const [checkoutCourse, setCheckoutCourse] = useState<Course | null>(() => {
     if (initialCourseId) {
-      return allCourses.find((c) => String(c.id) === String(initialCourseId)) || null;
+      return location.state?.course || allCourses.find((c) => String(c.id) === String(initialCourseId)) || null;
     }
     return null;
   });
 
   useEffect(() => {
     if (initialCourseId) {
-      const course = allCourses.find((c) => String(c.id) === String(initialCourseId));
+      const course = location.state?.course || allCourses.find((c) => String(c.id) === String(initialCourseId));
       if (course) {
         setCheckoutCourse(course);
         setPhase('paying');
       }
     }
-  }, [initialCourseId, allCourses]);
+  }, [initialCourseId, allCourses, location.state]);
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
 
-  const wishlistCourses = allCourses.filter((c) => wishlistCourseIds.includes(c.id));
+  const cartCourses = allCourses.filter((c) => cartCourseIds.includes(c.id));
   
   // Calculations for single course checkout
   const rawSubtotal = checkoutCourse ? (checkoutCourse.salePrice || checkoutCourse.price) : 0;
-  const discountAmount = activeDiscount ? Math.round((rawSubtotal * activeDiscount.percent) / 100) : 0;
+  const discountAmount = activeDiscount && checkoutCourse 
+    ? Math.round(activeDiscount.fixed ? activeDiscount.fixed : ((checkoutCourse.salePrice || checkoutCourse.price) * activeDiscount.percent / 100)) 
+    : 0;
   const finalTotal = rawSubtotal - discountAmount;
+
+  useEffect(() => {
+    let interval: any;
+    if (pollingOrderId) {
+      interval = setInterval(async () => {
+        try {
+          const res = await cartApi.getOrderBillReceipt(pollingOrderId);
+          const orderData = res?.data || res;
+          if (orderData && orderData.payment_status === 'paid') {
+            clearInterval(interval);
+            setPollingOrderId(null);
+            
+            const successOrder: Order = {
+              id: orderData.id || pollingOrderId,
+              date: new Date().toISOString().split('T')[0],
+              courses: [{ id: checkoutCourse!.id, title: checkoutCourse!.title, price: checkoutCourse!.salePrice || checkoutCourse!.price }],
+              discountAmount: discountAmount,
+              total: orderData.final_amount || finalTotal,
+              status: 'success',
+              paymentMethod: 'SePay VietQR'
+            };
+            
+            setCreatedOrder(successOrder);
+            setPhase('receipt');
+            onEnrollSuccess([checkoutCourse!.id], successOrder);
+          }
+        } catch (e) {
+          console.error("Polling error", e);
+        }
+      }, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [pollingOrderId, checkoutCourse, discountAmount, finalTotal, onEnrollSuccess]);
 
   const handleApplyCoupon = (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,8 +130,12 @@ export default function CartAndCheckout({
         return;
       }
       
-      setActiveDiscount({ code: matched.code, percent: matched.discount });
-      setCouponSuccess(`Đã áp dụng mã ${matched.code}: Giảm ${matched.discount}%`);
+      setActiveDiscount({ code: matched.code, percent: matched.discount, fixed: matched.fixedDiscount });
+      if (matched.fixedDiscount) {
+        setCouponSuccess(`Đã áp dụng mã ${matched.code}: Giảm ${matched.fixedDiscount.toLocaleString()}đ`);
+      } else {
+        setCouponSuccess(`Đã áp dụng mã ${matched.code}: Giảm ${matched.discount}%`);
+      }
     } else {
       setCouponError('Mã giảm giá không chính xác hoặc đã hết hạn.');
     }
@@ -112,7 +158,7 @@ export default function CartAndCheckout({
       discountAmount: discountAmount,
       total: finalTotal,
       status: status,
-      paymentMethod: paymentMethod === 'momo' ? 'Ví Momo' : 'VNPAY QR'
+      paymentMethod: paymentMethod === 'momo' ? 'Ví Momo' : 'SePay QR'
     };
 
     if (status === 'success') {
@@ -129,28 +175,34 @@ export default function CartAndCheckout({
     onEnrollSuccess(status === 'success' ? [checkoutCourse.id] : [], order);
   };
 
-  const handleRealVNPayPayment = async () => {
+  const handleRealSePayPayment = async () => {
     if (!checkoutCourse) return;
     setIsProcessing(true);
     try {
-      const orderRes = (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
-      const createdOrderId = orderRes?.order?.id || orderRes?.id || orderRes?.data?.id;
+      const orderRes = await cartApi.createCheckoutOrder([checkoutCourse.id]);
+      const createdOrderId = orderRes?.order?.id || orderRes?.id || (orderRes as any)?.data?.id;
       
       if (createdOrderId) {
-        const vnpayRes = (Object.assign([], { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 1 }, success: true, message: '', videoUrl: '', duration: '00:00', order: { id: 'dummy' } }) as any);
-        const paymentUrl = vnpayRes?.paymentUrl || vnpayRes?.url || vnpayRes?.data?.paymentUrl || vnpayRes?.data?.url;
+        if (activeDiscount) {
+          await cartApi.applyCouponCode(activeDiscount.code, createdOrderId.toString());
+        }
+
+        const sepayRes = await cartApi.createSePayGatewayUrl(createdOrderId.toString());
+        const paymentUrl = sepayRes?.paymentUrl || (sepayRes as any)?.payment_url;
         
         if (paymentUrl) {
-          window.location.href = paymentUrl;
+          setSepayQrUrl(paymentUrl);
+          setPollingOrderId(createdOrderId.toString());
+          setIsProcessing(false);
         } else {
-          throw new Error("Không lấy được link VNPay từ máy chủ");
+          throw new Error("Không lấy được mã QR SePay từ máy chủ");
         }
       } else {
         throw new Error("Không lấy được mã đơn hàng từ máy chủ");
       }
-    } catch (err) {
-      console.error('Lỗi thanh toán VNPay:', err);
-      alert('Đã xảy ra lỗi khi kết nối cổng thanh toán VNPay.');
+    } catch (err: any) {
+      console.error('Lỗi thanh toán SePay:', err);
+      alert('Đã xảy ra lỗi khi kết nối cổng thanh toán SePay: ' + (err.message || 'Lỗi không xác định'));
       setIsProcessing(false);
     }
   };
@@ -172,7 +224,7 @@ export default function CartAndCheckout({
               <Heart className="w-4.5 h-4.5 text-deep-indigo fill-deep-indigo" />
             )}
             <span className="font-display font-bold text-xs sm:text-sm">
-              {initialCourseId ? "Thanh toán Ghi danh khóa học | MindHub" : "Khóa học Yêu thích & Tuyển sinh | MindHub"}
+              {initialCourseId ? "Thanh toán khóa học | MindHub" : "Giỏ hàng & Thanh toán | MindHub"}
             </span>
           </div>
           <button 
@@ -184,13 +236,7 @@ export default function CartAndCheckout({
           </button>
         </div>
 
-        {/* Info Banner in wishlist page */}
-        {phase === 'wishlist' && (
-          <div className="bg-[#fffcf5] border-b border-[#f3e6cf] p-3 px-5 text-[10.5px] text-stone-700 flex items-center gap-2 shrink-0">
-            <Gift className="w-4 h-4 text-amber-600 shrink-0" />
-            <span className="text-left font-serif leading-relaxed">Nơi lưu giữ những lộ trình chất lượng cao bạn ưu tiên học tập. Ghi danh tuyển sinh trực tuyến nhận ưu đãi vĩnh viễn qua cổng chuyển khoản.</span>
-          </div>
-        )}
+
 
         {/* Scrollable contents wrapper */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 tactile-scrollbar">
@@ -198,23 +244,23 @@ export default function CartAndCheckout({
           {phase === 'wishlist' && (
             <div className="space-y-4">
               <h3 className="text-xs sm:text-sm font-bold text-stone-800 flex items-center gap-2 border-b border-stone-100 pb-2 text-left">
-                Khóa học yêu thích lưu trữ ({wishlistCourses.length} dự phòng)
+                Giỏ hàng của bạn ({cartCourses.length} khóa học)
               </h3>
 
-              {wishlistCourses.length === 0 ? (
+              {cartCourses.length === 0 ? (
                 <div className="text-center py-16 space-y-3.5">
                   <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto text-deep-indigo">
                     <Heart className="w-8 h-8 opacity-75" />
                   </div>
-                  <p className="text-xs font-semibold text-stone-500">Chưa có khóa học nào dưới mục Ước nguyện.</p>
-                  <p className="text-[11px] text-stone-400">Hãy nhấn biểu tượng Yêu thích ở các khóa học ngoài trang chủ để lưu trữ học vụ tại đây!</p>
+                  <p className="text-xs font-semibold text-stone-500">Giỏ hàng của bạn đang trống.</p>
+                  <p className="text-[11px] text-stone-400">Hãy khám phá các khóa học và thêm vào giỏ hàng nhé!</p>
                   <button onClick={onClose} className="bg-[#432c28] hover:bg-black text-white text-xs py-2 px-5 rounded-xl font-bold transition-all shadow-xs">
                     Khám phá Khóa học ngay
                   </button>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 tactile-scrollbar">
-                  {wishlistCourses.map((c) => {
+                  {cartCourses.map((c) => {
                     const isEnrolled = enrolledCourseIds.includes(c.id);
                     return (
                       <div key={c.id} className="flex flex-col sm:flex-row sm:items-center gap-3.5 p-3.5 bg-white border border-stone-250 rounded-2xl hover:shadow-xs transition-all relative text-left">
@@ -271,7 +317,7 @@ export default function CartAndCheckout({
           {phase === 'paying' && checkoutCourse && (
             <div className="space-y-4">
               <div className="text-left border-b border-stone-105 pb-3">
-                <span className="text-[9px] font-mono tracking-widest font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/50">CỔNG TIẾP NHẬN GHIDANH AN TOÀN VNPAY CHÍNH THỨC</span>
+                <span className="text-[9px] font-mono tracking-widest font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/50">CỔNG TIẾP NHẬN GHIDANH AN TOÀN SePay CHÍNH THỨC</span>
                 <h3 className="text-base font-bold text-stone-900 mt-1.5">Tuyển sinh trực tuyến: {checkoutCourse.title}</h3>
                 <p className="text-[11px] text-stone-800 font-medium italic mt-0.5">Thời hạn: Nhận toàn quyền truy cập cập nhật bài giảng vĩnh viễn</p>
               </div>
@@ -286,12 +332,12 @@ export default function CartAndCheckout({
                   <div className="grid grid-cols-1 gap-2">
                     <button 
                       type="button"
-                      onClick={() => setPaymentMethod('vnpay')}
-                      className={`border p-3 rounded-xl flex items-center gap-3 text-left transition-all ${paymentMethod === 'vnpay' ? 'border-[#8b5e3c] bg-[#faf6f2] ring-1 ring-[#8b5e3c] shadow-xs' : 'border-stone-200 hover:bg-stone-50'}`}
+                      onClick={() => setPaymentMethod('sepay')}
+                      className={`border p-3 rounded-xl flex items-center gap-3 text-left transition-all ${paymentMethod === 'sepay' ? 'border-[#8b5e3c] bg-[#faf6f2] ring-1 ring-[#8b5e3c] shadow-xs' : 'border-stone-200 hover:bg-stone-50'}`}
                     >
                       <div className="p-1.5 bg-blue-100 rounded-lg"><CreditCard className="w-4 h-4 text-blue-600" /></div>
                       <div>
-                        <span className="text-xs font-bold text-stone-900 block">Cổng VNPAY QR Code</span>
+                        <span className="text-xs font-bold text-stone-900 block">Cổng Thanh Toán SePay</span>
                         <span className="text-[9.5px] text-stone-700 font-semibold block mt-0.5">Quét dọn thanh toán bằng ứng dụng ngân hàng</span>
                       </div>
                     </button>
@@ -336,47 +382,38 @@ export default function CartAndCheckout({
                   </div>
                 </div>
 
-                {/* COLUMN 2 (Right 7 cols): VNPAY Specs & simulated submit */}
+                {/* COLUMN 2 (Right 7 cols): SePay Specs & simulated submit */}
                 <div className="lg:col-span-7 space-y-3 bg-stone-50 border border-stone-250 rounded-2xl p-4 sm:p-5">
-                  <span className="block text-xs font-bold text-stone-900 border-b pb-1">2. Chi tiết Lệnh thanh toán VNPAY QR:</span>
+                  <span className="block text-xs font-bold text-stone-900 border-b pb-1">2. Chi tiết Lệnh thanh toán SePay QR:</span>
                   
-                  {/* Beautiful Simulated VNPAY QR Code scanner container */}
+                  {/* Beautiful Simulated SePay QR Code scanner container */}
                   <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-3.5 rounded-xl border border-stone-200">
-                    <div className="w-24 h-24 bg-stone-50 rounded-lg border-2 border-dashed border-[#8b5e3c] flex flex-col items-center justify-center p-2 relative shrink-0">
-                      {/* Stylized QR Code Mockup */}
-                      <div className="absolute top-1 left-1 w-2 h-2 bg-[#432c28] rounded-xs"></div>
-                      <div className="absolute top-1 right-1 w-2 h-2 bg-[#432c28] rounded-xs"></div>
-                      <div className="absolute bottom-1 left-1 w-2 h-2 bg-[#432c28] rounded-xs"></div>
-                      <div className="w-16 h-16 bg-stone-900 flex flex-col justify-between p-1.5 rounded-sm">
-                        <div className="flex justify-between">
-                          <div className="w-4 h-4 bg-white rounded-xs p-0.5 flex items-center justify-center">
-                            <div className="w-full h-full bg-stone-900 rounded-2xs"></div>
-                          </div>
-                          <div className="w-4 h-4 bg-white rounded-xs p-0.5 flex items-center justify-center">
-                            <div className="w-full h-full bg-stone-900 rounded-2xs"></div>
-                          </div>
+                    <div className="w-32 h-32 bg-stone-50 rounded-lg flex flex-col items-center justify-center p-1 relative shrink-0">
+                      {sepayQrUrl ? (
+                        <img src={sepayQrUrl} alt="SePay QR Code" className="w-full h-full object-contain" />
+                      ) : (
+                        <div className="w-full h-full border-2 border-dashed border-[#8b5e3c] rounded-lg flex flex-col items-center justify-center">
+                          <span className="text-[9px] text-stone-500 font-medium px-2 text-center">Bấm 'Tạo mã SePay' để lấy QR</span>
                         </div>
-                        <div className="flex justify-between items-end">
-                          <div className="w-4 h-4 bg-white rounded-xs p-0.5 flex items-center justify-center">
-                            <div className="w-full h-full bg-stone-900 rounded-2xs"></div>
-                          </div>
-                          <div className="w-5 h-5 bg-[#8b5e3c] rounded-xs p-0.5 flex items-center justify-center text-[6px] text-white font-black">VN</div>
-                        </div>
-                      </div>
-                      <span className="text-[7px] text-[#8b5e3c] font-black uppercase tracking-wider mt-1.5 animate-pulse">QUÉT VNPAY QR</span>
+                      )}
                     </div>
                     
-                    <div className="space-y-1 text-left">
-                      <span className="text-[8.5px] bg-blue-100 text-blue-900 px-1.5 py-0.5 rounded font-black uppercase">CỔNG VNPAY CHÍNH THỨC</span>
+                    <div className="space-y-1 text-left flex-1">
+                      <span className="text-[8.5px] bg-blue-100 text-blue-900 px-1.5 py-0.5 rounded font-black uppercase">CỔNG SEPAY CHÍNH THỨC</span>
                       <p className="text-xs font-black text-stone-900">Mã QR Thanh toán Bảo mật</p>
-                      <p className="text-[10px] text-stone-800 leading-normal font-serif font-medium">Mở ứng dụng Ngân hàng (VCB, BIDV, VietinBank, Agribank, Techcombank...) quét mã QR để ghi danh tức thì.</p>
+                      <p className="text-[10px] text-stone-800 leading-normal font-serif font-medium">Mở ứng dụng Ngân hàng (VCB, BIDV, VietinBank, Techcombank...) quét mã QR trên để ghi danh tức thì. Hệ thống sẽ tự động xác nhận trong vòng 1-5 phút.</p>
+                      {sepayQrUrl && (
+                        <div className="mt-2 text-[10px] text-amber-700 font-bold bg-amber-50 p-1.5 rounded animate-pulse">
+                          Đang chờ bạn quét mã QR và thanh toán...
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   <div className="space-y-1.5 leading-normal text-xs text-stone-900 font-bold">
                     <div className="flex justify-between pb-1.5 border-b border-stone-200">
                       <span className="text-stone-800">Cổng kết nối thanh toán:</span>
-                      <span className="text-blue-800 font-black uppercase">VNPAY QR-GATEWAY</span>
+                      <span className="text-blue-800 font-black uppercase">SEPAY QR-GATEWAY</span>
                     </div>
                     <div className="flex justify-between pb-1.5 border-b border-stone-200">
                       <span className="text-stone-800">Đơn vị thụ hưởng pháp nhân:</span>
@@ -419,14 +456,14 @@ export default function CartAndCheckout({
                     <div className="flex flex-col sm:flex-row gap-2">
                       <button 
                         type="button"
-                        onClick={handleRealVNPayPayment} 
+                        onClick={handleRealSePayPayment} 
                         disabled={isProcessing}
                         className={`flex-1 ${isProcessing ? 'bg-emerald-800/60 cursor-not-allowed' : 'bg-emerald-700 hover:bg-emerald-800'} text-white text-[10.5px] font-bold py-2.5 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5`}
                       >
                         {isProcessing ? (
                            <span className="animate-pulse">Đang kết nối cổng thanh toán...</span>
                         ) : (
-                           <><CheckCircle className="w-4 h-4" /> Thanh toán VNPay (Sandbox)</>
+                           <><CheckCircle className="w-4 h-4" /> Tạo mã QR SePay</>
                         )}
                       </button>
                       
@@ -539,7 +576,6 @@ export default function CartAndCheckout({
                   <button 
                     type="button"
                     onClick={() => {
-                      onClose();
                       onEnterLesson(checkoutCourse);
                     }} 
                     className="flex-1 bg-[#432c28] hover:bg-black text-white py-2 px-5 rounded-xl text-xs font-bold shadow-md transition-all animate-pulse"
