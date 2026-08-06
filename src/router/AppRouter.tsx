@@ -42,7 +42,6 @@ const ProfilePage = React.lazy(() => import('@/features/profile/ProfilePage').th
 const LoginPage = React.lazy(() => import('@/features/auth/LoginPage').then(m => ({ default: m.default })));
 const RegisterPage = React.lazy(() => import('@/features/auth/RegisterPage').then(m => ({ default: m.default })));
 const CartAndCheckout = React.lazy(() => import('@/features/cart/CartAndCheckout').then(m => ({ default: m.default })));
-const VNPayReturnPage = React.lazy(() => import('@/features/cart/VNPayReturnPage').then(m => ({ default: m.default })));
 const InstructorDashboard = React.lazy(() => import('@/features/instructor/InstructorPage'));
 const AdminDashboard = React.lazy(() => import('@/features/admin/AdminDashboard').then(m => ({ default: m.default })));
 const InstructorProfilePage = React.lazy(() => import('@/features/instructor/InstructorProfilePage').then(m => ({ default: m.default })));
@@ -189,10 +188,6 @@ function AppRoutes() {
               />
             } />
             <Route path="/checkout" element={<Navigate to={`/cart${location.search}`} state={location.state} replace />} />
-            <Route path="/vnpay-return" element={
-              // @ts-ignore
-              <VNPayReturnPage onNavigate={navigateTo} />
-            } />
             
             {/* Protected Profile Route */}
             <Route path="/profile/:userId?" element={

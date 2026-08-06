@@ -46,17 +46,12 @@ async submitManualPaymentProof(payload: FormData): Promise<{ success: boolean }>
         });
   },
 
-async createVNPayGatewayUrl(orderId: string): Promise<{ paymentUrl: string }> {
-  devLog('Orders', `Redirect to VNPay gateway portal checkouts for Order ${orderId}`);
-  return apiFetch<{ paymentUrl: string }>('/payments/vnpay/create', {
+async createSePayGatewayUrl(orderId: string): Promise<{ paymentUrl: string }> {
+  devLog('Orders', `Redirect to SePay gateway portal checkouts for Order ${orderId}`);
+  return apiFetch<{ paymentUrl: string }>('/payments/sepay/create', {
           method: 'POST',
-          body: JSON.stringify({ order_id: parseInt(orderId), payment_method: 'vnpay' }),
+          body: JSON.stringify({ order_id: parseInt(orderId), payment_method: 'sepay' }),
         });
-  },
-
-async parseVNPayCallback(vnpayParams: string): Promise<any> {
-  devLog('Orders', 'Processing VNPay return callback payload token check');
-  return apiFetch<any>(`/payments/vnpay-return?${vnpayParams}`);
   },
 
 async hookPaymentStatusBackground(payload: any): Promise<any> {
