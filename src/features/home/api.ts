@@ -10,5 +10,9 @@ export const homeApi = {
   async getLearningDashboard(): Promise<ILearningDashboardData> {
     devLog('LearningDashboard', 'Get learning dashboard stats and recent course');
     return apiFetch<ILearningDashboardData>('/me/learning-dashboard');
+  },
+  async getActivityCalendar(): Promise<import('@/types/learningDashboard').IActivityCalendarData> {
+    devLog('ActivityCalendar', 'Get activity calendar and daily mission');
+    return apiFetch<import('@/types/learningDashboard').IActivityCalendarData>('/me/activity-calendar');
   }
 };

@@ -30,3 +30,28 @@ export interface ILearningDashboardResponse {
   message: string;
   data: ILearningDashboardData;
 }
+
+export interface IStreak {
+  current: number;
+  longest: number;
+}
+
+export interface IDailyMission {
+  title: string;
+  target: number;
+  progress: number;
+  is_completed: boolean;
+  reward_xp: number;
+}
+
+export interface IHeatmapItem {
+  date: string;
+  total_time_seconds: number;
+  intensity: number;
+}
+
+export interface IActivityCalendarData {
+  streak: IStreak;
+  daily_mission: IDailyMission;
+  heatmap: IHeatmapItem[];
+}

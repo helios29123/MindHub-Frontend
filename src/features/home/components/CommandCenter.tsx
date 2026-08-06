@@ -3,9 +3,11 @@ import { Flame, Target, Zap, Play } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Link } from "react-router-dom";
 import { useApp } from "@/app/AppContext";
+import { useActivityCalendarData } from "./../hooks/useActivityCalendarData";
 
 export function CommandCenter() {
   const { currentUser, isLoggedIn } = useApp();
+  const { data: calendarData } = useActivityCalendarData();
   const displayName = currentUser?.name?.split(' ')[0] || "bạn";
 
   return (
@@ -22,7 +24,7 @@ export function CommandCenter() {
             <Link to="/achievements" className="flex flex-col items-center justify-center group cursor-pointer hover:bg-muted/50 p-2 rounded-lg transition-colors">
               <div className="flex items-center text-amber-500 mb-1">
                 <Flame className="w-5 h-5 fill-current mr-1 group-hover:scale-110 transition-transform" />
-                <span className="text-xl font-bold">5</span>
+                <span className="text-xl font-bold">{calendarData?.streak.current || 0}</span>
               </div>
               <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold group-hover:text-amber-500 transition-colors">Ngày Streak</span>
             </Link>
