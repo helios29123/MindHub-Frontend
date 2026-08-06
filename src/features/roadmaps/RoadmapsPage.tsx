@@ -7,149 +7,12 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/shared/components/ui/button';
-import { roadmapsApi } from './api';
+import { roadmapsApi, RoadmapSummary } from './api';
+import { RoadmapSkeleton } from '@/shared/components/ui/Skeletons';
 
-interface RoadmapItem {
-  id: string;
-  category: 'web' | 'mobile' | 'data' | 'cloud' | 'fullstack';
-  categoryLabel: string;
-  title: string;
-  description: string;
+interface RoadmapItem extends RoadmapSummary {
   icon: React.ReactNode;
-  coursesCount: number;
-  duration: string;
-  level: string;
-  badge?: string;
-  salary: string;
-  demand: string;
-  skills: string[];
-  gradient: string;
-  borderHover: string;
-  iconBg: string;
-  textColor: string;
-  studentsCount: number;
 }
-
-const ROADMAPS: RoadmapItem[] = [
-  {
-    id: "frontend",
-    category: "web",
-    categoryLabel: "Web Development",
-    title: "Frontend Developer",
-    description: "Trở thành kỹ sư Frontend chuyên nghiệp với React, Next.js, Vue 3 và thiết kế UI/UX hiện đại.",
-    icon: <Code className="w-7 h-7 text-blue-600 dark:text-blue-400" />,
-    coursesCount: 12,
-    duration: "6 tháng",
-    level: "Cơ bản → Chuyên sâu",
-    badge: "Phổ biến nhất",
-    salary: "15 - 35 triệu/tháng",
-    demand: "Rất cao",
-    skills: ["HTML/CSS", "JavaScript", "TypeScript", "React", "Next.js", "Tailwind"],
-    gradient: "from-blue-500/10 via-sky-500/5 to-transparent",
-    borderHover: "group-hover:border-blue-500/40 hover:shadow-blue-500/10",
-    iconBg: "bg-blue-500/10 text-blue-600 border-blue-200/50",
-    textColor: "text-blue-600 dark:text-blue-400",
-    studentsCount: 4250
-  },
-  {
-    id: "backend",
-    category: "web",
-    categoryLabel: "Web Development",
-    title: "Backend Developer",
-    description: "Xây dựng hệ thống backend quy mô lớn với Node.js, Laravel, Java Spring Boot & Architecture.",
-    icon: <Server className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />,
-    coursesCount: 15,
-    duration: "8 tháng",
-    level: "Cơ bản → Nâng cao",
-    badge: "Hot Career",
-    salary: "18 - 40 triệu/tháng",
-    demand: "Rất cao",
-    skills: ["Node.js", "Laravel", "PostgreSQL", "Redis", "Microservices", "REST API"],
-    gradient: "from-emerald-500/10 via-teal-500/5 to-transparent",
-    borderHover: "group-hover:border-emerald-500/40 hover:shadow-emerald-500/10",
-    iconBg: "bg-emerald-500/10 text-emerald-600 border-emerald-200/50",
-    textColor: "text-emerald-600 dark:text-emerald-400",
-    studentsCount: 3890
-  },
-  {
-    id: "fullstack",
-    category: "fullstack",
-    categoryLabel: "Fullstack",
-    title: "Fullstack Engineer",
-    description: "Chinh phục cả Frontend và Backend, thiết kế toàn diện hệ thống từ giao diện đến cơ sở dữ liệu.",
-    icon: <Layers className="w-7 h-7 text-indigo-600 dark:text-indigo-400" />,
-    coursesCount: 20,
-    duration: "10 tháng",
-    level: "Toàn diện",
-    badge: "Được săn đón",
-    salary: "20 - 45 triệu/tháng",
-    demand: "Đột phá",
-    skills: ["React", "Node.js", "TypeScript", "Laravel", "Docker", "AWS"],
-    gradient: "from-indigo-500/10 via-purple-500/5 to-transparent",
-    borderHover: "group-hover:border-indigo-500/40 hover:shadow-indigo-500/10",
-    iconBg: "bg-indigo-500/10 text-indigo-600 border-indigo-200/50",
-    textColor: "text-indigo-600 dark:text-indigo-400",
-    studentsCount: 5120
-  },
-  {
-    id: "data",
-    category: "data",
-    categoryLabel: "Data & AI",
-    title: "Data Engineering & AI",
-    description: "Xử lý dữ liệu lớn, làm chủ Data Pipeline, Python, SQL, Spark & Tích hợp mô hình AI / LLM.",
-    icon: <Database className="w-7 h-7 text-purple-600 dark:text-purple-400" />,
-    coursesCount: 11,
-    duration: "6 tháng",
-    level: "Trung cấp → Chuyên gia",
-    badge: "Xu hướng 2026",
-    salary: "22 - 50 triệu/tháng",
-    demand: "Tăng trưởng nóng",
-    skills: ["Python", "SQL", "PySpark", "Kafka", "Data Warehouse", "LLM Integration"],
-    gradient: "from-purple-500/10 via-fuchsia-500/5 to-transparent",
-    borderHover: "group-hover:border-purple-500/40 hover:shadow-purple-500/10",
-    iconBg: "bg-purple-500/10 text-purple-600 border-purple-200/50",
-    textColor: "text-purple-600 dark:text-purple-400",
-    studentsCount: 2940
-  },
-  {
-    id: "mobile",
-    category: "mobile",
-    categoryLabel: "Mobile Dev",
-    title: "Mobile App Developer",
-    description: "Xây dựng ứng dụng di động iOS & Android đa nền tảng mượt mà với React Native và Flutter.",
-    icon: <Smartphone className="w-7 h-7 text-amber-600 dark:text-amber-400" />,
-    coursesCount: 9,
-    duration: "5 tháng",
-    level: "Cơ bản → Nâng cao",
-    salary: "16 - 35 triệu/tháng",
-    demand: "Cao",
-    skills: ["Flutter", "Dart", "React Native", "Swift/Kotlin", "Firebase", "App Store/Play"],
-    gradient: "from-amber-500/10 via-orange-500/5 to-transparent",
-    borderHover: "group-hover:border-amber-500/40 hover:shadow-amber-500/10",
-    iconBg: "bg-amber-500/10 text-amber-600 border-amber-200/50",
-    textColor: "text-amber-600 dark:text-amber-400",
-    studentsCount: 3100
-  },
-  {
-    id: "devops",
-    category: "cloud",
-    categoryLabel: "DevOps & Cloud",
-    title: "DevOps & Cloud Engineer",
-    description: "Tự động hóa triển khai, quản trị hạ tầng điện toán đám mây với Docker, Kubernetes, CI/CD & AWS.",
-    icon: <Cloud className="w-7 h-7 text-sky-600 dark:text-sky-400" />,
-    coursesCount: 10,
-    duration: "6 tháng",
-    level: "Trung cấp → Nâng cao",
-    salary: "25 - 55 triệu/tháng",
-    demand: "Rất cao",
-    skills: ["Docker", "Kubernetes", "AWS", "Terraform", "CI/CD Pipeline", "Linux Admin"],
-    gradient: "from-sky-500/10 via-blue-500/5 to-transparent",
-    borderHover: "group-hover:border-sky-500/40 hover:shadow-sky-500/10",
-    iconBg: "bg-sky-500/10 text-sky-600 border-sky-200/50",
-    textColor: "text-sky-600 dark:text-sky-400",
-    studentsCount: 2180
-  }
-];
 
 const CATEGORY_TABS = [
   { id: 'all', label: 'Tất cả lộ trình' },
@@ -160,27 +23,45 @@ const CATEGORY_TABS = [
   { id: 'cloud', label: 'DevOps & Cloud' }
 ];
 
+function getRoadmapIcon(id: string) {
+  switch (id) {
+    case 'frontend':
+      return <Code className="w-7 h-7 text-blue-600 dark:text-blue-400" />;
+    case 'backend':
+      return <Server className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />;
+    case 'fullstack':
+      return <Layers className="w-7 h-7 text-indigo-600 dark:text-indigo-400" />;
+    case 'data':
+      return <Database className="w-7 h-7 text-purple-600 dark:text-purple-400" />;
+    case 'mobile':
+      return <Smartphone className="w-7 h-7 text-amber-600 dark:text-amber-400" />;
+    case 'devops':
+    default:
+      return <Cloud className="w-7 h-7 text-sky-600 dark:text-sky-400" />;
+  }
+}
+
 export default function RoadmapsPage() {
   const [activeTab, setActiveTab] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [roadmapsList, setRoadmapsList] = useState<RoadmapItem[]>(ROADMAPS);
-  const [isLoadingApi, setIsLoadingApi] = useState<boolean>(false);
+  const [roadmapsList, setRoadmapsList] = useState<RoadmapItem[]>([]);
+  const [isLoadingApi, setIsLoadingApi] = useState<boolean>(true);
 
   useEffect(() => {
     let isMounted = true;
     async function loadBackendData() {
       setIsLoadingApi(true);
       try {
-        const backendCourses = await roadmapsApi.getRoadmaps();
-        if (isMounted && Array.isArray(backendCourses) && backendCourses.length > 0) {
-          // Dynamically enrich courses count from real backend courses
-          setRoadmapsList(prev => prev.map(rm => ({
-            ...rm,
-            coursesCount: Math.max(rm.coursesCount, backendCourses.length)
-          })));
+        const summaries = await roadmapsApi.getRoadmaps();
+        if (isMounted) {
+          const itemsWithIcons: RoadmapItem[] = summaries.map(s => ({
+            ...s,
+            icon: getRoadmapIcon(s.id)
+          }));
+          setRoadmapsList(itemsWithIcons);
         }
       } catch (err) {
-        console.warn('Backend courses load error:', err);
+        console.warn('Backend roadmaps load error:', err);
       } finally {
         if (isMounted) setIsLoadingApi(false);
       }
@@ -306,7 +187,13 @@ export default function RoadmapsPage() {
           </div>
 
           {/* Roadmaps Grid */}
-          {filteredRoadmaps.length === 0 ? (
+          {isLoadingApi ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <RoadmapSkeleton key={i} />
+              ))}
+            </div>
+          ) : filteredRoadmaps.length === 0 ? (
             <div className="text-center py-16 bg-card rounded-3xl border border-border/50">
               <Map className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
               <h3 className="text-lg font-bold text-foreground mb-1">Không tìm thấy lộ trình phù hợp</h3>

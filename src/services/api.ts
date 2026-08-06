@@ -41,8 +41,9 @@ export function getNormalizedBaseUrl(rawUrl?: string): string {
   return url;
 }
 
-// Read configuration from local storage or environment variables
-const initialMode = (import.meta as any).env?.VITE_API_MODE === 'api' ? 'api' : 'mock';
+// Read configuration from local storage or environment variables (Default to 'api' mode)
+const savedMode = localStorage.getItem('mindhub_api_mode');
+const initialMode: 'mock' | 'api' = savedMode === 'mock' ? 'mock' : 'api';
 const initialBaseUrl = getNormalizedBaseUrl(
   localStorage.getItem('mindhub_api_base_url') || (import.meta as any).env?.VITE_API_BASE_URL
 );
@@ -536,29 +537,19 @@ export const ApiService = {
 
   // Get category counts
   async getCategoriesWithCount(): Promise<{name: string, count: number}[]> {
-    if (config.mode === 'api') {
-      try {
-        const categories = await apiFetch<any[]>('/categories');
-        if (Array.isArray(categories)) {
-          return categories.map((cat: any) => ({
-            name: cat.name || '',
-            count: cat.courses_count ?? cat.count ?? 0,
-          }));
-        }
-        return [];
-      } catch (e) {
-        console.warn('Failed to fetch categories', e);
-        return [];
+    try {
+      const categories = await apiFetch<any[]>('/categories?per_page=50');
+      if (Array.isArray(categories)) {
+        return categories.map((cat: any) => ({
+          name: cat.name || '',
+          count: typeof cat.courses_count === 'number' ? cat.courses_count : (cat.count ?? 0),
+        }));
       }
+      return [];
+    } catch (e) {
+      console.warn('Failed to fetch categories from API:', e);
+      return [];
     }
-    // Mock fallback
-    return [
-      { name: 'Development', count: 12 },
-      { name: 'Design', count: 8 },
-      { name: 'Marketing', count: 5 },
-      { name: 'Artificial Intelligence', count: 10 },
-      { name: 'Data Science', count: 3 }
-    ];
   },
 
   async getUserEnrollments(userId: string): Promise<any[]> {
@@ -573,6 +564,59 @@ export const ApiService = {
       }
     }
     return [];
+  },
+
+  /** GET /me/courses - Get purchased courses for learner */
+  async getMyPurchasedCourses(): Promise<any[]> {
+    devLog('Learning', 'Fetch purchased courses from /me/courses');
+    try {
+      const res = await apiFetch<any>('/me/courses');
+      if (Array.isArray(res)) return res;
+      if (res && Array.isArray((res as any).data)) return (res as any).data;
+      return [];
+    } catch (e) {
+      console.warn('Failed to fetch my courses:', e);
+      return [];
+    }
+  },
+
+  /** GET /wishlist - Get saved wishlist courses */
+  async getWishlist(): Promise<any[]> {
+    devLog('Wishlist', 'Fetch saved courses from /wishlist');
+    try {
+      const res = await apiFetch<any>('/wishlist');
+      if (Array.isArray(res)) return res;
+      if (res && Array.isArray((res as any).data)) return (res as any).data;
+      return [];
+    } catch (e) {
+      console.warn('Failed to fetch wishlist:', e);
+      return [];
+    }
+  },
+
+  /** GET /me/learning-dashboard - Get learning stats and recent course from DB */
+  async getLearningDashboard(): Promise<any> {
+    devLog('Learning', 'Fetch learning dashboard from /me/learning-dashboard');
+    try {
+      return await apiFetch<any>('/me/learning-dashboard');
+    } catch (e) {
+      console.warn('Failed to fetch learning dashboard:', e);
+      return null;
+    }
+  },
+
+  /** GET /me/learning-path/next - Get next learning path recommendations from DB */
+  async getNextLearningPath(): Promise<any[]> {
+    devLog('Learning', 'Fetch next learning path from /me/learning-path/next');
+    try {
+      const res = await apiFetch<any>('/me/learning-path/next');
+      if (Array.isArray(res)) return res;
+      if (res && Array.isArray((res as any).data)) return (res as any).data;
+      return [];
+    } catch (e) {
+      console.warn('Failed to fetch next learning path:', e);
+      return [];
+    }
   },
 
   async getUserActivities(userId: string): Promise<any[]> {
@@ -966,23 +1010,30 @@ export const ApiService = {
 
   /** PATCH /learn/lessons/{id}/complete */
   async markLessonAsComplete(lessonId: string): Promise<{ success: boolean }> {
-  devLog('Learning', `Setting milestone checkmark to Lesson: ${lessonId}`);
-  return apiFetch<{ success: boolean }>(`/learn/lessons/${lessonId}/complete`, { method: 'PATCH' });
+    devLog('Learning', `Setting milestone checkmark to Lesson: ${lessonId}`);
+    return apiFetch<{ success: boolean }>(`/learn/lessons/${lessonId}/complete`, { 
+      method: 'PATCH',
+      body: JSON.stringify({ completed: true })
+    });
   },
 
   /** GET /learn/lessons/{id}/next */
   async getNextLessonNode(lessonId: string): Promise<any> {
-  devLog('Learning', `Find following lesson after node ${lessonId}`);
-  return apiFetch<any>(`/learn/lessons/${lessonId}/next`);
+    devLog('Learning', `Find following lesson after node ${lessonId}`);
+    return apiFetch<any>(`/learn/lessons/${lessonId}/next`);
   },
 
   /** PATCH /learn/lessons/{id}/progress */
-  async saveVideoPlaybackRatio(lessonId: string, currentSeconds: number): Promise<{ success: boolean }> {
-  devLog('Learning', `Syncing video playback bookmark: ${lessonId}`, { seconds: currentSeconds });
-  return apiFetch<{ success: boolean }>(`/learn/lessons/${lessonId}/progress`, {
-          method: 'PATCH',
-          body: JSON.stringify({ current_time: currentSeconds }),
-        });
+  async saveVideoPlaybackRatio(lessonId: string, currentSeconds: number, durationSeconds?: number): Promise<{ success: boolean }> {
+    devLog('Learning', `Syncing video playback bookmark: ${lessonId}`, { seconds: currentSeconds });
+    return apiFetch<{ success: boolean }>(`/learn/lessons/${lessonId}/progress`, {
+      method: 'PATCH',
+      body: JSON.stringify({ 
+        current_second: Math.floor(currentSeconds),
+        duration_second: durationSeconds ? Math.floor(durationSeconds) : undefined,
+        is_completed: false
+      }),
+    });
   },
 
   /** POST /learn/assets/{assetId}/signed-url */

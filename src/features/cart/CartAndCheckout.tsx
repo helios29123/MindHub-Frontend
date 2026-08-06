@@ -77,8 +77,8 @@ export default function CartAndCheckout({
                 instructorTitle: rawData.instructor?.expertise || 'Chuyên gia MindHub',
                 instructorAvatar: rawData.instructor?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
                 instructorBio: '',
-                price: Number(rawData.price) || 499000,
-                salePrice: rawData.sale_price ? Number(rawData.sale_price) : undefined,
+                price: rawData.price !== undefined && rawData.price !== null ? Number(rawData.price) : 0,
+                salePrice: rawData.sale_price !== undefined && rawData.sale_price !== null ? Number(rawData.sale_price) : undefined,
                 rating: 4.8,
                 reviewCount: 120,
                 enrolledCount: 1500,
@@ -234,9 +234,9 @@ export default function CartAndCheckout({
           }
         }
 
-        const sepayRes = await cartApi.createSePayGatewayUrl(createdOrderId.toString());
+        const sepayRes: any = await cartApi.createSePayGatewayUrl(createdOrderId.toString());
         const resSepayData = sepayRes?.data || sepayRes;
-        const paymentUrl = resSepayData?.qr_url || resSepayData?.payment_url || resSepayData?.paymentUrl || sepayRes?.qr_url || sepayRes?.payment_url || sepayRes?.paymentUrl;
+        const paymentUrl = resSepayData?.qr_url || resSepayData?.payment_url || resSepayData?.paymentUrl;
         
         if (paymentUrl) {
           setSepayQrUrl(paymentUrl);

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Course, Lesson, StudentProgress } from '@/shared/types';
 import { useApp } from '@/app/AppContext';
 import { useCourseDetail } from '@/features/courses/hooks/useCourseDetail';
+import { classroomApi } from '@/features/classroom/api';
+import { safeLocalStorage as localStorage } from '@/shared/utils/safeStorage';
 
 export type TabType = 'overview' | 'qa' | 'notes' | 'resources';
 
@@ -15,7 +17,7 @@ export interface UseClassroomResult {
   error: Error | null;
   toggleSidebar: () => void;
   selectLesson: (lessonId: string) => void;
-  markAsCompleted: (lessonId: string) => void;
+  markAsCompleted: (lessonId: string) => Promise<void>;
   setTab: (tab: TabType) => void;
 }
 
@@ -33,34 +35,39 @@ export function useClassroom(courseId: string | undefined): UseClassroomResult {
       let firstLesson: Lesson | null = null;
       if (course.chapters && course.chapters.length > 0 && course.chapters[0].lessons.length > 0) {
         firstLesson = course.chapters[0].lessons[0];
-      } else if (!course.chapters || course.chapters.length === 0) {
-        // Provide a mock chapter if backend didn't return any, so the UI doesn't break
-        course.chapters = [{
-          id: 'mock-chap-1',
-          title: 'Chương 1: Giới thiệu (Tự động tạo)',
-          lessons: [{
-            id: 'mock-less-1',
-            title: 'Bài 1: Tổng quan',
-            duration: '05:00',
-            videoUrl: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4',
-            isFree: true,
-            type: 'video'
-          }]
-        }];
-        firstLesson = course.chapters[0].lessons[0];
       }
 
       setActiveLesson(firstLesson);
 
-      // Mock initial progress
+      // Read completed lessons from localStorage cache
+      const cacheKey = `mindhub_completed_lessons_${course.id}`;
+      const cached = localStorage.getItem(cacheKey);
+      const cachedCompletedIds: string[] = cached ? JSON.parse(cached) : [];
+
       setProgress({
         courseId: course.id,
         currentLessonId: firstLesson?.id || '',
-        completedLessonIds: [],
+        completedLessonIds: cachedCompletedIds,
         notes: [],
         bookmarks: [],
         lastWatchedProgressSec: 0
       });
+
+      // Attempt to pull real progress from backend API
+      classroomApi.getStudentCourseProgress(course.id)
+        .then((res: any) => {
+          if (res && res.data) {
+            const apiCompletedIds = res.data.completed_lesson_ids || res.data.completed_lessons || [];
+            if (Array.isArray(apiCompletedIds) && apiCompletedIds.length > 0) {
+              const strIds = apiCompletedIds.map(String);
+              setProgress(prev => prev ? { ...prev, completedLessonIds: strIds } : null);
+              localStorage.setItem(cacheKey, JSON.stringify(strIds));
+            }
+          }
+        })
+        .catch(() => {
+          // Unauthenticated or fallback gracefully
+        });
     }
   }, [course]);
 
@@ -81,21 +88,28 @@ export function useClassroom(courseId: string | undefined): UseClassroomResult {
     }
   };
 
-  const markAsCompleted = (lessonId: string) => {
+  const markAsCompleted = async (lessonId: string) => {
+    if (!course) return;
+    const cacheKey = `mindhub_completed_lessons_${course.id}`;
+
+    // Update local state & storage first for instant feedback
     setProgress(prev => {
       if (!prev) return prev;
-      if (prev.completedLessonIds.includes(lessonId)) {
-        // Toggle off for testing purposes if desired, but usually we just keep it completed
-        return {
-          ...prev,
-          completedLessonIds: prev.completedLessonIds.filter(id => id !== lessonId)
-        };
-      }
-      return {
-        ...prev,
-        completedLessonIds: [...prev.completedLessonIds, lessonId]
-      };
+      const isAlreadyCompleted = prev.completedLessonIds.includes(lessonId);
+      const nextCompleted = isAlreadyCompleted
+        ? prev.completedLessonIds.filter(id => id !== lessonId)
+        : [...prev.completedLessonIds, lessonId];
+      
+      localStorage.setItem(cacheKey, JSON.stringify(nextCompleted));
+      return { ...prev, completedLessonIds: nextCompleted };
     });
+
+    // Sync to backend DB API
+    try {
+      await classroomApi.markLessonAsComplete(lessonId);
+    } catch (err) {
+      console.warn("Could not sync complete status to backend:", err);
+    }
   };
 
   return {

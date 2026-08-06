@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Card } from "@/shared/components/ui/card";
 import { Button } from "@/shared/components/ui/button";
-import { Clock, BookOpen, Star, ArrowRight, User as UserIcon } from "lucide-react";
+import { Clock, BookOpen, Star, ArrowRight, User as UserIcon, Award } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from 'sonner';
 
@@ -17,6 +17,10 @@ export interface CourseData {
   slug?: string;
   price?: number;
   salePrice?: number;
+  category?: string;
+  rating?: number;
+  enrolledCount?: number;
+  description?: string;
 }
 
 const FALLBACK_THUMBNAILS = [
@@ -27,7 +31,12 @@ const FALLBACK_THUMBNAILS = [
   'https://images.unsplash.com/photo-1542831371-29b0f74f9713?w=800&auto=format&fit=crop&q=80'
 ];
 
-export const CourseCard = React.memo(({ course }: { course: CourseData }) => {
+interface CourseCardProps {
+  course: CourseData;
+  viewMode?: 'grid' | 'list';
+}
+
+export const CourseCard = React.memo(({ course, viewMode = 'grid' }: CourseCardProps) => {
   const [imgError, setImgError] = useState(false);
 
   const isEnrolled = course.status === "enrolled" || course.progress !== undefined;
@@ -53,7 +62,7 @@ export const CourseCard = React.memo(({ course }: { course: CourseData }) => {
     ? course.instructor 
     : (course.instructor as any)?.name || (course.instructor as any)?.full_name || (course.instructor as any)?.user?.name || 'Giảng viên MindHub';
 
-  // Pick deterministic fallback image if thumbnail fails or is empty/relative demo
+  // Pick deterministic fallback image if thumbnail fails
   const hash = course.id ? Array.from(String(course.id)).reduce((acc, char) => acc + char.charCodeAt(0), 0) : 0;
   const fallbackUrl = FALLBACK_THUMBNAILS[hash % FALLBACK_THUMBNAILS.length];
 
@@ -81,9 +90,119 @@ export const CourseCard = React.memo(({ course }: { course: CourseData }) => {
     }
   };
 
+  // -------------------------------------------------------------
+  // LIST VIEW LAYOUT
+  // -------------------------------------------------------------
+  if (viewMode === 'list') {
+    return (
+      <Card className="group overflow-hidden border border-border/70 shadow-xs hover:shadow-xl hover:border-primary/40 transition-all duration-300 flex flex-col sm:flex-row bg-card rounded-2xl">
+        {/* Cover Thumbnail Left */}
+        <div className="relative sm:w-72 shrink-0 aspect-[16/10] sm:aspect-auto overflow-hidden bg-slate-950">
+          <img 
+            src={displayThumbnail} 
+            alt={course.title}
+            onError={() => setImgError(true)}
+            className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-700 ease-out"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent opacity-70" />
+          
+          <div className="absolute top-3 left-3 flex gap-2">
+            <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md backdrop-blur-md border shadow-xs ${difficultyBadges[validDifficulty]}`}>
+              {difficultyLabels[validDifficulty]}
+            </span>
+            {course.category && (
+              <span className="bg-slate-900/80 text-white backdrop-blur-md border border-white/10 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                {course.category}
+              </span>
+            )}
+          </div>
+
+          <div className="absolute top-3 right-3 bg-slate-950/80 backdrop-blur-md border border-white/10 px-2 py-0.5 rounded-md text-[11px] font-black text-amber-400 flex items-center gap-1 shadow-xs">
+            <Star className="w-3 h-3 fill-current" />
+            <span>{course.rating || '4.8'}</span>
+          </div>
+        </div>
+
+        {/* Card Body Right */}
+        <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground font-semibold">
+                <div className="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <UserIcon className="w-3 h-3" />
+                </div>
+                <span>{instructorName}</span>
+              </div>
+              {course.enrolledCount !== undefined && (
+                <span className="text-[11px] text-muted-foreground font-medium">
+                  {course.enrolledCount.toLocaleString()} học viên
+                </span>
+              )}
+            </div>
+
+            <Link to={`/courses/${course.slug || course.id}`} className="block group-hover:text-primary transition-colors">
+              <h3 className="font-extrabold text-base leading-snug text-foreground tracking-tight line-clamp-1">
+                {course.title}
+              </h3>
+            </Link>
+
+            {course.description && (
+              <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                {course.description}
+              </p>
+            )}
+
+            <div className="flex items-center gap-4 text-xs font-semibold text-muted-foreground pt-1">
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-primary" />
+                <span>{course.duration || '20h 30m'}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
+                <span>24 bài học</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Award className="w-3.5 h-3.5 text-amber-500" />
+                <span>Chứng chỉ MindHub</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-border/50 flex items-center justify-between gap-4">
+            <div className="flex items-baseline gap-2">
+              <span className="text-lg font-black text-foreground tracking-tight whitespace-nowrap">
+                {displayPrice.toLocaleString()}đ
+              </span>
+              {originalPrice && (
+                <span className="text-xs text-muted-foreground line-through font-medium whitespace-nowrap">
+                  {originalPrice.toLocaleString()}đ
+                </span>
+              )}
+            </div>
+
+            <Link to={`/courses/${course.slug || course.id}`}>
+              <Button 
+                onClick={handleAction} 
+                size="sm" 
+                variant={isEnrolled ? "default" : "secondary"} 
+                className="rounded-xl text-xs h-9 px-4 font-bold shadow-xs group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300 flex items-center gap-1.5"
+              >
+                <span>{isCompleted ? "Xem lại" : isEnrolled ? "Học tiếp" : "Xem chi tiết"}</span>
+                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  // -------------------------------------------------------------
+  // GRID VIEW LAYOUT (DEFAULT)
+  // -------------------------------------------------------------
   return (
-    <Card className="group overflow-hidden border border-border/70 shadow-sm hover:shadow-xl hover:border-primary/40 transition-all duration-300 hover:-translate-y-1 flex flex-col h-full bg-card rounded-2xl">
-      {/* 1. COVER IMAGE WITH OVERLAY BADGES */}
+    <Card className="group overflow-hidden border border-border/70 shadow-xs hover:shadow-xl hover:border-primary/40 transition-all duration-300 hover:-translate-y-1 flex flex-col h-full bg-card rounded-2xl">
+      {/* Cover Image */}
       <div className="relative aspect-[16/10] overflow-hidden bg-slate-950">
         <img 
           src={displayThumbnail} 
@@ -94,16 +213,21 @@ export const CourseCard = React.memo(({ course }: { course: CourseData }) => {
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent opacity-70 group-hover:opacity-50 transition-opacity duration-300" />
         
         {/* Difficulty Badge Top-Left */}
-        <div className="absolute top-2.5 left-2.5">
+        <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
           <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md backdrop-blur-md border shadow-xs ${difficultyBadges[validDifficulty]}`}>
             {difficultyLabels[validDifficulty]}
           </span>
+          {course.category && (
+            <span className="bg-slate-900/80 text-white backdrop-blur-md border border-white/10 px-2 py-0.5 rounded-md text-[10px] font-bold">
+              {course.category}
+            </span>
+          )}
         </div>
 
         {/* Rating Badge Top-Right */}
         <div className="absolute top-2.5 right-2.5 bg-slate-950/80 backdrop-blur-md border border-white/10 px-2 py-0.5 rounded-md text-[11px] font-black text-amber-400 flex items-center gap-1 shadow-xs">
           <Star className="w-3 h-3 fill-current" />
-          <span>4.8</span>
+          <span>{course.rating || '4.8'}</span>
         </div>
 
         {/* Enrolled Progress Bar */}
@@ -117,7 +241,7 @@ export const CourseCard = React.memo(({ course }: { course: CourseData }) => {
         )}
       </div>
       
-      {/* 2. CARD CONTENT BODY */}
+      {/* Content Body */}
       <div className="p-4 flex-1 flex flex-col justify-between space-y-3.5">
         <div className="space-y-2">
           {/* Instructor Line */}
@@ -135,7 +259,7 @@ export const CourseCard = React.memo(({ course }: { course: CourseData }) => {
             </h3>
           </Link>
 
-          {/* Meta Info (Duration & Lessons) */}
+          {/* Meta Info */}
           <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground/90 pt-1">
             <div className="flex items-center gap-1 whitespace-nowrap">
               <Clock className="w-3.5 h-3.5 text-primary shrink-0" />
@@ -148,9 +272,8 @@ export const CourseCard = React.memo(({ course }: { course: CourseData }) => {
           </div>
         </div>
 
-        {/* 3. FOOTER PRICE & ACTION BUTTON */}
+        {/* Footer Price & Action */}
         <div className="pt-3 border-t border-border/50 flex items-center justify-between gap-2">
-          {/* Price */}
           <div className="flex flex-col">
             <span className="text-sm font-black text-foreground tracking-tight leading-none whitespace-nowrap">
               {displayPrice.toLocaleString()}đ
@@ -162,13 +285,12 @@ export const CourseCard = React.memo(({ course }: { course: CourseData }) => {
             )}
           </div>
 
-          {/* Action Button */}
           <Link to={`/courses/${course.slug || course.id}`} className="shrink-0">
             <Button 
               onClick={handleAction} 
               size="sm" 
               variant={isEnrolled ? "default" : "secondary"} 
-              className="rounded-xl text-[11px] h-7.5 px-2.5 font-bold shadow-xs group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300 flex items-center gap-1 whitespace-nowrap"
+              className="rounded-xl text-[11px] h-8 px-3 font-bold shadow-xs group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300 flex items-center gap-1 whitespace-nowrap"
             >
               <span>{isCompleted ? "Xem lại" : isEnrolled ? "Học tiếp" : "Xem chi tiết"}</span>
               <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />

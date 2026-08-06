@@ -4,11 +4,12 @@ import { PageTransition } from '@/shared/components/ui/PageTransition';
 import { 
   Map as MapIcon, ArrowLeft, CheckCircle2, Circle, Lock, PlayCircle, Clock, BookOpen, 
   Sparkles, Award, ChevronRight, Code, Server, Database, Smartphone, 
-  Layers, Cloud, Zap, Briefcase, Share2, FileText, CheckSquare, Trophy
+  Layers, Cloud, Zap, Briefcase, Share2, FileText, CheckSquare, Trophy, X, Video
 } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { CourseCard, CourseData } from '@/features/courses/components/CourseCard';
 import { roadmapsApi } from './api';
+import { ApiService } from '@/services/api';
 
 interface MilestoneStep {
   id: number;
@@ -20,6 +21,9 @@ interface MilestoneStep {
   estimatedHours: string;
   concepts?: string[];
   projectTitle?: string;
+  videoUrl?: string;
+  videoTitle?: string;
+  videoDuration?: string;
   courses?: Array<{
     id: string;
     slug?: string;
@@ -33,6 +37,8 @@ interface MilestoneStep {
     thumbnail: string;
     tags: string[];
     level: string;
+    videoUrl?: string;
+    videoDuration?: string;
   }>;
 }
 
@@ -681,62 +687,48 @@ const ALL_ROADMAPS_DATA: Record<string, RoadmapData> = {
 export default function RoadmapDetailPage() {
   const { roadmapId } = useParams<{ roadmapId: string }>();
   const navigate = useNavigate();
-  
-  // Safely resolve roadmap data or fallback to frontend
-  const roadmapKey = (roadmapId && ALL_ROADMAPS_DATA[roadmapId]) ? roadmapId : 'frontend';
-  const initialRoadmap = ALL_ROADMAPS_DATA[roadmapKey] || ALL_ROADMAPS_DATA.frontend;
 
-  const [roadmap, setRoadmap] = useState<RoadmapData>(initialRoadmap);
+  const [roadmap, setRoadmap] = useState<RoadmapData | null>(null);
   const [activeStepId, setActiveStepId] = useState<number>(1);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [selectedVideo, setSelectedVideo] = useState<{ url: string; title: string; stepTitle?: string } | null>(null);
 
-  // Sync active step & real backend courses when roadmap changes
   useEffect(() => {
     let isMounted = true;
-    const currentBase = ALL_ROADMAPS_DATA[roadmapKey] || ALL_ROADMAPS_DATA.frontend;
-    setRoadmap(currentBase);
-
-    if (currentBase && currentBase.steps && currentBase.steps.length > 0) {
-      const inProgress = currentBase.steps.find(s => s.status === 'in-progress');
-      setActiveStepId(inProgress ? inProgress.id : currentBase.steps[0].id);
-    }
-
-    async function syncBackendCourses() {
+    async function fetchRoadmapDetail() {
+      setIsLoading(true);
       try {
-        const { courses } = await roadmapsApi.getRoadmapDetail(roadmapKey);
-        if (isMounted && Array.isArray(courses) && courses.length > 0) {
-          setRoadmap(prev => ({
-            ...prev,
-            steps: prev.steps.map((st, idx) => {
-              const slicedBackend = courses.slice(idx, idx + 2);
-              if (slicedBackend.length === 0) return st;
-              return {
-                ...st,
-                courses: slicedBackend.map((c: any) => ({
-                  id: String(c.id),
-                  slug: c.slug || String(c.id),
-                  title: c.title || c.name || 'Khóa học thực chiến',
-                  instructor: typeof c.instructor === 'string' ? c.instructor : (c.instructor?.name || c.instructor?.full_name || 'Giảng viên MindHub'),
-                  price: typeof c.price === 'number' ? c.price : 499000,
-                  salePrice: typeof (c.sale_price || c.salePrice) === 'number' ? (c.sale_price || c.salePrice) : 299000,
-                  rating: c.rating || 4.9,
-                  reviewCount: c.review_count || 320,
-                  enrolledCount: c.enrolled_count || 1250,
-                  thumbnail: c.thumbnail_url || c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=800&q=80',
-                  tags: c.tags || ['MindHub', 'API'],
-                  level: c.level || 'Intermediate'
-                }))
-              };
-            })
-          }));
+        const detail = await roadmapsApi.getRoadmapDetail(roadmapId || 'frontend');
+        if (isMounted && detail) {
+          const detailData: RoadmapData = {
+            ...detail,
+            icon: <Code className="w-8 h-8 text-blue-500" />
+          };
+          setRoadmap(detailData);
+          if (detailData.steps && detailData.steps.length > 0) {
+            const inProgress = detailData.steps.find(s => s.status === 'in-progress');
+            setActiveStepId(inProgress ? inProgress.id : detailData.steps[0].id);
+          }
         }
       } catch (err) {
-        console.warn('Sync roadmap backend courses error:', err);
+        console.warn('Failed to load roadmap detail from API:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     }
 
-    syncBackendCourses();
+    fetchRoadmapDetail();
     return () => { isMounted = false; };
-  }, [roadmapKey]);
+  }, [roadmapId]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center p-4">
+        <div className="w-12 h-12 rounded-full border-4 border-primary/30 border-t-primary animate-spin mb-4" />
+        <p className="text-sm font-semibold text-muted-foreground animate-pulse">Đang tải dữ liệu lộ trình từ Backend...</p>
+      </div>
+    );
+  }
 
   if (!roadmap || !roadmap.steps) {
     return (
@@ -961,12 +953,34 @@ export default function RoadmapDetailPage() {
                       </div>
                     )}
 
-                    {/* Project Milestone Highlight if present */}
-                    {step.projectTitle && (
-                      <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent border border-amber-500/30 p-4 rounded-2xl mb-6 text-xs text-amber-950 dark:text-amber-200">
-                        <p className="font-bold flex items-center gap-2 text-amber-800 dark:text-amber-300">
-                          {step.projectTitle}
-                        </p>
+                    {/* Milestone Step Video Preview */}
+                    {step.videoUrl && (
+                      <div className="bg-card/90 border border-primary/20 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 bg-gradient-to-r from-primary/5 via-indigo-500/5 to-transparent hover:border-primary/40 transition-colors">
+                        <div className="flex items-center gap-3 w-full sm:w-auto">
+                          <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 shadow-xs">
+                            <PlayCircle className="w-6 h-6 text-primary animate-pulse" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-foreground">
+                              {step.videoTitle || `Video Hướng dẫn Chặng ${step.id}`}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Thời lượng: {step.videoDuration || '15:00'} • Bài giảng trực quan chặng học
+                            </p>
+                          </div>
+                        </div>
+
+                        <Button
+                          size="sm"
+                          onClick={() => setSelectedVideo({
+                            url: step.videoUrl!,
+                            title: step.videoTitle || `Video Hướng dẫn Chặng ${step.id}`,
+                            stepTitle: step.title
+                          })}
+                          className="rounded-xl font-bold gap-1.5 text-xs shrink-0 w-full sm:w-auto shadow-xs"
+                        >
+                          <PlayCircle className="w-4 h-4" /> Xem Video Chặng
+                        </Button>
                       </div>
                     )}
 
@@ -987,8 +1001,8 @@ export default function RoadmapDetailPage() {
                               thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=800&q=80',
                               duration: '20 giờ học',
                               difficulty: (c.level as any) || 'Intermediate',
-                              price: c.price || 499000,
-                              salePrice: c.salePrice || 299000,
+                              price: c.price !== undefined && c.price !== null ? c.price : 0,
+                              salePrice: c.salePrice !== undefined && c.salePrice !== null ? c.salePrice : undefined,
                               status: 'not_enrolled'
                             };
 
@@ -1069,6 +1083,70 @@ export default function RoadmapDetailPage() {
           </div>
         </section>
       </div>
+
+      {/* Interactive Video Player Modal */}
+      {selectedVideo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-fade-in">
+          <div className="bg-card border border-border rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-border flex items-center justify-between bg-muted/30">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <Video className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-foreground line-clamp-1">
+                    {selectedVideo.title}
+                  </h3>
+                  {selectedVideo.stepTitle && (
+                    <p className="text-xs text-muted-foreground line-clamp-1">
+                      {selectedVideo.stepTitle}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedVideo(null)}
+                className="w-8 h-8 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Video Player */}
+            <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
+              {selectedVideo.url.endsWith('.mp4') || selectedVideo.url.includes('/storage/') || selectedVideo.url.includes('gtv-videos-bucket') ? (
+                <video
+                  src={selectedVideo.url}
+                  controls
+                  autoPlay
+                  className="w-full h-full object-contain"
+                >
+                  Trình duyệt của bạn không hỗ trợ phát video HTML5.
+                </video>
+              ) : (
+                <iframe
+                  src={selectedVideo.url.includes('youtube.com') || selectedVideo.url.includes('youtu.be')
+                    ? selectedVideo.url.replace('watch?v=', 'embed/')
+                    : selectedVideo.url}
+                  title={selectedVideo.title}
+                  className="w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-border bg-muted/20 flex items-center justify-between text-xs text-muted-foreground">
+              <span>MindHub Interactive Learning • Bài giảng trực quan</span>
+              <Button size="sm" variant="secondary" onClick={() => setSelectedVideo(null)} className="rounded-xl font-bold">
+                Đóng Player
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageTransition>
   );
 }

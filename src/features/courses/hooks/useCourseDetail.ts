@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Course } from '@/shared/types';
 import { coursesApi } from '@/features/courses/api';
+import { resolveMediaUrl } from '@/shared/lib/media-url';
 
 interface UseCourseDetailResult {
   course: Course | null;
@@ -71,8 +72,8 @@ export function useCourseDetail(courseId: string | undefined): UseCourseDetailRe
           instructorTitle: rawData.instructor?.expertise || rawData.instructor?.level || 'Senior Backend Instructor',
           instructorAvatar: avatarUrl,
           instructorBio: rawData.instructor?.bio || 'Giảng viên chuyên thiết kế hệ thống API & Microservices với hơn 6 năm kinh nghiệm.',
-          price: Number(rawData.price) || 499000,
-          salePrice: rawData.sale_price ? Number(rawData.sale_price) : undefined,
+          price: rawData.price !== undefined && rawData.price !== null ? Number(rawData.price) : 0,
+          salePrice: rawData.sale_price !== undefined && rawData.sale_price !== null ? Number(rawData.sale_price) : undefined,
           rating: 4.8,
           reviewCount: rawData.reviews?.length || 120,
           enrolledCount: rawData.enrolled_count || 1500,
@@ -97,7 +98,11 @@ export function useCourseDetail(courseId: string | undefined): UseCourseDetailRe
               title: l.title || 'Bài học',
               type: (l.lesson_type === 'video' || l.type === 'video') ? 'video' : 'document',
               duration: l.video_duration_seconds ? `${Math.ceil(l.video_duration_seconds / 60)} phút` : '10 phút',
-              videoUrl: l.video_url || '',
+              videoUrl: (l.video_url && typeof l.video_url === 'string' && l.video_url.trim()) 
+                ? resolveMediaUrl(l.video_url) 
+                : (rawData.intro_video_url && typeof rawData.intro_video_url === 'string' && rawData.intro_video_url.trim() 
+                    ? resolveMediaUrl(rawData.intro_video_url) 
+                    : resolveMediaUrl(null)),
               isPreview: !!l.is_preview
             }))
           })),

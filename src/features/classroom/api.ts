@@ -39,21 +39,28 @@ async verifyClassroomAccess(lessonId: string): Promise<{ has_access: boolean }> 
 
 async markLessonAsComplete(lessonId: string): Promise<{ success: boolean }> {
   devLog('Learning', `Setting milestone checkmark to Lesson: ${lessonId}`);
-  return apiFetch<{ success: boolean }>(`/learn/lessons/${lessonId}/complete`, { method: 'PATCH' });
-  },
+  return apiFetch<{ success: boolean }>(`/learn/lessons/${lessonId}/complete`, { 
+    method: 'PATCH',
+    body: JSON.stringify({ completed: true })
+  });
+},
 
 async getNextLessonNode(lessonId: string): Promise<any> {
   devLog('Learning', `Find following lesson after node ${lessonId}`);
   return apiFetch<any>(`/learn/lessons/${lessonId}/next`);
-  },
+},
 
-async saveVideoPlaybackRatio(lessonId: string, currentSeconds: number): Promise<{ success: boolean }> {
+async saveVideoPlaybackRatio(lessonId: string, currentSeconds: number, durationSeconds?: number): Promise<{ success: boolean }> {
   devLog('Learning', `Syncing video playback bookmark: ${lessonId}`, { seconds: currentSeconds });
   return apiFetch<{ success: boolean }>(`/learn/lessons/${lessonId}/progress`, {
-          method: 'PATCH',
-          body: JSON.stringify({ current_time: currentSeconds }),
-        });
-  },
+    method: 'PATCH',
+    body: JSON.stringify({ 
+      current_second: Math.floor(currentSeconds),
+      duration_second: durationSeconds ? Math.floor(durationSeconds) : undefined,
+      is_completed: false
+    }),
+  });
+},
 
 async generateSignedAssetUrl(assetId: string): Promise<{ signedUrl: string }> {
   devLog('Learning', `Signing secure credential attachment download token for Asset ${assetId}`);

@@ -1,13 +1,36 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Lesson } from '@/shared/types';
 import { PlayCircle } from 'lucide-react';
+import { classroomApi } from '../api';
 
 interface VideoPlayerProps {
   activeLesson: Lesson | null;
   onEnded?: () => void;
+  onTimeUpdate?: (currentTime: number, duration: number) => void;
 }
 
-export function VideoPlayer({ activeLesson, onEnded }: VideoPlayerProps) {
+export function VideoPlayer({ activeLesson, onEnded, onTimeUpdate }: VideoPlayerProps) {
+  const lastSavedSecondRef = useRef<number>(0);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    lastSavedSecondRef.current = 0;
+  }, [activeLesson?.id]);
+
+  useEffect(() => {
+    const handleSeekEvent = (e: CustomEvent<{ seconds: number }>) => {
+      if (videoRef.current && typeof e.detail?.seconds === 'number') {
+        videoRef.current.currentTime = e.detail.seconds;
+        videoRef.current.play().catch(() => {});
+      }
+    };
+
+    window.addEventListener('mindhub_seek_video' as any, handleSeekEvent as any);
+    return () => {
+      window.removeEventListener('mindhub_seek_video' as any, handleSeekEvent as any);
+    };
+  }, []);
+
   if (!activeLesson) {
     return (
       <div className="w-full aspect-video bg-slate-900 flex flex-col items-center justify-center text-slate-400">
@@ -17,18 +40,47 @@ export function VideoPlayer({ activeLesson, onEnded }: VideoPlayerProps) {
     );
   }
 
-  // If there's a videoUrl and it's an mp4, use standard video player
-  // Otherwise, fallback to a placeholder
-  const isVideo = activeLesson.type === 'video' || activeLesson.videoUrl;
+  const isVideo = activeLesson.type === 'video' || Boolean(activeLesson.videoUrl);
+
+  const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const video = e.currentTarget;
+    const currentSecond = Math.floor(video.currentTime);
+    const durationSecond = Math.floor(video.duration || 0);
+
+    (window as any).__mindhub_current_video_time = video.currentTime;
+
+    if (onTimeUpdate) {
+      onTimeUpdate(video.currentTime, video.duration || 0);
+    }
+
+    // Throttle API progress saves: Sync with backend DB every 5 seconds of watching
+    if (activeLesson.id && currentSecond > 0 && Math.abs(currentSecond - lastSavedSecondRef.current) >= 5) {
+      lastSavedSecondRef.current = currentSecond;
+      classroomApi.saveVideoPlaybackRatio(activeLesson.id, currentSecond, durationSecond)
+        .catch(err => console.warn('Failed to sync video playback progress with DB:', err));
+    }
+  };
+
+  const handleVideoEnded = () => {
+    if (activeLesson.id) {
+      classroomApi.markLessonAsComplete(activeLesson.id)
+        .catch(err => console.warn('Failed to mark lesson complete on video end:', err));
+    }
+    if (onEnded) {
+      onEnded();
+    }
+  };
 
   return (
     <div className="w-full aspect-video bg-black relative flex items-center justify-center overflow-hidden">
       {isVideo && activeLesson.videoUrl ? (
         <video 
+          ref={videoRef}
           key={activeLesson.id} // Ensure video re-mounts on lesson change
           controls 
           className="w-full h-full object-contain"
-          onEnded={onEnded}
+          onTimeUpdate={handleTimeUpdate}
+          onEnded={handleVideoEnded}
           autoPlay
         >
           <source src={activeLesson.videoUrl} type="video/mp4" />
@@ -54,7 +106,7 @@ export function VideoPlayer({ activeLesson, onEnded }: VideoPlayerProps) {
           {activeLesson.type !== 'video' && (
             <button 
               className="mt-6 px-6 py-2 bg-primary text-primary-foreground rounded-md font-medium"
-              onClick={onEnded}
+              onClick={handleVideoEnded}
             >
               Hoàn thành bài học
             </button>

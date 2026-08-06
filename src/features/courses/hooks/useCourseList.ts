@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Course } from '@/shared/types';
-import { INITIAL_COURSES } from '@/shared/data';
+import { ApiService } from '@/services/api';
 
 export interface CourseListFilters {
   query: string;
@@ -13,106 +13,184 @@ export interface CourseListFilters {
   limit: number;
 }
 
+export interface CategoryOption {
+  name: string;
+  count: number;
+}
+
 export interface UseCourseListResult {
   courses: Course[];
   totalItems: number;
   totalPages: number;
   isLoading: boolean;
   error: Error | null;
+  categoriesList: CategoryOption[];
+  refetch: () => void;
 }
 
 export function useCourseList(filters: CourseListFilters): UseCourseListResult {
   const [courses, setCourses] = useState<Course[]>([]);
-  const [totalItems, setTotalItems] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
+  const [totalItems, setTotalItems] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
+  const [categoriesList, setCategoriesList] = useState<CategoryOption[]>([]);
+  const [reloadTrigger, setReloadTrigger] = useState(0);
 
+  const refetch = () => setReloadTrigger(prev => prev + 1);
+
+  // Fetch dynamic categories directly from DB
+  useEffect(() => {
+    let active = true;
+    async function loadCategories() {
+      try {
+        const catData = await ApiService.getCategoriesWithCount();
+        if (active && Array.isArray(catData)) {
+          // Sort categories by course count descending, then name ascending
+          const sorted = [...catData].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+          setCategoriesList(sorted);
+        }
+      } catch (e) {
+        console.warn('Failed to fetch DB categories:', e);
+      }
+    }
+
+    loadCategories();
+    return () => { active = false; };
+  }, [reloadTrigger]);
+
+  // Main Course Fetching directly from DB
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
     setError(null);
 
-    const timeoutId = setTimeout(() => {
-      if (!isMounted) return;
+    async function fetchCourseDataFromDb() {
       try {
-        let result = [...INITIAL_COURSES];
+        const config = ApiService.getConfig();
+        const backendOrigin = config.baseUrl.replace(/\/api\/?$/, '');
 
-        // 1. Search Query Filter
+        const apiParams: Record<string, any> = {
+          page: filters.page,
+          per_page: filters.limit,
+          status: 'published'
+        };
+
         if (filters.query.trim()) {
-          const q = filters.query.toLowerCase().trim();
-          result = result.filter(c => 
-            c.title.toLowerCase().includes(q) || 
-            c.instructorName.toLowerCase().includes(q)
-          );
+          apiParams.search = filters.query.trim();
         }
 
-        // 2. Category Filter
-        if (filters.categories.length > 0) {
-          result = result.filter(c => filters.categories.includes(c.category));
+        if (filters.categories.length === 1) {
+          apiParams.category_slug = filters.categories[0].toLowerCase().replace(/\s+/g, '-');
         }
 
-        // 3. Level Filter
-        if (filters.levels.length > 0) {
-          // Assuming `category` or `subcategory` maps to level. If not, mock it since `Course` type in types.ts doesn't have an explicit 'level' field.
-          // Since it's a mock, we'll map `requirements` length to a fake level for demo purposes if needed, 
-          // or assume one of the string fields. Let's just ignore level for now or filter by 'Beginner' string in requirements.
-          // For simplicity, we just skip it or fake it.
+        if (filters.levels.length === 1) {
+          const lvlMap: Record<string, string> = {
+            'Cơ bản': 'beginner',
+            'Trung cấp': 'intermediate',
+            'Nâng cao': 'advanced'
+          };
+          apiParams.level = lvlMap[filters.levels[0]] || filters.levels[0].toLowerCase();
         }
 
-        // 4. Rating Filter
-        if (filters.minRating !== null) {
-          result = result.filter(c => c.rating >= filters.minRating!);
-        }
-
-        // 5. Price Filter
         if (filters.priceType === 'free') {
-          result = result.filter(c => c.price === 0);
+          apiParams.max_price = 0;
         } else if (filters.priceType === 'paid') {
-          result = result.filter(c => c.price > 0);
+          apiParams.min_price = 1000;
         }
 
-        // 6. Sorting
-        result.sort((a, b) => {
-          switch (filters.sortBy) {
-            case 'newest':
-              return (b.createdAt ? new Date(b.createdAt).getTime() : 0) - (a.createdAt ? new Date(a.createdAt).getTime() : 0);
-            case 'popular':
-              return b.enrolledCount - a.enrolledCount;
-            case 'highest-rated':
-              return b.rating - a.rating;
-            case 'lowest-price':
-              return (a.salePrice ?? a.price) - (b.salePrice ?? b.price);
-            case 'highest-price':
-              return (b.salePrice ?? b.price) - (a.salePrice ?? a.price);
-            default:
-              return 0;
+        // Sorting map
+        const sortMap: Record<string, string> = {
+          'newest': 'latest',
+          'popular': 'popular',
+          'highest-rated': 'rating_desc',
+          'lowest-price': 'price_asc',
+          'highest-price': 'price_desc'
+        };
+        apiParams.sort = sortMap[filters.sortBy] || 'latest';
+
+        const responseData: any = await ApiService.getCourses(apiParams);
+
+        if (!isMounted) return;
+
+        let rawItems: any[] = [];
+        let total = 0;
+        let pages = 1;
+
+        if (Array.isArray(responseData)) {
+          rawItems = responseData;
+          total = (responseData as any).meta?.total ?? rawItems.length;
+          pages = (responseData as any).meta?.last_page ?? Math.ceil(total / filters.limit);
+        } else if (responseData && Array.isArray(responseData.data)) {
+          rawItems = responseData.data;
+          total = responseData.meta?.total ?? rawItems.length;
+          pages = responseData.meta?.last_page ?? Math.ceil(total / filters.limit);
+        }
+
+        // Strict DB filter: ONLY published/active courses
+        rawItems = rawItems.filter((item: any) => 
+          !item.status || item.status === 'published' || item.status === 'active'
+        );
+
+        // Map DB CatalogCourseResource into Course type
+        const mappedCourses: Course[] = rawItems.map((item: any) => {
+          let thumb = item.thumbnail_url || '';
+          if (thumb && thumb.startsWith('/')) {
+            thumb = `${backendOrigin}${thumb}`;
           }
+
+          return {
+            id: String(item.id),
+            title: item.title || 'Khóa học MindHub',
+            subtitle: item.short_description || item.title || '',
+            description: item.short_description || '',
+            category: item.categories?.[0]?.name || 'Công nghệ',
+            subcategory: 'General',
+            instructorId: item.instructor?.id ? String(item.instructor.id) : 'ins-1',
+            instructorName: item.instructor?.full_name || 'Giảng viên MindHub',
+            instructorTitle: 'Giảng viên Chuyên nghiệp',
+            instructorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+            instructorBio: 'Giảng viên giàu kinh nghiệm tại MindHub Academy',
+            image: thumb || 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&auto=format&fit=crop&q=80',
+            price: typeof item.price === 'number' ? item.price : 299000,
+            salePrice: typeof item.sale_price === 'number' ? item.sale_price : null,
+            rating: typeof item.average_rating === 'number' ? item.average_rating : 4.8,
+            reviewCount: typeof item.reviews_count === 'number' ? item.reviews_count : 0,
+            enrolledCount: typeof item.enrollments_count === 'number' ? item.enrollments_count : 0,
+            completionRate: 92,
+            isFeatured: Boolean(item.is_featured),
+            isBestseller: false,
+            isNew: true,
+            status: 'active',
+            chapters: [],
+            requirements: item.level ? [`Cấp độ: ${item.level}`] : ['Phù hợp với mọi đối tượng'],
+            willLearn: ['Nắm vững kiến thức nền tảng và nâng cao'],
+            targetAudience: ['Học viên muốn làm chủ kỹ năng mới'],
+            slug: item.slug || String(item.id),
+            createdAt: item.published_at || new Date().toISOString(),
+            updatedAt: item.published_at || new Date().toISOString()
+          };
         });
 
-        const total = result.length;
-        const totalPgs = Math.ceil(total / filters.limit);
-        
-        // 7. Pagination
-        const start = (filters.page - 1) * filters.limit;
-        const end = start + filters.limit;
-        const paginatedResult = result.slice(start, end);
-
-        setCourses(paginatedResult);
+        setCourses(mappedCourses);
         setTotalItems(total);
-        setTotalPages(totalPgs);
-      } catch (err: any) {
-        setError(err);
-      } finally {
+        setTotalPages(Math.max(1, pages));
         setIsLoading(false);
+      } catch (err: any) {
+        console.error('DB fetch courses error:', err);
+        if (isMounted) {
+          setError(err);
+          setIsLoading(false);
+        }
       }
-    }, 500); // Network simulation
+    }
 
+    const timer = setTimeout(fetchCourseDataFromDb, 250);
     return () => {
       isMounted = false;
-      clearTimeout(timeoutId);
+      clearTimeout(timer);
     };
-  }, [filters]);
+  }, [filters, reloadTrigger]);
 
-  return { courses, totalItems, totalPages, isLoading, error };
+  return { courses, totalItems, totalPages, isLoading, error, categoriesList, refetch };
 }

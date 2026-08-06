@@ -47,9 +47,9 @@ async submitManualPaymentProof(payload: FormData): Promise<{ success: boolean }>
         });
   },
 
-async createSePayGatewayUrl(orderId: string): Promise<{ paymentUrl: string }> {
+async createSePayGatewayUrl(orderId: string): Promise<any> {
   devLog('Orders', `Redirect to SePay gateway portal checkouts for Order ${orderId}`);
-  return apiFetch<{ paymentUrl: string }>('/payments/sepay/create', {
+  return apiFetch<any>('/payments/sepay/create', {
           method: 'POST',
           body: JSON.stringify({ order_id: parseInt(orderId), payment_method: 'sepay' }),
         });

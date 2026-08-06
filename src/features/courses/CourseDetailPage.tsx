@@ -86,10 +86,48 @@ export default function CourseDetailPage() {
   const handleEnrollNow = () => {
     if (!course) return;
 
+    // Save to enrolled course list in localStorage & cache so it displays in "Khóa học của tôi"
+    try {
+      const storedIdsStr = localStorage.getItem('mindhub_enrolled_courses') || '[]';
+      const storedIds: string[] = JSON.parse(storedIdsStr);
+      if (!storedIds.includes(String(course.id))) {
+        storedIds.push(String(course.id));
+        localStorage.setItem('mindhub_enrolled_courses', JSON.stringify(storedIds));
+      }
+
+      const storedListStr = localStorage.getItem('mindhub_enrolled_course_list') || '[]';
+      const storedList: any[] = JSON.parse(storedListStr);
+      if (!storedList.some(c => String(c.id) === String(course.id))) {
+        storedList.push({
+          id: String(course.id),
+          title: course.title,
+          slug: course.slug || String(course.id),
+          image: course.image,
+          instructorName: course.instructorName || 'Giảng viên MindHub',
+          progress: 5,
+          totalDurationSeconds: 18000,
+          status: 'active'
+        });
+        localStorage.setItem('mindhub_enrolled_course_list', JSON.stringify(storedList));
+      }
+    } catch (e) {
+      console.warn("Could not save local enrollment:", e);
+    }
+
     if (enrolledCourseIds.includes(course.id)) {
       navigate(`/learn/${course.id}`);
       return;
     }
+
+    const effectivePrice = typeof course.salePrice === 'number' ? course.salePrice : course.price;
+    const isFree = effectivePrice === 0 || course.price === 0;
+
+    if (isFree) {
+      toast.success(`Đã ghi danh khóa học! Đang vào lớp học...`);
+      navigate(`/learn/${course.id}`);
+      return;
+    }
+
     setCart([course.id]);
     toast.success(`Đang mở trang thanh toán cho "${course.title}"`);
     navigate(`/checkout?courseId=${course.id}`, { state: { course } });
@@ -482,26 +520,46 @@ export default function CourseDetailPage() {
               <div className="p-6 space-y-6">
                 
                 {/* Price Header */}
-                <div className="space-y-1">
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-3xl font-black tracking-tight text-foreground">
-                      {course.salePrice ? `${course.salePrice.toLocaleString()}đ` : course.price === 0 ? 'Miễn phí' : `${course.price.toLocaleString()}đ`}
-                    </span>
-                    {course.salePrice && (
-                      <>
-                        <span className="text-base font-semibold text-muted-foreground line-through">
-                          {course.price.toLocaleString()}đ
+                <div className="space-y-1.5">
+                  {(course.price === 0 || course.salePrice === 0) ? (
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-3xl font-black tracking-tight text-emerald-600 dark:text-emerald-400">
+                          Miễn phí
                         </span>
-                        <span className="bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold text-xs px-2.5 py-0.5 rounded-md border border-rose-500/20">
-                          -{discountPercent}% OFF
+                        <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                          100% Free
                         </span>
-                      </>
-                    )}
-                  </div>
-                  {course.salePrice && (
-                    <p className="text-[11px] font-semibold text-rose-500 flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> Giảm giá có hạn áp dụng trong tuần này
-                    </p>
+                      </div>
+                      <p className="text-xs text-muted-foreground font-medium mt-1">
+                        Truy cập không giới hạn tất cả bài học & tài liệu
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-baseline gap-3">
+                        <span className="text-3xl font-black tracking-tight text-foreground">
+                          {typeof course.salePrice === 'number' && course.salePrice > 0
+                            ? `${course.salePrice.toLocaleString()}đ`
+                            : `${course.price.toLocaleString()}đ`}
+                        </span>
+                        {typeof course.salePrice === 'number' && course.salePrice > 0 && course.price > course.salePrice && (
+                          <>
+                            <span className="text-base font-semibold text-muted-foreground line-through">
+                              {course.price.toLocaleString()}đ
+                            </span>
+                            <span className="bg-rose-500/10 text-rose-600 dark:text-rose-400 font-extrabold text-xs px-2.5 py-0.5 rounded-md border border-rose-500/20">
+                              -{discountPercent}% OFF
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      {typeof course.salePrice === 'number' && course.salePrice > 0 && (
+                        <p className="text-[11px] font-semibold text-rose-500 flex items-center gap-1 mt-1">
+                          <Clock className="w-3 h-3" /> Giảm giá có hạn áp dụng trong tuần này
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
                 
