@@ -45,19 +45,30 @@ export const CourseCard = React.memo(({ course }: { course: CourseData }) => {
     Advanced: "Nâng cao",
   };
 
-  const difficulty = course.difficulty || "Beginner";
+  const validDifficulty = (course.difficulty && difficultyLabels[course.difficulty]) 
+    ? course.difficulty 
+    : "Beginner";
+
+  const instructorName = typeof course.instructor === 'string' 
+    ? course.instructor 
+    : (course.instructor as any)?.name || (course.instructor as any)?.full_name || (course.instructor as any)?.user?.name || 'Giảng viên MindHub';
 
   // Pick deterministic fallback image if thumbnail fails or is empty/relative demo
   const hash = course.id ? Array.from(String(course.id)).reduce((acc, char) => acc + char.charCodeAt(0), 0) : 0;
   const fallbackUrl = FALLBACK_THUMBNAILS[hash % FALLBACK_THUMBNAILS.length];
 
-  const isValidUrl = course.thumbnail && 
+  const isValidUrl = course.thumbnail && typeof course.thumbnail === 'string' &&
     (course.thumbnail.startsWith('http://') || course.thumbnail.startsWith('https://'));
 
   const displayThumbnail = (imgError || !isValidUrl) ? fallbackUrl : course.thumbnail;
 
-  const displayPrice = course.salePrice || course.price || 299000;
-  const originalPrice = course.salePrice ? course.price || 499000 : null;
+  const displayPrice = typeof course.salePrice === 'number' 
+    ? course.salePrice 
+    : (typeof course.price === 'number' ? course.price : 299000);
+
+  const originalPrice = (typeof course.salePrice === 'number' && typeof course.price === 'number' && course.price > course.salePrice) 
+    ? course.price 
+    : null;
 
   const handleAction = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -84,8 +95,8 @@ export const CourseCard = React.memo(({ course }: { course: CourseData }) => {
         
         {/* Difficulty Badge Top-Left */}
         <div className="absolute top-2.5 left-2.5">
-          <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md backdrop-blur-md border shadow-xs ${difficultyBadges[difficulty]}`}>
-            {difficultyLabels[difficulty]}
+          <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md backdrop-blur-md border shadow-xs ${difficultyBadges[validDifficulty]}`}>
+            {difficultyLabels[validDifficulty]}
           </span>
         </div>
 
@@ -114,7 +125,7 @@ export const CourseCard = React.memo(({ course }: { course: CourseData }) => {
             <div className="w-4.5 h-4.5 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
               <UserIcon className="w-2.5 h-2.5" />
             </div>
-            <span className="truncate">{course.instructor}</span>
+            <span className="truncate">{instructorName}</span>
           </div>
 
           {/* Title */}
