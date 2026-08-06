@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User as UserType, Course, Notification, Order, Banner } from '@/shared/types';
+import { User as UserType, Course, Notification, Order, Banner, normalizeUser } from '@/shared/types';
 import { INITIAL_USER, INITIAL_BANNERS } from '@/shared/data';
 import { safeLocalStorage as localStorage } from '@/shared/utils/safeStorage';
 import { ApiService } from '@/services/api';
+import { authApi } from '@/features/auth/api';
 
 interface AppContextType {
   currentUser: UserType;
@@ -54,24 +55,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Fetch fresh profile from Backend database on app mount/reload if token exists
   useEffect(() => {
     const token = localStorage.getItem('mindhub_api_token');
-    if (token && currentUser?.role === 'instructor') {
-      ApiService.getInstructorProfile()
+    if (token) {
+      authApi.getCurrentUser()
         .then(res => {
-          const profileData = res?.data || res;
-          if (profileData) {
+          if (res) {
+            const normalized = normalizeUser(res);
             setCurrentUser(prev => {
               const updated = {
                 ...prev,
-                id: profileData.id || prev?.id,
-                name: profileData.full_name || profileData.name || prev?.name,
-                full_name: profileData.full_name || profileData.name || prev?.full_name,
-                email: profileData.email || prev?.email,
-                phone: profileData.phone ?? prev?.phone,
-                bio: profileData.bio ?? prev?.bio,
-                expertise: profileData.expertise ?? prev?.expertise,
-                avatar: profileData.avatar_url || profileData.avatar || prev?.avatar,
-                avatar_url: profileData.avatar_url || profileData.avatar || prev?.avatar_url,
-                role: profileData.role || prev?.role || 'instructor'
+                ...normalized,
+                avatar: normalized.avatar || normalized.avatar_url || prev?.avatar,
+                avatar_url: normalized.avatar_url || normalized.avatar || prev?.avatar_url,
               };
               localStorage.setItem('mindhub_current_user', JSON.stringify(updated));
               return updated;
@@ -81,6 +75,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .catch(err => {
           console.warn('Could not fetch fresh user profile on app load:', err);
         });
+
+      if (currentUser?.role === 'instructor') {
+        ApiService.getInstructorProfile()
+          .then(res => {
+            const profileData = res?.data || res;
+            if (profileData) {
+              setCurrentUser(prev => {
+                const updated = {
+                  ...prev,
+                  id: profileData.id || prev?.id,
+                  name: profileData.full_name || profileData.name || prev?.name,
+                  full_name: profileData.full_name || profileData.name || prev?.full_name,
+                  email: profileData.email || prev?.email,
+                  phone: profileData.phone ?? prev?.phone,
+                  bio: profileData.bio ?? prev?.bio,
+                  expertise: profileData.expertise ?? prev?.expertise,
+                  avatar: profileData.avatar_url || profileData.avatar || prev?.avatar,
+                  avatar_url: profileData.avatar_url || profileData.avatar || prev?.avatar_url,
+                  role: profileData.role || prev?.role || 'instructor'
+                };
+                localStorage.setItem('mindhub_current_user', JSON.stringify(updated));
+                return updated;
+              });
+            }
+          })
+          .catch(err => {
+            console.warn('Could not fetch instructor profile:', err);
+          });
+      }
     }
   }, []);
 

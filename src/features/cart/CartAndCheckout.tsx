@@ -5,6 +5,7 @@ import { Course, Order, Coupon } from '@/shared/types';
 import { safeLocalStorage as localStorage } from '@/shared/utils/safeStorage';
 import { SYSTEM_COUPONS } from '@/shared/data';
 import { cartApi } from './api';
+import { coursesApi } from '@/features/courses/api';
 
 interface CartAndCheckoutProps {
   cartCourseIds: string[];
@@ -48,17 +49,58 @@ export default function CartAndCheckout({
   const location = useLocation();
   const [checkoutCourse, setCheckoutCourse] = useState<Course | null>(() => {
     if (initialCourseId) {
-      return location.state?.course || allCourses.find((c) => String(c.id) === String(initialCourseId)) || null;
+      return location.state?.course || allCourses.find((c) => String(c.id) === String(initialCourseId) || c.slug === String(initialCourseId)) || null;
     }
     return null;
   });
 
   useEffect(() => {
     if (initialCourseId) {
-      const course = location.state?.course || allCourses.find((c) => String(c.id) === String(initialCourseId));
-      if (course) {
-        setCheckoutCourse(course);
+      const found = location.state?.course || allCourses.find((c) => String(c.id) === String(initialCourseId) || c.slug === String(initialCourseId));
+      if (found) {
+        setCheckoutCourse(found);
         setPhase('paying');
+      } else {
+        coursesApi.getCourseBySlug(String(initialCourseId))
+          .then((res: any) => {
+            const rawData = res?.data || res;
+            if (rawData && (rawData.id || rawData.title)) {
+              const mapped: Course = {
+                id: String(rawData.id || initialCourseId),
+                title: rawData.title || 'Khoá học MindHub',
+                subtitle: rawData.short_description || '',
+                description: rawData.description || '',
+                category: rawData.category || 'Programming',
+                subcategory: '',
+                instructorId: String(rawData.instructor?.id || '1'),
+                instructorName: rawData.instructor?.full_name || 'Giảng viên MindHub',
+                instructorTitle: rawData.instructor?.expertise || 'Chuyên gia MindHub',
+                instructorAvatar: rawData.instructor?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+                instructorBio: '',
+                price: Number(rawData.price) || 499000,
+                salePrice: rawData.sale_price ? Number(rawData.sale_price) : undefined,
+                rating: 4.8,
+                reviewCount: 120,
+                enrolledCount: 1500,
+                completionRate: 0,
+                isFeatured: true,
+                isBestseller: false,
+                isNew: false,
+                image: rawData.thumbnail_url || 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800',
+                requirements: [],
+                willLearn: [],
+                status: 'active',
+                chapters: [],
+                reviews: [],
+                faqs: []
+              };
+              setCheckoutCourse(mapped);
+              setPhase('paying');
+            }
+          })
+          .catch((err) => {
+            console.warn('Could not load course details for checkout:', err);
+          });
       }
     }
   }, [initialCourseId, allCourses, location.state]);
@@ -310,6 +352,14 @@ export default function CartAndCheckout({
                   })}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* PAYING Flow Loading Fallback */}
+          {phase === 'paying' && !checkoutCourse && (
+            <div className="py-16 text-center space-y-4">
+              <div className="w-10 h-10 border-4 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-sm font-semibold text-stone-700">Đang khởi tạo cổng thanh toán cho khóa học...</p>
             </div>
           )}
 

@@ -71,8 +71,8 @@ async logout(): Promise<{ success: boolean }> {
 
 async getCurrentUser(): Promise<User> {
     devLog('Auth', 'Get currently authenticated user via session token');
-    const res = await apiFetch<{ user: User }>('/auth/me');
-    return res.user;
+    const res = await apiFetch<any>('/auth/me');
+    return res?.user || res;
   },
 
 async logoutAll(): Promise<{ success: boolean }> {

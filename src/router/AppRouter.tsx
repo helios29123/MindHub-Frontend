@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 
 // Layouts
@@ -41,7 +41,9 @@ const ClassroomPage = React.lazy(() => import('@/features/classroom/ClassroomPag
 const ProfilePage = React.lazy(() => import('@/features/profile/ProfilePage').then(m => ({ default: m.ProfilePage })));
 const LoginPage = React.lazy(() => import('@/features/auth/LoginPage').then(m => ({ default: m.default })));
 const RegisterPage = React.lazy(() => import('@/features/auth/RegisterPage').then(m => ({ default: m.default })));
+const GoogleCallbackPage = React.lazy(() => import('@/features/auth/GoogleCallbackPage'));
 const CartAndCheckout = React.lazy(() => import('@/features/cart/CartAndCheckout').then(m => ({ default: m.default })));
+const VNPayReturnPage = React.lazy(() => import('@/features/cart/VNPayReturnPage').then(m => ({ default: m.default })));
 const InstructorDashboard = React.lazy(() => import('@/features/instructor/InstructorPage'));
 const AdminDashboard = React.lazy(() => import('@/features/admin/AdminDashboard').then(m => ({ default: m.default })));
 const InstructorProfilePage = React.lazy(() => import('@/features/instructor/InstructorProfilePage').then(m => ({ default: m.default })));
@@ -70,6 +72,33 @@ const InstructorCoursesPageWrapper = () => {
           currentUser={currentUser}
         />
       ) : <PageLoader />}
+    </Suspense>
+  );
+};
+
+const CheckoutRouteWrapper = () => {
+  const { cart, courses, favorites, enrolledCourseIds, setEnrolledCourseIds } = useApp();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  
+  const courseId = searchParams.get('courseId') || (cart && cart[0]) || null;
+
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <CartAndCheckout 
+        cartCourseIds={cart}
+        allCourses={courses}
+        enrolledCourseIds={enrolledCourseIds}
+        onEnrollSuccess={(newIds) => {
+          if (newIds && newIds.length > 0) {
+            setEnrolledCourseIds(prev => Array.from(new Set([...prev, ...newIds])));
+          }
+        }}
+        onClose={() => navigate('/')}
+        onToggleFavorite={() => {}}
+        onEnterLesson={(c) => navigate(`/learn/${c.id}`)}
+        initialCourseId={courseId}
+      />
     </Suspense>
   );
 };
@@ -136,6 +165,7 @@ function AppRoutes() {
           {/* Auth Routes */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
           
           {/* Main Layout Routes (Navbar + Footer) */}
           <Route element={<MainLayout />}>
@@ -175,19 +205,12 @@ function AppRoutes() {
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/privacy" element={<Navigate to="/legal" replace />} />
             
-            <Route path="/cart" element={
-              <CartAndCheckout 
-                cartCourseIds={cart}
-                allCourses={courses}
-                enrolledCourseIds={enrolledCourseIds}
-                onEnrollSuccess={() => {}}
-                onClose={() => navigate(-1)}
-                onToggleFavorite={() => {}}
-                onEnterLesson={(course) => navigate(`/learn/${course.slug || course.id}`)}
-                initialCourseId={initialCourseId}
-              />
+            <Route path="/cart" element={<CheckoutRouteWrapper />} />
+            <Route path="/checkout" element={<CheckoutRouteWrapper />} />
+            <Route path="/vnpay-return" element={
+              // @ts-ignore
+              <VNPayReturnPage onNavigate={navigateTo} />
             } />
-            <Route path="/checkout" element={<Navigate to={`/cart${location.search}`} state={location.state} replace />} />
             
             {/* Protected Profile Route */}
             <Route path="/profile/:userId?" element={
