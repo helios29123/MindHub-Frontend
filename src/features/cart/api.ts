@@ -15,7 +15,7 @@ async applyCouponCode(couponCode: string, orderId: string): Promise<any> {
   devLog('Orders', `Apply coupon "${couponCode}" discount trigger to Order ID: ${orderId}`);
   return apiFetch<any>('/orders/apply-coupon', {
           method: 'POST',
-          body: JSON.stringify({ code: couponCode, order_id: orderId }),
+          body: JSON.stringify({ coupon_code: couponCode, order_id: orderId }),
         });
   },
 

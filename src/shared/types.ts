@@ -237,6 +237,7 @@ export interface Coupon {
   discount: number;
   description: string;
   targetCourseId?: string;
+  fixedDiscount?: number;
 }
 
 export interface StudentProgress {

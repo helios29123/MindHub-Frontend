@@ -21,13 +21,13 @@ export default function MyCoursesPage() {
     classroomApi.getMyCourses()
       .then(res => {
         if (!isMounted) return;
-        const courses = res.data || [];
+        const courses = Array.isArray(res) ? res : (res.data || []);
         // Giả sử API trả về mảng khoá học, ta map lại cho đúng UI.
         const mapped = courses.map((c: any) => {
            const courseData = c.course || c; // Tùy thuộc vào payload API
            return {
              ...courseData,
-             progress: c.progress || Math.floor(Math.random() * 30) + 5, // Mock progress nếu API chưa trả về
+             progress: c.progress_percent !== undefined ? parseFloat(c.progress_percent) : (c.progress || 0),
              image: courseData.thumbnail_url || courseData.image || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&q=80&w=800',
              instructorName: courseData.instructor?.full_name || courseData.instructorName || 'MindHub Instructor'
            };
@@ -68,28 +68,28 @@ export default function MyCoursesPage() {
             <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-3">
               <BookOpen className="w-6 h-6 text-primary" />
             </div>
-            <h3 className="font-bold text-2xl text-foreground">3</h3>
+            <h3 className="font-bold text-2xl text-foreground">{learningCourses.length + completedCourses.length + savedCourses.length}</h3>
             <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider mt-1">Khóa học</p>
           </div>
           <div className="bg-card border rounded-2xl p-5 flex flex-col items-center justify-center text-center shadow-sm">
             <div className="w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center mb-3">
               <Trophy className="w-6 h-6 text-green-600" />
             </div>
-            <h3 className="font-bold text-2xl text-foreground">1</h3>
+            <h3 className="font-bold text-2xl text-foreground">{completedCourses.length}</h3>
             <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider mt-1">Hoàn thành</p>
           </div>
           <div className="bg-card border rounded-2xl p-5 flex flex-col items-center justify-center text-center shadow-sm">
             <div className="w-12 h-12 bg-orange-500/10 rounded-full flex items-center justify-center mb-3">
               <Target className="w-6 h-6 text-orange-600" />
             </div>
-            <h3 className="font-bold text-2xl text-foreground">15</h3>
+            <h3 className="font-bold text-2xl text-foreground">{completedCourses.length * 15 + learningCourses.length * 5}</h3>
             <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider mt-1">XP Nhận được</p>
           </div>
           <div className="bg-card border rounded-2xl p-5 flex flex-col items-center justify-center text-center shadow-sm">
             <div className="w-12 h-12 bg-blue-500/10 rounded-full flex items-center justify-center mb-3">
               <Clock className="w-6 h-6 text-blue-600" />
             </div>
-            <h3 className="font-bold text-2xl text-foreground">42h</h3>
+            <h3 className="font-bold text-2xl text-foreground">{Math.floor((learningCourses.length + completedCourses.length) * 12)}h</h3>
             <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider mt-1">Thời gian học</p>
           </div>
         </div>

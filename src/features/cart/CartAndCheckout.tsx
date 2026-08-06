@@ -28,11 +28,15 @@ export default function CartAndCheckout({
   initialCourseId = null
 }: CartAndCheckoutProps) {
   const [couponCode, setCouponCode] = useState('');
-  const [activeDiscount, setActiveDiscount] = useState<{ code: string; percent: number } | null>(null);
+  const [activeDiscount, setActiveDiscount] = useState<{code: string, percent: number, fixed?: number} | null>(null);
   const [couponError, setCouponError] = useState('');
   const [couponSuccess, setCouponSuccess] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'momo' | 'sepay'>('sepay');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [sepayQrUrl, setSepayQrUrl] = useState<string | null>(null);
+  const [pollingOrderId, setPollingOrderId] = useState<string | null>(null);
+
+
   
   // Checkout flow phase: 'wishlist' | 'paying' | 'receipt'
   const [phase, setPhase] = useState<'wishlist' | 'paying' | 'receipt'>(() => {
@@ -64,8 +68,43 @@ export default function CartAndCheckout({
   
   // Calculations for single course checkout
   const rawSubtotal = checkoutCourse ? (checkoutCourse.salePrice || checkoutCourse.price) : 0;
-  const discountAmount = activeDiscount ? Math.round((rawSubtotal * activeDiscount.percent) / 100) : 0;
+  const discountAmount = activeDiscount && checkoutCourse 
+    ? Math.round(activeDiscount.fixed ? activeDiscount.fixed : ((checkoutCourse.salePrice || checkoutCourse.price) * activeDiscount.percent / 100)) 
+    : 0;
   const finalTotal = rawSubtotal - discountAmount;
+
+  useEffect(() => {
+    let interval: any;
+    if (pollingOrderId) {
+      interval = setInterval(async () => {
+        try {
+          const res = await cartApi.getOrderBillReceipt(pollingOrderId);
+          const orderData = res?.data || res;
+          if (orderData && orderData.payment_status === 'paid') {
+            clearInterval(interval);
+            setPollingOrderId(null);
+            
+            const successOrder: Order = {
+              id: orderData.id || pollingOrderId,
+              date: new Date().toISOString().split('T')[0],
+              courses: [{ id: checkoutCourse!.id, title: checkoutCourse!.title, price: checkoutCourse!.salePrice || checkoutCourse!.price }],
+              discountAmount: discountAmount,
+              total: orderData.final_amount || finalTotal,
+              status: 'success',
+              paymentMethod: 'SePay VietQR'
+            };
+            
+            setCreatedOrder(successOrder);
+            setPhase('receipt');
+            onEnrollSuccess([checkoutCourse!.id], successOrder);
+          }
+        } catch (e) {
+          console.error("Polling error", e);
+        }
+      }, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [pollingOrderId, checkoutCourse, discountAmount, finalTotal, onEnrollSuccess]);
 
   const handleApplyCoupon = (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,8 +130,12 @@ export default function CartAndCheckout({
         return;
       }
       
-      setActiveDiscount({ code: matched.code, percent: matched.discount });
-      setCouponSuccess(`Đã áp dụng mã ${matched.code}: Giảm ${matched.discount}%`);
+      setActiveDiscount({ code: matched.code, percent: matched.discount, fixed: matched.fixedDiscount });
+      if (matched.fixedDiscount) {
+        setCouponSuccess(`Đã áp dụng mã ${matched.code}: Giảm ${matched.fixedDiscount.toLocaleString()}đ`);
+      } else {
+        setCouponSuccess(`Đã áp dụng mã ${matched.code}: Giảm ${matched.discount}%`);
+      }
     } else {
       setCouponError('Mã giảm giá không chính xác hoặc đã hết hạn.');
     }
@@ -136,24 +179,23 @@ export default function CartAndCheckout({
     if (!checkoutCourse) return;
     setIsProcessing(true);
     try {
-      // 1. Tạo đơn hàng thật
       const orderRes = await cartApi.createCheckoutOrder([checkoutCourse.id]);
-      const createdOrderId = orderRes?.order?.id || orderRes?.id || orderRes?.data?.id;
+      const createdOrderId = orderRes?.order?.id || orderRes?.id || (orderRes as any)?.data?.id;
       
       if (createdOrderId) {
-        // Nếu có mã giảm giá thì apply vào đây nếu backend cần
         if (activeDiscount) {
           await cartApi.applyCouponCode(activeDiscount.code, createdOrderId.toString());
         }
 
-        // 2. Gọi lấy link SePay
         const sepayRes = await cartApi.createSePayGatewayUrl(createdOrderId.toString());
-        const paymentUrl = sepayRes?.paymentUrl || sepayRes?.url || sepayRes?.data?.paymentUrl || sepayRes?.data?.url;
+        const paymentUrl = sepayRes?.paymentUrl || (sepayRes as any)?.payment_url;
         
         if (paymentUrl) {
-          window.location.href = paymentUrl;
+          setSepayQrUrl(paymentUrl);
+          setPollingOrderId(createdOrderId.toString());
+          setIsProcessing(false);
         } else {
-          throw new Error("Không lấy được link SePay từ máy chủ");
+          throw new Error("Không lấy được mã QR SePay từ máy chủ");
         }
       } else {
         throw new Error("Không lấy được mã đơn hàng từ máy chủ");
