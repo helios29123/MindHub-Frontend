@@ -222,15 +222,21 @@ export default function CartAndCheckout({
     setIsProcessing(true);
     try {
       const orderRes = await cartApi.createCheckoutOrder([checkoutCourse.id]);
-      const createdOrderId = orderRes?.order?.id || orderRes?.id || (orderRes as any)?.data?.id;
+      const resOrderData = orderRes?.data || orderRes?.order || orderRes;
+      const createdOrderId = resOrderData?.id || orderRes?.id;
       
       if (createdOrderId) {
         if (activeDiscount) {
-          await cartApi.applyCouponCode(activeDiscount.code, createdOrderId.toString());
+          try {
+            await cartApi.applyCouponCode(activeDiscount.code, createdOrderId.toString());
+          } catch (couponErr) {
+            console.warn('Coupon apply error (proceeding with base amount):', couponErr);
+          }
         }
 
         const sepayRes = await cartApi.createSePayGatewayUrl(createdOrderId.toString());
-        const paymentUrl = sepayRes?.paymentUrl || (sepayRes as any)?.payment_url;
+        const resSepayData = sepayRes?.data || sepayRes;
+        const paymentUrl = resSepayData?.qr_url || resSepayData?.payment_url || resSepayData?.paymentUrl || sepayRes?.qr_url || sepayRes?.payment_url || sepayRes?.paymentUrl;
         
         if (paymentUrl) {
           setSepayQrUrl(paymentUrl);
