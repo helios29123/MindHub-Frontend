@@ -14,7 +14,6 @@ import { CourseDetailSkeleton } from './components/CourseDetailSkeleton';
 import { CourseCard, CourseData } from './components/CourseCard';
 import { ReviewList } from '@/features/reviews/ReviewList';
 import { INITIAL_COURSES } from '@/shared/data';
-import { toast } from 'sonner';
 
 export default function CourseDetailPage() {
   const { courseId } = useParams<{ courseId: string }>();
@@ -29,17 +28,6 @@ export default function CourseDetailPage() {
       ...prev,
       [chapterId]: !prev[chapterId]
     }));
-  };
-
-  const handleAddToCart = () => {
-    if (!course) return;
-    if (cart.includes(course.id)) {
-      toast.info('Khoá học đã có trong giỏ hàng');
-      navigate('/cart');
-      return;
-    }
-    setCart([...cart, course.id]);
-    toast.success('Đã thêm vào giỏ hàng');
   };
 
   const handleEnrollNow = () => {
@@ -149,14 +137,9 @@ export default function CourseDetailPage() {
                   Tiếp tục học
                 </Button>
               ) : (
-                <div className="space-y-3">
-                  <Button className="w-full h-12 text-lg" onClick={handleAddToCart}>
-                    Thêm vào giỏ hàng
-                  </Button>
-                  <Button variant="outline" className="w-full h-12 text-lg" onClick={handleEnrollNow}>
-                    Mua ngay
-                  </Button>
-                </div>
+                <Button className="w-full h-12 text-lg font-bold" onClick={handleEnrollNow}>
+                  Mua ngay
+                </Button>
               )}
             </div>
           </div>
@@ -301,14 +284,9 @@ export default function CourseDetailPage() {
                   Tiếp tục học
                 </Button>
               ) : (
-                <div className="space-y-3">
-                  <Button className="w-full h-12 text-lg" onClick={handleAddToCart}>
-                    Thêm vào giỏ hàng
-                  </Button>
-                  <Button variant="outline" className="w-full h-12 text-lg" onClick={handleEnrollNow}>
-                    Mua ngay
-                  </Button>
-                </div>
+                <Button className="w-full h-12 text-lg font-bold" onClick={handleEnrollNow}>
+                  Mua ngay
+                </Button>
               )}
               
               <div className="pt-4 border-t border-border">

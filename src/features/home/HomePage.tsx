@@ -1,5 +1,5 @@
 import React from 'react';
-import { CommandCenter } from './components/CommandCenter';
+import { HeroBanner } from './components/HeroBanner';
 import { RoadmapTimeline } from './components/RoadmapTimeline';
 import { SmartDiscovery } from './components/SmartDiscovery';
 import { TrendingCourses } from './components/TrendingCourses';
@@ -13,6 +13,8 @@ import { RecentlyViewedWidget } from './components/RecentlyViewedWidget';
 import { RecommendedCategoriesWidget } from './components/RecommendedCategoriesWidget';
 import { PageTransition } from '@/shared/components/ui/PageTransition';
 import { useHomepageData } from './hooks/useHomepageData';
+import { BannerSection } from '@/shared/components/ui/BannerSection';
+import { Button } from '@/shared/components/ui/button';
 
 export default function HomePage() {
   const { data, isLoading } = useHomepageData();
@@ -33,17 +35,39 @@ export default function HomePage() {
             
             {/* Cột chính (Main content - Current focus & Gamification) */}
             <div className="flex-1 min-w-0">
-              {/* Where am I? & What should I do now? */}
-              <CommandCenter />
+              {/* Hero Banner (Replaces CommandCenter) */}
+              <HeroBanner />
               
               {/* How far have I progressed? */}
               <RoadmapTimeline />
               
+              {/* Banner 2 - Khuyến mãi khóa học nổi bật */}
+              <BannerSection
+                imageUrl="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?q=80&w=2000&auto=format&fit=crop"
+                title="Thành thạo kỹ năng mới"
+                description="Hàng trăm khóa học chất lượng với ưu đãi đặc biệt đang chờ đón bạn."
+                heightClass="min-h-[250px] md:min-h-[300px]"
+                className="mb-8"
+              >
+                <Button className="w-fit rounded-full bg-white text-primary font-bold hover:bg-white/90">
+                  Khám phá ngay
+                </Button>
+              </BannerSection>
+
               {/* Trending Courses */}
               <TrendingCourses courses={data.trendingCourses} />
 
               {/* What should I learn next? */}
               <SmartDiscovery courses={data.recommendedCourses} />
+
+              {/* Banner 3 - Giới thiệu khóa học mới */}
+              <BannerSection
+                imageUrl="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?q=80&w=2000&auto=format&fit=crop"
+                title="Đón đầu xu hướng công nghệ"
+                description="Cập nhật những kiến thức mới nhất từ các chuyên gia hàng đầu."
+                heightClass="min-h-[200px] md:min-h-[250px]"
+                className="mb-8"
+              />
 
               {/* New Courses */}
               <NewCourses courses={data.newCourses} />
