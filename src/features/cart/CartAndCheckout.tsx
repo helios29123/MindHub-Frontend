@@ -231,7 +231,7 @@ export default function CartAndCheckout({
           }
         }
 
-        const sepayRes = await cartApi.createSePayGatewayUrl(createdOrderId.toString());
+        const sepayRes: any = await cartApi.createSePayGatewayUrl(createdOrderId.toString());
         const resSepayData = sepayRes?.data || sepayRes;
         const paymentUrl = resSepayData?.qr_url || resSepayData?.payment_url || resSepayData?.paymentUrl || sepayRes?.qr_url || sepayRes?.payment_url || sepayRes?.paymentUrl;
         
