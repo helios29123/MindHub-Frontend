@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
   Search,
@@ -45,43 +45,51 @@ interface PaginationMeta {
   total: number;
 }
 
+function maskAccountNumber(accountNumber: string | undefined): string {
+  if (!accountNumber) return "---";
+  const str = String(accountNumber);
+  if (str.length <= 4) return str;
+  return "**** **** " + str.slice(-4);
+}
+
 const STATUS_MAP: Record<
   string,
   { label: string; color: string; dot: string }
 > = {
   pending: {
     label: "Chờ chi",
-    color: "text-amber-700 bg-amber-50 border-amber-200/60",
+    color: "text-amber-700 bg-paper border-hairline",
     dot: "bg-amber-500",
   },
   approved: {
     label: "Đang xử lý",
-    color: "text-blue-700 bg-blue-50 border-blue-200/60",
+    color: "text-blue-700 bg-paper border-hairline",
     dot: "bg-blue-500",
   },
   rejected: {
     label: "Đã từ chối",
-    color: "text-mid-gray bg-canvas border-hairline",
+    color: "text-mid-gray bg-paper border-hairline",
     dot: "bg-mid-gray",
   },
   paid: {
     label: "Thành công",
-    color: "text-emerald-700 bg-emerald-50 border-emerald-200/60",
+    color: "text-emerald-700 bg-paper border-hairline",
     dot: "bg-emerald-500",
   },
   failed: {
     label: "Thất bại",
-    color: "text-rose-700 bg-rose-50 border-rose-200/60",
+    color: "text-rose-700 bg-paper border-hairline",
     dot: "bg-rose-500",
   },
   cancelled: {
     label: "Đã hủy",
-    color: "text-mid-gray bg-canvas border-hairline",
+    color: "text-mid-gray bg-paper border-hairline",
     dot: "bg-mid-gray",
   },
 };
 
 export default function WithdrawalsManagement() {
+  const navigate = useNavigate();
   // --- States ---
   const [items, setItems] = useState<any[]>([]);
   const [summary, setSummary] = useState<SummaryKPIs>({
@@ -143,24 +151,21 @@ export default function WithdrawalsManagement() {
     );
   };
 
-  // Wrapper để sync page lên URL
   const setPage = (newPage: number | ((prev: number) => number)) => {
-    setPageState((prev) => {
-      const resolved = typeof newPage === "function" ? newPage(prev) : newPage;
-      setSearchParams(
-        (sp) => {
-          const next = new URLSearchParams(sp);
-          if (resolved <= 1) {
-            next.delete("page");
-          } else {
-            next.set("page", String(resolved));
-          }
-          return next;
-        },
-        { replace: true },
-      );
-      return resolved;
-    });
+    const resolved = typeof newPage === "function" ? newPage(page) : newPage;
+    setPageState(resolved);
+    setSearchParams(
+      (sp) => {
+        const next = new URLSearchParams(sp);
+        if (resolved <= 1) {
+          next.delete("page");
+        } else {
+          next.set("page", String(resolved));
+        }
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   // Search state with debouncing
@@ -276,8 +281,30 @@ export default function WithdrawalsManagement() {
   useEffect(() => {
     if (selectedWithdrawalId !== null) {
       loadDetail(selectedWithdrawalId);
+      // Sync URL
+      const nextParams = new URLSearchParams(searchParams);
+      if (nextParams.get('open_withdrawal_id') !== String(selectedWithdrawalId)) {
+        nextParams.set('open_withdrawal_id', String(selectedWithdrawalId));
+        setSearchParams(nextParams, { replace: true });
+      }
+    } else {
+      setDetail(null);
+      // Cleanup URL
+      if (searchParams.has('open_withdrawal_id')) {
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete('open_withdrawal_id');
+        setSearchParams(nextParams, { replace: true });
+      }
     }
   }, [selectedWithdrawalId]);
+
+  // Handle deep link
+  useEffect(() => {
+    const openId = searchParams.get('open_withdrawal_id');
+    if (openId && selectedWithdrawalId === null) {
+      setSelectedWithdrawalId(Number(openId));
+    }
+  }, [searchParams]);
 
   const closeDrawer = () => {
     setSelectedWithdrawalId(null);
@@ -1085,18 +1112,22 @@ export default function WithdrawalsManagement() {
                         </div>
                       </td>
                       <td className="py-3.5 px-3">
-                        <div className="flex flex-col">
+                        <div className="flex flex-col gap-0.5">
                           <span className="font-semibold text-ink truncate max-w-[180px]">
-                            {item.payout_snapshot?.provider} -{" "}
-                            {item.payout_snapshot?.account_number_masked}
+                            {item.payout_snapshot?.provider || "---"}
                           </span>
-                          <span className="text-[10px] text-mid-gray truncate max-w-[180px]">
-                            {item.payout_snapshot?.account_name}
+                          <span className="font-mono text-xs text-ink truncate max-w-[180px]">
+                            {maskAccountNumber(item.payout_snapshot?.account_number || item.payout_snapshot?.account_number_masked)}
+                          </span>
+                          <span className="text-[10px] uppercase font-medium text-mid-gray truncate max-w-[180px]">
+                            {item.payout_snapshot?.account_name || "---"}
                           </span>
                         </div>
                       </td>
-                      <td className="py-3.5 px-3 text-center font-bold text-ink whitespace-nowrap tabular-nums">
-                        {formatVND(item.amount)}
+                      <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-1 rounded-[6px] border border-hairline bg-paper text-[11px] font-bold text-ink tabular-nums">
+                          {formatVND(item.amount)}
+                        </span>
                       </td>
                       <td className="py-3.5 px-3 whitespace-nowrap">
                         <span
@@ -1108,11 +1139,15 @@ export default function WithdrawalsManagement() {
                           <span>{badge.label}</span>
                         </span>
                       </td>
-                      <td className="py-3.5 px-3 text-mid-gray whitespace-nowrap">
-                        {formatDate(item.requested_at)}
+                      <td className="py-3.5 px-3 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-1 rounded-[6px] border border-hairline bg-paper text-[11px] font-medium text-mid-gray">
+                          {formatDate(item.requested_at)}
+                        </span>
                       </td>
-                      <td className="py-3.5 px-3 text-mid-gray whitespace-nowrap">
-                        {formatDate(lastUpdate)}
+                      <td className="py-3.5 px-3 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-1 rounded-[6px] border border-hairline bg-paper text-[11px] font-medium text-mid-gray">
+                          {formatDate(lastUpdate)}
+                        </span>
                       </td>
                       <td
                         className="py-3.5 px-3 text-center whitespace-nowrap"
@@ -1272,18 +1307,18 @@ export default function WithdrawalsManagement() {
                     </div>
                   </div>
                   {detail.user?.id && (
-                    <a
-                      href={`/admin/users?open_user_id=${detail.user.id}`}
-                      className="h-8 px-3 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-hairline hover:bg-canvas rounded-[6px] transition-colors flex items-center justify-center shrink-0 whitespace-nowrap"
+                    <button
+                      onClick={() => navigate(`/admin/users?open_user_id=${detail.user.id}`)}
+                      className="h-8 px-3 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-hairline hover:bg-canvas rounded-[6px] transition-colors flex items-center justify-center shrink-0 whitespace-nowrap cursor-pointer"
                     >
-                      Xem hồ sơ &rarr;
-                    </a>
+                      Xem chi tiết &rarr;
+                    </button>
                   )}
                 </div>
               </div>
 
               {/* Section 2: Payout Amounts and Balances */}
-              <div className="rounded-[6px] border border-hairline bg-surface-alt/60 p-4 space-y-3">
+              <div className="rounded-[6px] border border-hairline bg-paper p-3.5 space-y-3">
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-mid-gray">
                   Chi tiết số tiền rút
                 </h3>
@@ -1338,9 +1373,19 @@ export default function WithdrawalsManagement() {
 
               {/* Section 3: Payout Account info */}
               <div>
-                <h3 className="text-[10px] font-bold uppercase tracking-wider text-mid-gray mb-2">
-                  Tài khoản nhận tiền (Lịch sử Snapshot)
-                </h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-[10px] font-bold uppercase tracking-wider text-mid-gray">
+                    Tài khoản nhận tiền (Lịch sử Snapshot)
+                  </h3>
+                  {detail.payout_snapshot?.payout_account_id && (
+                    <button
+                      onClick={() => navigate(`/admin/payout-accounts?open_payout_account_id=${detail.payout_snapshot.payout_account_id}`)}
+                      className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+                    >
+                      Xem chi tiết &rarr;
+                    </button>
+                  )}
+                </div>
                 <div className="p-3.5 border border-hairline rounded-[6px] bg-paper space-y-2 text-xs">
                   <div className="flex justify-between items-center pb-2 border-b border-hairline/60">
                     <span className="text-mid-gray">Ngân hàng / Cổng:</span>
@@ -1370,7 +1415,7 @@ export default function WithdrawalsManagement() {
               </div>
 
               {/* Section 3.5: Transaction Details */}
-              <div className="rounded-[6px] border border-hairline bg-surface-alt/40 p-4 space-y-2 text-xs">
+              <div className="rounded-[6px] border border-hairline bg-paper p-3.5 space-y-2 text-xs">
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-mid-gray mb-1">
                   Thông tin giao dịch &amp; Xử lý
                 </h3>

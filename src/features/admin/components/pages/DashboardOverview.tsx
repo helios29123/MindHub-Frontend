@@ -1472,8 +1472,8 @@ export default function DashboardOverview() {
             <div className="rounded-[6px] border border-border-strong bg-paper p-4 shadow-sm flex flex-col">
               <div className="border-l-3 border-success pl-2.5 mb-2.5">
                 <h2 className="text-sm font-semibold text-ink leading-snug">Top khóa học tiêu biểu</h2>
-                <p className="text-[11px] text-mid-gray mt-0.5 leading-normal">
-                  Xếp hạng theo tổng doanh thu bán khóa học
+                <p className="text-xs text-mid-gray mt-1">
+                  Xếp hạng theo điểm chất lượng và độ thịnh hành (Trending)
                 </p>
               </div>
               <div className="mt-2.5 overflow-x-auto flex-1 max-h-80 custom-scrollbar pr-1">
@@ -1525,8 +1525,8 @@ export default function DashboardOverview() {
             <div className="rounded-[6px] border border-border-strong bg-paper p-4 shadow-sm flex flex-col">
               <div className="border-l-3 border-ink pl-2.5 mb-2.5">
                 <h2 className="text-sm font-semibold text-ink leading-snug">Giảng viên nổi bật</h2>
-                <p className="text-[11px] text-mid-gray mt-0.5 leading-normal">
-                  Xếp hạng theo doanh thu gộp nhận được
+                <p className="text-xs text-mid-gray mt-1">
+                  Xếp hạng theo tổng lượt đăng ký và tỷ lệ hoàn thành
                 </p>
               </div>
               <div className="mt-2.5 overflow-x-auto flex-1 max-h-80 custom-scrollbar pr-1">

@@ -120,7 +120,14 @@ export default function Topbar({
                 <span>Trung tâm trợ giúp</span>
               </a>
               <div className="h-[1px] bg-hairline my-1 mx-2"></div>
-              <button onClick={() => window.location.href = '/'} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs text-ember hover:bg-red-50 hover:text-ember rounded-full transition-colors cursor-pointer">
+              <button 
+                onClick={() => {
+                  localStorage.removeItem('mindhub_api_token');
+                  localStorage.removeItem('mindhub_user'); localStorage.removeItem('mindhub_current_user'); localStorage.removeItem('mindhub_is_logged_in');
+                  window.location.href = '/';
+                }} 
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs text-ember hover:bg-red-50 hover:text-ember rounded-full transition-colors cursor-pointer"
+              >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>
                 </svg>

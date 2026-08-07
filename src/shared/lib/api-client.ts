@@ -112,6 +112,16 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
     }
     const errMsg = errJson?.message || errJson?.error || `HTTP error! status: ${response.status}`;
     devLog('Error Response', errMsg, { status: response.status, url });
+    
+    // Auto logout on 401 Unauthorized
+    if (response.status === 401) {
+      localStorage.removeItem('mindhub_api_token');
+      localStorage.removeItem('mindhub_user'); localStorage.removeItem('mindhub_current_user'); localStorage.removeItem('mindhub_is_logged_in');
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login') && window.location.pathname !== '/') {
+         window.location.href = '/';
+      }
+    }
+
     throw new ApiError(errMsg, response.status, errJson?.errors);
   }
 
@@ -171,6 +181,16 @@ async function apiFetchEnvelope<T>(endpoint: string, options: RequestInit = {}):
     }
     const errMsg = errJson?.message || errJson?.error || `HTTP error! status: ${response.status}`;
     devLog('Error Response', errMsg, { status: response.status, url });
+
+    // Auto logout on 401 Unauthorized
+    if (response.status === 401) {
+      localStorage.removeItem('mindhub_api_token');
+      localStorage.removeItem('mindhub_user'); localStorage.removeItem('mindhub_current_user'); localStorage.removeItem('mindhub_is_logged_in');
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login') && window.location.pathname !== '/') {
+         window.location.href = '/';
+      }
+    }
+
     throw new ApiError(errMsg, response.status, errJson?.errors);
   }
 

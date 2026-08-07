@@ -2532,36 +2532,38 @@ export default function CoursesManagement() {
             >
               {activeDetailCourse && (
                 <>
-                  {activeDetailCourse.is_featured ? (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await closeDetailDrawer();
-                        setFeaturedModal({
-                          open: true,
-                          course: activeDetailCourse,
-                          targetFeatured: false,
-                        });
-                      }}
-                      className="px-4 py-1.5 text-xs font-semibold rounded-[6px] border border-hairline bg-canvas hover:bg-hairline text-ink transition-colors cursor-pointer"
-                    >
-                      Bỏ nổi bật
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await closeDetailDrawer();
-                        setFeaturedModal({
-                          open: true,
-                          course: activeDetailCourse,
-                          targetFeatured: true,
-                        });
-                      }}
-                      className="px-4 py-1.5 text-xs font-semibold rounded-[6px] border border-warning/20 bg-canvas text-warning hover:bg-warning-soft/20 transition-colors cursor-pointer"
-                    >
-                      Đánh dấu nổi bật
-                    </button>
+                  {activeDetailCourse.status === "published" && (
+                    activeDetailCourse.is_featured ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await closeDetailDrawer();
+                          setFeaturedModal({
+                            open: true,
+                            course: activeDetailCourse,
+                            targetFeatured: false,
+                          });
+                        }}
+                        className="px-4 py-1.5 text-xs font-semibold rounded-[6px] border border-hairline bg-canvas hover:bg-hairline text-ink transition-colors cursor-pointer"
+                      >
+                        Bỏ nổi bật
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await closeDetailDrawer();
+                          setFeaturedModal({
+                            open: true,
+                            course: activeDetailCourse,
+                            targetFeatured: true,
+                          });
+                        }}
+                        className="px-4 py-1.5 text-xs font-semibold rounded-[6px] border border-warning/20 bg-canvas text-warning hover:bg-warning-soft/20 transition-colors cursor-pointer"
+                      >
+                        Đánh dấu nổi bật
+                      </button>
+                    )
                   )}
 
                   {activeDetailCourse.status === "published" && (
