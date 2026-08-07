@@ -148,38 +148,35 @@ export default function CartAndCheckout({
     return () => clearInterval(interval);
   }, [pollingOrderId, checkoutCourse, discountAmount, finalTotal, onEnrollSuccess]);
 
-  const handleApplyCoupon = (e: React.FormEvent) => {
+  const handleApplyCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!couponCode.trim()) return;
+    
     setCouponError('');
     setCouponSuccess('');
     
-    // Fetch coupons dynamically from local storage or fallback to system static presets
-    const saved = localStorage.getItem('mindhub_coupons');
-    let couponsList: Coupon[] = SYSTEM_COUPONS;
-    if (saved) {
-      try {
-        couponsList = JSON.parse(saved);
-      } catch (err) {
-        console.error("Lỗi parse coupons:", err);
-      }
-    }
-
-    const matched = couponsList.find(c => c.code.toUpperCase() === couponCode.trim().toUpperCase());
-    if (matched) {
-      // Check if this coupon is course-restricted and does not match checkoutCourse
-      if (matched.targetCourseId && checkoutCourse && checkoutCourse.id !== matched.targetCourseId) {
-        setCouponError(`Mã giảm giá này chỉ khả dụng cho khóa học mục tiêu được quy định riêng.`);
-        return;
-      }
+    try {
+      const res = await cartApi.checkCouponCode(couponCode.trim(), checkoutCourse ? String(checkoutCourse.id).replace('course-', '') : null);
+      const data = res?.data || res;
       
-      setActiveDiscount({ code: matched.code, percent: matched.discount, fixed: matched.fixedDiscount });
-      if (matched.fixedDiscount) {
-        setCouponSuccess(`Đã áp dụng mã ${matched.code}: Giảm ${matched.fixedDiscount.toLocaleString()}đ`);
-      } else {
-        setCouponSuccess(`Đã áp dụng mã ${matched.code}: Giảm ${matched.discount}%`);
+      if (data && data.code) {
+        const discountType = data.discount_type || 'percent';
+        const discountValue = data.discount_value || 0;
+        
+        setActiveDiscount({ 
+          code: data.code, 
+          percent: discountType === 'percent' ? discountValue : 0, 
+          fixed: discountType === 'fixed' ? discountValue : undefined 
+        });
+        
+        if (discountType === 'fixed') {
+          setCouponSuccess(`Đã áp dụng mã ${data.code}: Giảm ${discountValue.toLocaleString()}đ`);
+        } else {
+          setCouponSuccess(`Đã áp dụng mã ${data.code}: Giảm ${discountValue}%`);
+        }
       }
-    } else {
-      setCouponError('Mã giảm giá không chính xác hoặc đã hết hạn.');
+    } catch (err: any) {
+      setCouponError(err.message || 'Mã giảm giá không chính xác hoặc đã hết hạn.');
     }
   };
 

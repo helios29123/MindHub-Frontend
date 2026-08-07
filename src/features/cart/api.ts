@@ -19,6 +19,14 @@ async applyCouponCode(couponCode: string, orderId: string): Promise<any> {
         });
   },
 
+async checkCouponCode(couponCode: string, courseId: string | null = null): Promise<any> {
+  devLog('Orders', `Check coupon validity "${couponCode}"`);
+  const query = courseId ? `?code=${couponCode}&course_id=${courseId}` : `?code=${couponCode}`;
+  return apiFetch<any>(`/orders/check-coupon${query}`, {
+          method: 'GET'
+        });
+  },
+
 async getMyOrdersHistory(): Promise<any[]> {
   devLog('Orders', 'Fetch past buy transactions listing');
   return apiFetch<any[]>('/orders/my');

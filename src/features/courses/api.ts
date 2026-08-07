@@ -83,6 +83,26 @@ async getCourses(filters?: any): Promise<Course[]> {
   return apiFetch<Course[]>(endpoint);
   },
 
+async searchPublicCourses(filters?: any): Promise<{ items: Course[], totalItems: number, totalPages: number }> {
+  devLog('Catalog', 'Search active public courses', filters);
+  let endpoint = '/courses';
+  if (filters) {
+          const queryParams = new URLSearchParams();
+          Object.keys(filters).forEach(key => {
+            if (filters[key] !== undefined && filters[key] !== null) {
+              if (Array.isArray(filters[key])) {
+                  queryParams.append(key, filters[key].join(','));
+              } else {
+                  queryParams.append(key, String(filters[key]));
+              }
+            }
+          });
+          const queryStr = queryParams.toString();
+          if (queryStr) endpoint += `?${queryStr}`;
+        }
+  return apiFetch<{ items: Course[], totalItems: number, totalPages: number }>(endpoint);
+  },
+
 async getFeaturedCourses(): Promise<Course[]> {
   devLog('Catalog', 'Fetch highly rated featured courses');
   return apiFetch<Course[]>('/courses/featured');
