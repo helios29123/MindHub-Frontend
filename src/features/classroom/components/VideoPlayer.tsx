@@ -38,11 +38,19 @@ export function VideoPlayer({ activeLesson, onEnded }: VideoPlayerProps) {
         <div className="text-center p-6 text-slate-300">
           <PlayCircle className="w-16 h-16 mb-4 opacity-50 mx-auto" />
           <h3 className="text-xl font-bold mb-2">{activeLesson.title}</h3>
-          <p className="text-sm opacity-80">
-            {activeLesson.type === 'quiz' ? 'Bài kiểm tra / Quiz' 
-              : activeLesson.type === 'assignment' ? 'Bài tập / Assignment' 
-              : 'Tài liệu / Document'}
-          </p>
+          
+          {activeLesson.type === 'video' && !activeLesson.videoUrl ? (
+            <div className="bg-red-950/40 border border-red-500/50 text-red-200 p-4 rounded-xl mt-4 max-w-md mx-auto">
+              <p className="font-bold mb-1">⚠️ Video Đang Cập Nhật</p>
+              <p className="text-xs opacity-90">Giảng viên chưa upload video cho bài học này hoặc đường dẫn video bị lỗi. Hệ thống đang tiến hành cập nhật. Xin vui lòng quay lại sau.</p>
+            </div>
+          ) : (
+            <p className="text-sm opacity-80 mt-2">
+              {activeLesson.type === 'quiz' ? 'Bài kiểm tra / Quiz' 
+                : activeLesson.type === 'assignment' ? 'Bài tập / Assignment' 
+                : 'Tài liệu / Document'}
+            </p>
+          )}
           {activeLesson.type !== 'video' && (
             <button 
               className="mt-6 px-6 py-2 bg-primary text-primary-foreground rounded-md font-medium"

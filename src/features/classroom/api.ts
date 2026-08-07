@@ -12,6 +12,11 @@ async getResumeBookmarkNode(): Promise<any> {
   return apiFetch<any>('/learn/resume');
   },
 
+async getMyCourses(): Promise<any> {
+  devLog('Learning', 'Fetch my enrolled courses');
+  return apiFetch<any>('/me/courses');
+  },
+
 async getStudentCourseOutline(courseId: string): Promise<any> {
   devLog('Learning', `Retrieve syllabus framework with checkmarks for Course: ${courseId}`);
   return apiFetch<any>(`/learn/courses/${courseId}/outline`);

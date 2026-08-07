@@ -22,8 +22,21 @@ export default function Navbar() {
   
   const [searchQuery, setSearchQuery] = useState("");
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setIsLoggedIn(false);
+    
+    try {
+      const { safeLocalStorage } = await import('@/shared/utils/safeStorage');
+      safeLocalStorage.removeItem('mindhub_is_logged_in');
+      safeLocalStorage.removeItem('mindhub_current_user');
+      safeLocalStorage.removeItem('mindhub_api_token');
+      
+      const { ApiService } = await import('@/services/api');
+      await ApiService.logout();
+    } catch (e) {
+      console.error('Logout error', e);
+    }
+
     navigate("/");
   };
   
@@ -76,9 +89,9 @@ export default function Navbar() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="rounded-full">
                     <img 
-                      src={currentUser?.avatar || "https://i.pravatar.cc/150?u=a042581f4e29026704d"} 
+                      src={currentUser?.avatar || currentUser?.avatar_url || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(currentUser?.name || 'User')}`} 
                       alt="Avatar" 
-                      className="w-8 h-8 rounded-full border"
+                      className="w-8 h-8 rounded-full border object-cover"
                     />
                   </Button>
                 </DropdownMenuTrigger>

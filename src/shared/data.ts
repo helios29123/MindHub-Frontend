@@ -1138,6 +1138,8 @@ export const GENERAL_FAQ = [
 export const SYSTEM_COUPONS = [
   { code: 'WELCOMEMIND', discount: 10, description: 'Giảm 10% cho đơn hàng đầu tiên.' },
   { code: 'SUMMER26', discount: 20, description: 'Đại tiệc mùa hè giảm giá 20% toàn sàn!' },
+  { code: 'TEST10K', discount: 0, fixedDiscount: 589000, description: 'Giảm giá còn 10k (Test)' },
+  { code: 'TEST99', discount: 99, description: 'Mã giảm 99% Test' },
 ];
 
 export const INITIAL_BANNERS: Banner[] = [

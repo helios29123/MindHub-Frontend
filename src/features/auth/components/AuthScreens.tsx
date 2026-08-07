@@ -246,20 +246,15 @@ export default function AuthScreens({ onLoginSuccess, onClose, initialMode = 'lo
       bio: registerRole === 'instructor' ? instructorBio : undefined,
       experience_years: registerRole === 'instructor' ? instructorExperience : undefined
     })
-      .then(res => {
-        const apiUser = normalizeUser({
-          ...res.user,
-          role: registerRole,
-          isEmailVerified: true
-        });
-        saveToHistory(apiUser);
-        onLoginSuccess(apiUser);
-        alert('Đăng ký tài khoản thành công! Bạn đã được tự động đăng nhập.');
-        if (navigateTo) {
-          navigateTo(getDashboardRouteByRole(apiUser.role));
-        } else {
-          onClose();
+      .then((res: any) => {
+        const verifyUrl = res.verify_url || res.data?.verify_url;
+        let msg = 'Đăng ký tài khoản thành công! Vui lòng kiểm tra email để xác thực tài khoản trước khi đăng nhập.';
+        if (verifyUrl) {
+          msg += '\n\n(Chế độ Dev) Link xác thực: ' + verifyUrl;
+          console.log('Verify URL:', verifyUrl);
         }
+        alert(msg);
+        handleModeChange('login');
       })
       .catch(err => {
         setSuccessMsg('');

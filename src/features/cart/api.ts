@@ -4,9 +4,10 @@ import { Course, Chapter, Lesson, Resource, User, QAMessage, StudentProgress, Pa
 export const cartApi = {
 async createCheckoutOrder(courseIds: string[]): Promise<any> {
   devLog('Orders', 'Assembling payment carts into transaction invoice', courseIds);
+  const rawId = String(courseIds[0]).replace('course-', '');
   return apiFetch<any>('/orders', {
           method: 'POST',
-          body: JSON.stringify({ course_ids: courseIds }),
+          body: JSON.stringify({ course_id: parseInt(rawId) }),
         });
   },
 
@@ -14,7 +15,15 @@ async applyCouponCode(couponCode: string, orderId: string): Promise<any> {
   devLog('Orders', `Apply coupon "${couponCode}" discount trigger to Order ID: ${orderId}`);
   return apiFetch<any>('/orders/apply-coupon', {
           method: 'POST',
-          body: JSON.stringify({ code: couponCode, order_id: orderId }),
+          body: JSON.stringify({ coupon_code: couponCode, order_id: orderId }),
+        });
+  },
+
+async checkCouponCode(couponCode: string, courseId: string | null = null): Promise<any> {
+  devLog('Orders', `Check coupon validity "${couponCode}"`);
+  const query = courseId ? `?code=${couponCode}&course_id=${courseId}` : `?code=${couponCode}`;
+  return apiFetch<any>(`/orders/check-coupon${query}`, {
+          method: 'GET'
         });
   },
 
@@ -46,17 +55,12 @@ async submitManualPaymentProof(payload: FormData): Promise<{ success: boolean }>
         });
   },
 
-async createVNPayGatewayUrl(orderId: string): Promise<{ paymentUrl: string }> {
-  devLog('Orders', `Redirect to VNPay gateway portal checkouts for Order ${orderId}`);
-  return apiFetch<{ paymentUrl: string }>('/payments/vnpay/create', {
+async createSePayGatewayUrl(orderId: string): Promise<{ paymentUrl: string }> {
+  devLog('Orders', `Redirect to SePay gateway portal checkouts for Order ${orderId}`);
+  return apiFetch<{ paymentUrl: string }>('/payments/sepay/create', {
           method: 'POST',
-          body: JSON.stringify({ order_id: orderId }),
+          body: JSON.stringify({ order_id: parseInt(orderId), payment_method: 'sepay' }),
         });
-  },
-
-async parseVNPayCallback(vnpayParams: string): Promise<any> {
-  devLog('Orders', 'Processing VNPay return callback payload token check');
-  return apiFetch<any>(`/payments/vnpay-return?${vnpayParams}`);
   },
 
 async hookPaymentStatusBackground(payload: any): Promise<any> {

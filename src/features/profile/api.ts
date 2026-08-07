@@ -58,15 +58,26 @@ async resolveAccountRequest(requestId: string, action: 'approved' | 'rejected'):
   },
 
 async getAccountProfile(): Promise<any> {
-    return this.getInstructorProfile();
+    devLog('Profile', 'Fetch account profile details');
+    return apiFetch<any>('/account/profile');
   },
 
 async updateAccountProfile(payload: any): Promise<any> {
-    return this.updateInstructorProfile(payload);
+    devLog('Profile', 'Update account profile details', payload);
+    return apiFetch<any>('/users/me', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
   },
 
 async uploadAccountAvatar(file: File): Promise<any> {
-    return this.uploadInstructorAvatar(file);
+    devLog('Profile', 'Upload account avatar', { fileName: file.name, size: file.size });
+    const formData = new FormData();
+    formData.append('avatar', file);
+    return apiFetch<any>('/account/avatar', {
+      method: 'POST',
+      body: formData,
+    });
   },
 
 async selectAccountAvatarPreset(presetId: string): Promise<any> {
