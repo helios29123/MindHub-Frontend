@@ -146,9 +146,7 @@ async submitCourseToAdminVerificationLegacy(courseId: string): Promise<{ success
 async getInstructorEnrollmentStats(instructorId: string): Promise<{ totalEnrollments: number }> {
       // BACKEND_MISSING
     devLog('Instructor', `Get enrollment stats for instructor ${instructorId}`);
-    return apiFetch<{ totalEnrollments: number }>(`/instructor/${instructorId}/enrollment-stats`);
-    // Mock
-    // Mock
+    return Promise.resolve({ totalEnrollments: 0 });
   },
 
 async getInstructorCourses(params?: {
@@ -281,11 +279,7 @@ async getInstructorUnansweredQuestions(params?: any): Promise<any> {
 async getInstructorRevenueStats(instructorId: string, params: any): Promise<{ totalRevenue: number, totalGross: number, totalPlatformFee: number, totalTransactions: number, totalStudentsPaid: number }> {
       // BACKEND_MISSING
     devLog('Instructor', `Get revenue stats for instructor ${instructorId}`, params);
-    const query = new URLSearchParams();
-      if (params.startDate) query.append('startDate', params.startDate);
-      if (params.endDate) query.append('endDate', params.endDate);
-      return apiFetch<any>(`/instructor/${instructorId}/revenue-stats?${query.toString()}`);
-    // Mock
+    return Promise.resolve({ totalRevenue: 0, totalGross: 0, totalPlatformFee: 0, totalTransactions: 0, totalStudentsPaid: 0 });
   },
 
 async getInstructorEnrollments(instructorId: string, params: any): Promise<{ data: any[], meta: any }> {
@@ -966,7 +960,7 @@ async getInstructorTransactionDetails(transactionId: string | number): Promise<a
 
 async getInstructorQAStats(instructorId: string): Promise<any> {
       // BACKEND_MISSING
-    return apiFetch<any>(`/instructor/${instructorId}/qa-stats`);
+    return Promise.resolve({ totalQuestions: 0, unansweredQuestions: 0, resolutionRate: 0, averageResponseTime: 0 });
   },
 
 async getInstructorQuestions(arg1?: any, arg2?: any): Promise<any> {

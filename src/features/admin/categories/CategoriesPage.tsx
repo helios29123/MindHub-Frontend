@@ -444,13 +444,16 @@ export default function CategoriesPage() {
     }
   };
 
-  const generateSortOrderBetween = (prev: string | null, next: string | null): string => {
+  const generateSortOrderBetween = (
+    prev: string | null,
+    next: string | null,
+  ): string => {
     const CHARS = "0123456789abcdefghijklmnopqrstuvwxyz";
     const p = prev || "";
     const n = next || "";
-    
+
     if (p === "" && n === "") return "m";
-    
+
     if (p === "") {
       const firstChar = n.charAt(0);
       if (firstChar === "0") {
@@ -463,7 +466,7 @@ export default function CategoriesPage() {
       }
       return "0m";
     }
-    
+
     if (n === "") {
       const lastChar = p.charAt(p.length - 1);
       const index = CHARS.indexOf(lastChar);
@@ -473,23 +476,23 @@ export default function CategoriesPage() {
       }
       return p + "m";
     }
-    
+
     let i = 0;
     while (i < p.length && i < n.length && p.charAt(i) === n.charAt(i)) {
       i++;
     }
-    
+
     const charP = i < p.length ? p.charAt(i) : "0";
     const charN = i < n.length ? n.charAt(i) : "z";
-    
+
     const idxP = CHARS.indexOf(charP);
     const idxN = CHARS.indexOf(charN);
-    
+
     if (idxN - idxP > 1) {
       const midIdx = Math.floor((idxP + idxN) / 2);
       return p.slice(0, i) + CHARS.charAt(midIdx);
     }
-    
+
     if (i === p.length) {
       const nextCharN = n.charAt(i);
       const idxNextN = CHARS.indexOf(nextCharN);
@@ -499,14 +502,14 @@ export default function CategoriesPage() {
       }
       return p + "0m";
     }
-    
+
     if (i < p.length - 1) {
       const nextCharP = p.charAt(i + 1);
       const idxNextP = CHARS.indexOf(nextCharP);
       const midIdx = Math.floor((idxNextP + CHARS.length) / 2);
       return p.slice(0, i + 1) + CHARS.charAt(midIdx);
     }
-    
+
     return p + "m";
   };
 
@@ -524,8 +527,14 @@ export default function CategoriesPage() {
 
     const siblings = allCategoriesBase.filter((c) => c.parent_id === parentId);
     siblings.sort((a, b) => {
-      const sa = a.sort_order !== undefined && a.sort_order !== null ? String(a.sort_order) : "";
-      const sb = b.sort_order !== undefined && b.sort_order !== null ? String(b.sort_order) : "";
+      const sa =
+        a.sort_order !== undefined && a.sort_order !== null
+          ? String(a.sort_order)
+          : "";
+      const sb =
+        b.sort_order !== undefined && b.sort_order !== null
+          ? String(b.sort_order)
+          : "";
       if (sa && sb) {
         if (sa !== sb) return sa.localeCompare(sb, "en");
         return (a.name || "").localeCompare(b.name || "", "vi");
@@ -560,7 +569,8 @@ export default function CategoriesPage() {
 
     // Calculate new string sort key
     const prevItem = newIndex > 0 ? tempSiblings[newIndex - 1] : null;
-    const nextItem = newIndex < tempSiblings.length - 1 ? tempSiblings[newIndex + 1] : null;
+    const nextItem =
+      newIndex < tempSiblings.length - 1 ? tempSiblings[newIndex + 1] : null;
 
     const prevSort = prevItem ? String(prevItem.sort_order) : null;
     const nextSort = nextItem ? String(nextItem.sort_order) : null;
@@ -569,11 +579,19 @@ export default function CategoriesPage() {
     (window as any).lastReorderDebug = {
       draggedCategoryId,
       action,
-      siblings: siblings.map(s => ({ id: s.id, name: s.name, sort_order: s.sort_order })),
-      tempSiblings: tempSiblings.map(s => ({ id: s.id, name: s.name, sort_order: s.sort_order })),
+      siblings: siblings.map((s) => ({
+        id: s.id,
+        name: s.name,
+        sort_order: s.sort_order,
+      })),
+      tempSiblings: tempSiblings.map((s) => ({
+        id: s.id,
+        name: s.name,
+        sort_order: s.sort_order,
+      })),
       prevSort,
       nextSort,
-      newSortOrder
+      newSortOrder,
     };
     console.log("REORDER DEBUG:", (window as any).lastReorderDebug);
 
@@ -827,8 +845,6 @@ export default function CategoriesPage() {
       }, 100);
     });
   };
-
-
 
   // Build active chips
   const activeChips = useMemo(() => {
@@ -1139,7 +1155,10 @@ export default function CategoriesPage() {
                 { value: "", label: "Tất cả cha" },
                 ...allCategoriesBase
                   .filter((c) => c.parent_id === null && c.deleted_at === null)
-                  .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0))
+                  .sort(
+                    (a, b) =>
+                      (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0),
+                  )
                   .map((c) => {
                     const childCount = allCategoriesBase.filter(
                       (ch) => ch.parent_id === c.id && ch.deleted_at === null,
@@ -1346,15 +1365,27 @@ export default function CategoriesPage() {
                             c.deleted_at === null,
                         );
                         sameLevel.sort((a, b) => {
-                          const sa = a.sort_order !== undefined && a.sort_order !== null ? String(a.sort_order) : "";
-                          const sb = b.sort_order !== undefined && b.sort_order !== null ? String(b.sort_order) : "";
+                          const sa =
+                            a.sort_order !== undefined && a.sort_order !== null
+                              ? String(a.sort_order)
+                              : "";
+                          const sb =
+                            b.sort_order !== undefined && b.sort_order !== null
+                              ? String(b.sort_order)
+                              : "";
                           if (sa && sb) {
                             if (sa !== sb) return sa.localeCompare(sb, "en");
-                            return (a.name || "").localeCompare(b.name || "", "vi");
+                            return (a.name || "").localeCompare(
+                              b.name || "",
+                              "vi",
+                            );
                           }
                           if (sa && !sb) return -1;
                           if (!sa && sb) return 1;
-                          return (a.name || "").localeCompare(b.name || "", "vi");
+                          return (a.name || "").localeCompare(
+                            b.name || "",
+                            "vi",
+                          );
                         });
                         const idx = sameLevel.findIndex((c) => c.id === cat.id);
                         const isFirstChild = idx === 0;
@@ -1474,7 +1505,11 @@ export default function CategoriesPage() {
         <AdminPagination
           currentPage={filters.page}
           perPage={filters.per_page}
-          total={viewMode === "tree" && treeMetrics ? treeMetrics.totalRootBranches : summary.total_categories}
+          total={
+            viewMode === "tree" && treeMetrics
+              ? treeMetrics.totalRootBranches
+              : summary.total_categories
+          }
           onPageChange={handlePageChange}
           onPerPageChange={(pp) => {
             safeFilterAction(() => {
